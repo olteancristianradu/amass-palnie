@@ -197,10 +197,12 @@ export default function PalniePage() {
               </select>
             )}
             <input className="field w-40" placeholder={t('Caută client, oraș, #id…')} value={filter} onChange={e => setFilter(e.target.value)} />
-            <select className="field w-32" value={stadiuFilter} onChange={e => setStadiuFilter(e.target.value)}>
-              <option value="">{t('Toate stadiile')}</option>
-              {STADII.filter(s => s).map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+            {view !== 'kanban' && (
+              <select className="field w-32" value={stadiuFilter} onChange={e => setStadiuFilter(e.target.value)}>
+                <option value="">{t('Toate stadiile')}</option>
+                {STADII.filter(s => s).map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            )}
             <button onClick={() => runSync('/api/crm/sync-clienti', 'Sync clienți')} disabled={!!sync} className="btn btn-primary">{sync ? '⏳' : '↻'} {t('Sync clienți')}</button>
             <button onClick={() => runSync('/api/crm/sync-detalii', 'Sync detalii')} disabled={!!sync} className="btn btn-secondary">↻ {t('Detalii')}</button>
             <button onClick={() => runSync('/api/crm/sync-remindere', 'Sync remindere')} disabled={!!sync} className="btn btn-secondary">↻ {t('Remindere')}</button>

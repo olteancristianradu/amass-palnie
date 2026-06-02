@@ -97,7 +97,7 @@ export function KanbanBoard({ clienti, isManager, ownerFilter, onPatch, setMsg, 
 
   return (
     <>
-      <div className="flex gap-3 overflow-x-auto scroll-area pb-3 rise" style={{ minHeight: '60vh' }}>
+      <div className="flex gap-2 overflow-x-auto scroll-area pb-2 rise" style={{ minHeight: '60vh' }}>
         {COLS.map(col => {
           const cards = byCol[col.key];
           const mp = cards.reduce((s, c) => s + (c.suprafata || 0), 0);
@@ -106,36 +106,39 @@ export function KanbanBoard({ clienti, isManager, ownerFilter, onPatch, setMsg, 
                  onDragOver={e => { e.preventDefault(); setOver(col.key); }}
                  onDragLeave={() => setOver(o => o === col.key ? null : o)}
                  onDrop={e => { e.preventDefault(); const id = e.dataTransfer.getData('text/plain'); setOver(null); setDrag(null); if (id && stageOf(clienti.find(c => c.id === id)!) !== col.key) requestMove(id, col.key); }}
-                 className="flex-shrink-0 w-[270px] rounded-[var(--radius)] transition-colors"
+                 className="flex-shrink-0 w-[224px] rounded-[var(--radius)] transition-colors"
                  style={{ background: over === col.key ? 'var(--ember-soft)' : 'var(--paper)', border: '1px solid var(--line)' }}>
-              <div className="px-3 py-2.5 sticky top-0 z-10 rounded-t-[var(--radius)]" style={{ background: 'var(--card)', borderBottom: '2px solid ' + col.color }}>
-                <div className="flex items-center justify-between">
-                  <span className="font-display font-semibold text-[14px]" style={{ color: col.color }}>{col.label}</span>
-                  <span className="pill pill-lucru !py-0.5 tabular">{cards.length}</span>
-                </div>
-                <div className="text-[10.5px] text-[var(--fg-faint)] tabular mt-0.5">{mp.toLocaleString('ro-RO')} mp{cards.length ? ' · ~' + Math.round(mp * 50).toLocaleString('ro-RO') + ' €' : ''}</div>
+              {/* Antet coloană COMPACT pe un singur rând (nume + mp + count) → mai mult loc pentru carduri */}
+              <div className="px-2 py-1.5 sticky top-0 z-10 rounded-t-[var(--radius)] flex items-center justify-between gap-1" style={{ background: 'var(--card)', borderBottom: '2px solid ' + col.color }}>
+                <span className="font-display font-semibold text-[12.5px] truncate" style={{ color: col.color }}>{col.label}</span>
+                <span className="flex items-center gap-1 flex-shrink-0">
+                  <span className="text-[9px] text-[var(--fg-faint)] tabular" title="Suprafață totală în coloană">{mp ? mp.toLocaleString('ro-RO') + 'mp' : ''}</span>
+                  <span className="pill pill-lucru !py-0 !px-1.5 !text-[10px] tabular">{cards.length}</span>
+                </span>
               </div>
-              <div className="p-2 space-y-2 overflow-y-auto scroll-area" style={{ maxHeight: 'calc(100vh - 240px)' }}>
+              <div className="p-1.5 space-y-1.5 overflow-y-auto scroll-area" style={{ maxHeight: 'calc(100vh - 188px)' }}>
                 {cards.map(c => (
                   <div key={c.id} draggable
                        onDragStart={e => { e.dataTransfer.setData('text/plain', c.id); e.dataTransfer.effectAllowed = 'move'; setDrag(c.id); }}
                        onDragEnd={() => { setDrag(null); setOver(null); }}
                        onClick={() => router.push('/strategie/' + c.id)}
-                       className="card p-2.5 cursor-grab active:cursor-grabbing hover:border-[var(--line-2)]"
+                       className="card p-1.5 cursor-grab active:cursor-grabbing hover:border-[var(--line-2)]"
                        style={{ opacity: drag === c.id ? 0.4 : 1, borderLeft: '3px solid ' + col.color }}
                        title="Trage pentru a schimba stadiul · click pentru fișă">
-                    <div className="font-display font-semibold text-[13px] leading-tight">{c.nume || '(fără nume)'}</div>
-                    <div className="text-[10.5px] text-[var(--fg-faint)] font-mono mt-0.5">
-                      {c.localitate ? c.localitate + ' · ' : ''}{c.suprafata != null ? c.suprafata + ' mp' : ''} · #{c.idLucrare}
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="font-display font-semibold text-[12px] leading-tight truncate">{c.nume || '(fără nume)'}</div>
+                      <span className="flex-shrink-0" title="Prioritate (live în CRM)"><PriorityStars value={c.stelutaCat} readOnly size={12} /></span>
                     </div>
-                    <div className="flex items-center justify-between mt-1.5 gap-1" onClick={stop}>
-                      <span title="Prioritate (live în CRM)"><PriorityStars value={c.stelutaCat} readOnly size={13} /></span>
-                      <div className="flex items-center gap-1">
+                    <div className="flex items-center justify-between gap-1 mt-0.5">
+                      <div className="text-[10px] text-[var(--fg-faint)] font-mono truncate">
+                        {c.localitate ? c.localitate + ' · ' : ''}{c.suprafata != null ? c.suprafata + 'mp' : ''}
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
                         {!col.terminal && (() => { const b = ageBadge(ageDays(c)); return b ? <span className="text-[9px] font-bold tabular px-1 rounded" style={{ color: b.c, border: '1px solid ' + b.c }} title="Zile în stadiu (deal care îmbătrânește)">{b.t}</span> : null; })()}
-                        {isManager && ownerFilter === 'all' && c.owner && <span className="pill pill-lucru !py-0 !px-1.5 !text-[9px]">{c.owner.name || c.owner.email}</span>}
+                        {isManager && ownerFilter === 'all' && c.owner && <span className="pill pill-lucru !py-0 !px-1 !text-[8px] truncate max-w-[60px]">{c.owner.name || c.owner.email}</span>}
                       </div>
                     </div>
-                    {c.reminderText && <div className="text-[10.5px] text-[var(--fg-soft)] mt-1.5 pt-1.5 border-t border-[var(--line)] line-clamp-2">⏰ {c.reminderText}</div>}
+                    {c.reminderText && <div className="text-[10px] text-[var(--fg-soft)] mt-1 pt-1 border-t border-[var(--line)] line-clamp-2">⏰ {c.reminderText}</div>}
                   </div>
                 ))}
                 {cards.length === 0 && <div className="text-center text-[11px] text-[var(--fg-faint)] py-6">— gol —</div>}
