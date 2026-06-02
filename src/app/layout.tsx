@@ -24,6 +24,9 @@ export const metadata: Metadata = {
   description: 'AMASS Sales — pâlnie clienți & strategie, conectat la CRM'
 };
 
+// Scalare corectă pe telefon/tabletă (responsive).
+export const viewport = { width: 'device-width', initialScale: 1, maximumScale: 5 };
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   // Aplică preferințele de stil ÎNAINTE de paint (fără flash), din localStorage.
   // Noul sistem: doar setăm atribute pe <html>; CSS-ul ([data-accent], [data-radius]...) face restul.

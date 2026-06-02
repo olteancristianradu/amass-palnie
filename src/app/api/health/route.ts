@@ -6,9 +6,9 @@ import { prisma } from '@/lib/db';
 // și auto-update-ul face rollback automat la versiunea anterioară. Doar un număr, fără date sensibile.
 export async function GET() {
   try {
-    // findFirst citește TOATE coloanele (exact ca login-ul) → dacă schema/DB e stricată
-    // (ex. coloană nouă incompatibilă), aruncă aici → 500 → auto-update face rollback.
-    const u = await prisma.user.findFirst({ select: { id: true, active: true, role: true } });
+    // findFirst FĂRĂ select citește TOATE coloanele (exact ca login-ul) → dacă lipsește ORICE
+    // coloană din DB (nu doar `active`), aruncă aici → 500 → auto-update face ROLLBACK automat.
+    const u = await prisma.user.findFirst();
     const users = await prisma.user.count();
     const secret = !!process.env.NEXTAUTH_SECRET;
     return NextResponse.json({ ok: true, users, hasAdmin: u?.role === 'admin' || users > 0, secret });
