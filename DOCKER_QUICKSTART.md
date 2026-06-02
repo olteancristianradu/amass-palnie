@@ -86,3 +86,5 @@ Pentru un al doilea client: clonează în alt folder, schimbă portul (ex. `3001
 > De ce un `.bat`, nu comenzi în PowerShell? În PowerShell `curl` e alias (nu curl real) și `sh`/`openssl`/`cp` nu există → comenzile „de Linux" dau erori. `install.bat` ocolește tot asta.
 
 **Mentenanță (tot dublu-click):** `update.bat` = ia ultima versiune + repornește (datele rămân); `backup.bat` = salvează datele în `backup-amass.tgz`.
+
+**Actualizare AUTOMATĂ (recomandat — serverul trage singur modificările):** dublu-click **o singură dată** pe **`setup-autoupdate.bat`**. De atunci, serverul verifică GitHub la fiecare 2 ore și, dacă apare o versiune nouă, o trage și repornește singur (fără tine, fără downtime când nu e nimic nou). Istoric în `auto-update.log`. Oprești cu: `schtasks /Delete /TN "AMASS-Palnie-AutoUpdate" /F`.

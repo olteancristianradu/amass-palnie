@@ -293,10 +293,10 @@ export default function PalniePage() {
   return (
     <Layout>
       {/* Toolbar STICKY (rămâne vizibil la scroll); comutatorul de vizualizare e fixat lângă titlu → nu mai dispare */}
-      <div className="sticky top-11 z-20 bg-[var(--bg)] -mx-6 px-6 pt-2 pb-3 mb-4 border-b border-[var(--border)] rise">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-4 min-w-0">
-            <h1 className="text-[22px] whitespace-nowrap">{t('Pâlnie clienți')}</h1>
+      <div className="sticky top-11 z-20 bg-[var(--bg)] -mx-6 px-6 pt-1.5 pb-2 mb-3 border-b border-[var(--border)] rise">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-3 min-w-0">
+            <h1 className="text-[19px] whitespace-nowrap flex items-baseline gap-2">{t('Pâlnie clienți')}<span className="text-[12px] font-normal text-[var(--fg-faint)] tabular" title="afișați / total">{filtered.length}/{clienti.length}</span></h1>
             {/* COMUTATOR VIZUALIZARE — lângă titlu, flex-shrink-0, mereu vizibil */}
             <div className="inline-flex rounded-[var(--r-sm)] border border-[var(--border-strong)] overflow-hidden text-[12px] font-semibold flex-shrink-0 shadow-sm">
               <button onClick={() => switchView('cards')} title="Carduri aerisite"
@@ -328,14 +328,11 @@ export default function PalniePage() {
               {activeFilterCount > 0 && <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[var(--on-accent)] text-[var(--accent)] text-[10px] font-bold leading-none">{activeFilterCount}</span>}
               <span className="ml-1 text-[10px]">{filtersOpen ? '▲' : '▼'}</span>
             </button>
-            <button onClick={() => runSync('/api/crm/sync-clienti', 'Sync clienți')} disabled={!!sync} className="btn btn-primary">{sync ? '⏳' : '↻'} {t('Sync clienți')}</button>
-            <button onClick={() => runSync('/api/crm/sync-detalii', 'Sync detalii')} disabled={!!sync} className="btn btn-secondary">↻ {t('Detalii')}</button>
-            <button onClick={() => runSync('/api/crm/sync-remindere', 'Sync remindere')} disabled={!!sync} className="btn btn-secondary">↻ {t('Remindere')}</button>
+            <button onClick={() => runSync('/api/crm/sync-clienti', 'Sync clienți')} disabled={!!sync} className="btn btn-primary !py-1 !text-[12px]" title="Importă clienți noi din CRM">{sync ? '⏳' : '↻'} {t('Sync')}</button>
+            <button onClick={() => runSync('/api/crm/sync-detalii', 'Sync detalii')} disabled={!!sync} className="btn btn-secondary !py-1 !text-[12px]" title="Reîmprospătează detalii (audio, steluțe, suprafață…)">↻ {t('Detalii')}</button>
+            <button onClick={() => runSync('/api/crm/sync-remindere', 'Sync remindere')} disabled={!!sync} className="btn btn-secondary !py-1 !text-[12px]" title="Reîmprospătează remindere">↻ {t('Remindere')}</button>
           </div>
         </div>
-        <p className="text-[var(--fg-soft)] text-[12px] mt-1.5">
-          <span className="font-semibold text-[var(--fg)]">{filtered.length}</span> {t('afișați din')} {clienti.length} · steluțe, observații și remindere merg <b>live</b> în CRM
-        </p>
 
         {/* PANOU FILTRE — colapsabil, compact; aplicat pe `filtered` → afectează cards/tabel/kanban */}
         {filtersOpen && (
