@@ -63,27 +63,26 @@ docker run --rm -v amass-palnie_amass-data:/d -v $PWD:/b alpine tar czf /b/backu
 ## Izolare per client (mai mulți clienți pe același server)
 Pentru un al doilea client: clonează în alt folder, schimbă portul (ex. `3001:3000`) și numele containerului/volumului în `docker-compose.yml` → a doua instanță, complet **separată** (altă bază, alte date).
 
-## Windows / PowerShell (comenzi echivalente)
-Comenzile de mai sus sunt pentru Linux/Mac. Pe Windows, după ce ai instalat **Docker Desktop** + **Git pentru Windows**, folosește astea în PowerShell:
-```powershell
-# Cod
-git clone https://github.com/olteancristianradu/amass-palnie.git
-cd amass-palnie
+## ⭐ Windows 10 (PC ca server) — calea SIMPLĂ, recomandată
 
-# Secrete: copiază exemplul
-Copy-Item .env.example .env
+**O singură dată (instalări de bază, manual):**
+1. **Docker Desktop**: descarcă de la https://www.docker.com/products/docker-desktop/ → instalează (lasă bifat WSL 2) → restart → deschide Docker Desktop, așteaptă „Engine running" (verde, jos-stânga).
+   - În Docker Desktop → ⚙ Settings → General → bifează **„Start Docker Desktop when you sign in"**.
+2. **Git pentru Windows**: https://git-scm.com/download/win (Next, Next, default).
+3. **Pornire automată la restart**: `Win+R` → `netplwiz` → debifează „Users must enter a user name and password" → pune parola. (Așa, după un restart, Windows se loghează singur → Docker pornește → aplicația revine.)
 
-# Generează cele 2 chei (rulează de DOUĂ ori; pui câte una la NEXTAUTH_SECRET și CRYPTO_KEY)
-$b = New-Object byte[] 32; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)
+**Instalarea aplicației (2 pași — fără comenzi de tastat):**
+1. Deschide **PowerShell** și ia codul:
+   ```powershell
+   git clone https://github.com/olteancristianradu/amass-palnie.git
+   cd amass-palnie
+   ```
+2. Deschide folderul `amass-palnie` în File Explorer și **dublu-click pe `install.bat`**.
+   - Generează singur cele 2 chei, pornește aplicația și te întreabă emailul/parola pentru contul admin. Gata.
+   - Deschide `http://localhost:3000` și te loghezi cu adminul creat.
 
-# Editează .env (chei + NEXTAUTH_URL)
-notepad .env
+**Dacă `install.bat` se închide cu o eroare**, fă-mi o poză/copiază textul — îți spun exact ce lipsește (de regulă: Docker Desktop nu e pornit, sau Git nu e instalat).
 
-# Pornește
-docker compose up -d --build
+> De ce un `.bat`, nu comenzi în PowerShell? În PowerShell `curl` e alias (nu curl real) și `sh`/`openssl`/`cp` nu există → comenzile „de Linux" dau erori. `install.bat` ocolește tot asta.
 
-# Primul admin (în PowerShell, NU curl):
-Invoke-RestMethod -Uri http://localhost:3000/api/setup -Method Post -ContentType 'application/json' `
-  -Body '{"email":"admin@firma.ro","password":"ParolaTare123","name":"Admin"}'
-```
-Note Windows: în PowerShell `curl` e doar un alias (nu curl-ul real) și `sh`/`openssl`/`cp`/`nano` nu există — de aceea folosim variantele de mai sus. Backup-ul (volumul) se face din Docker Desktop sau cu aceeași comandă `docker run ... alpine tar ...` rulată în PowerShell (înlocuiește `$PWD` cu `${PWD}`).
+**Mentenanță (tot dublu-click):** `update.bat` = ia ultima versiune + repornește (datele rămân); `backup.bat` = salvează datele în `backup-amass.tgz`.
