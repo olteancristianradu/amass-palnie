@@ -1,6 +1,10 @@
 node_modules
 .next
 .git
+# TOATE fișierele .env — runtime-ul își ia valorile din docker-compose, NU din .env la build.
+# (Altfel un .env greșit pe disc — ex. NEXTAUTH_URL invalid — strică `next build`.)
+.env
+.env.*
 .env.local
 .env*.local
 *.db

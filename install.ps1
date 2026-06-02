@@ -31,7 +31,10 @@ if (Test-Path .env) {
   function New-Key { $b = New-Object byte[] 32; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); return [Convert]::ToBase64String($b) }
   $nsec = New-Key; $ckey = New-Key
   $url = Read-Host "Adresa publica a serverului (Enter pentru http://localhost:3000)"
-  if ([string]::IsNullOrWhiteSpace($url)) { $url = "http://localhost:3000" }
+  if ($url -notmatch '^https?://') {
+    if (-not [string]::IsNullOrWhiteSpace($url)) { Write-Host "[INFO] Adresa trebuie sa inceapa cu http:// sau https:// - folosesc http://localhost:3000" -ForegroundColor Yellow }
+    $url = "http://localhost:3000"
+  }
   (Get-Content .env) `
     -replace '^NEXTAUTH_SECRET=.*', "NEXTAUTH_SECRET=$nsec" `
     -replace '^CRYPTO_KEY=.*', "CRYPTO_KEY=$ckey" `

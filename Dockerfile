@@ -22,6 +22,7 @@ RUN npx prisma generate
 ENV NEXTAUTH_SECRET="build-time-placeholder-not-used-at-runtime"
 ENV CRYPTO_KEY="YnVpbGQtdGltZS1wbGFjZWhvbGRlci0zMmJ5dGVzLWtleQ=="
 ENV DATABASE_URL="file:/tmp/build.db"
+ENV NEXTAUTH_URL="http://localhost:3000"
 RUN npm run build
 
 # 3) Runtime (mic, standalone)
