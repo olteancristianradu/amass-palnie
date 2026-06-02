@@ -34,6 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     d.setAttribute('data-accent', s.accent||'amass');
     d.setAttribute('data-radius', s.radius||'default');
     var lang=localStorage.getItem('amass-lang'); if(lang==='en'||lang==='ro') d.setAttribute('lang', lang);
+    var z=localStorage.getItem('amass-scale'); if(z) d.style.zoom=z;
   }catch(e){}})();`;
   return (
     <html lang="ro" className={`${montserrat.variable} ${inter.variable} ${mono.variable}`}>

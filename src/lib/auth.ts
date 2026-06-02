@@ -15,6 +15,7 @@ export const authOptions: NextAuthOptions = {
         if (!creds?.email || !creds?.password) return null;
         const user = await prisma.user.findUnique({ where: { email: creds.email.toLowerCase() } });
         if (!user) return null;
+        if ((user as any).active === false) return null; // cont înghețat → login refuzat
         const ok = await bcrypt.compare(creds.password, user.passwordHash);
         if (!ok) return null;
         return { id: user.id, email: user.email, name: user.name ?? user.email, role: user.role };

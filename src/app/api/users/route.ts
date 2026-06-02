@@ -15,7 +15,7 @@ export async function GET() {
   const scope = await requireAdmin();
   if (!scope) return NextResponse.json({ ok: false, error: 'Doar admin' }, { status: 403 });
   const users = await prisma.user.findMany({
-    select: { id: true, email: true, name: true, role: true, managerId: true, createdAt: true, _count: { select: { clienti: true, reports: true } }, crmCreds: { select: { crmUser: true } } },
+    select: { id: true, email: true, name: true, role: true, active: true, managerId: true, createdAt: true, _count: { select: { clienti: true, reports: true } }, crmCreds: { select: { crmUser: true } } },
     orderBy: { createdAt: 'asc' }
   });
   return NextResponse.json({ ok: true, users });
@@ -42,11 +42,16 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const scope = await requireAdmin();
   if (!scope) return NextResponse.json({ ok: false, error: 'Doar admin' }, { status: 403 });
-  const { id, role, password, managerId } = await req.json();
+  const { id, role, password, managerId, active } = await req.json();
   if (!id) return NextResponse.json({ ok: false, error: 'id lipsă' }, { status: 400 });
   const data: any = {};
   if (role && ['agent', 'manager', 'admin'].includes(role)) data.role = role;
   if (password && password.length >= 6) data.passwordHash = await bcrypt.hash(password, 10);
+  // Freeze/unfreeze cont. Nu-ți poți îngheța propriul cont (te-ai bloca afară).
+  if (typeof active === 'boolean') {
+    if (id === scope.userId && active === false) return NextResponse.json({ ok: false, error: 'Nu-ți poți îngheța propriul cont' }, { status: 400 });
+    data.active = active;
+  }
   if (managerId !== undefined) {
     // Previne cicluri: managerId nou nu poate fi în subtree-ul lui id (sau el însuși).
     if (managerId === id) return NextResponse.json({ ok: false, error: 'Un user nu poate fi propriul manager' }, { status: 400 });
@@ -63,5 +68,27 @@ export async function PATCH(req: NextRequest) {
   if (Object.keys(data).length === 0) return NextResponse.json({ ok: false, error: 'Nimic de schimbat' }, { status: 400 });
   await prisma.user.update({ where: { id }, data });
   await auditLog({ userId: scope.userId, func: 'users/update', action: 'UPDATE', entity: 'User', entityId: id, fields: Object.keys(data).join(',') });
+  return NextResponse.json({ ok: true });
+}
+
+// Ștergere cont. Protecții: nu te poți șterge pe tine, nu ștergi ultimul admin,
+// nu ștergi un cont care deține clienți (întâi reasignezi sau folosești „Îngheață").
+export async function DELETE(req: NextRequest) {
+  const scope = await requireAdmin();
+  if (!scope) return NextResponse.json({ ok: false, error: 'Doar admin' }, { status: 403 });
+  const { id } = await req.json().catch(() => ({}));
+  if (!id) return NextResponse.json({ ok: false, error: 'id lipsă' }, { status: 400 });
+  if (id === scope.userId) return NextResponse.json({ ok: false, error: 'Nu-ți poți șterge propriul cont' }, { status: 400 });
+  const target = await prisma.user.findUnique({ where: { id }, select: { id: true, role: true, _count: { select: { clienti: true } } } });
+  if (!target) return NextResponse.json({ ok: false, error: 'Cont inexistent' }, { status: 404 });
+  if (target.role === 'admin') {
+    const admins = await prisma.user.count({ where: { role: 'admin' } });
+    if (admins <= 1) return NextResponse.json({ ok: false, error: 'Nu poți șterge ultimul admin' }, { status: 400 });
+  }
+  if (target._count.clienti > 0) {
+    return NextResponse.json({ ok: false, error: `Contul deține ${target._count.clienti} clienți. Reasignează-i întâi sau folosește „Îngheață" (suspendă login-ul fără să ștergi datele).` }, { status: 400 });
+  }
+  await prisma.user.delete({ where: { id } });
+  await auditLog({ userId: scope.userId, func: 'users/delete', action: 'DELETE', entity: 'User', entityId: id });
   return NextResponse.json({ ok: true });
 }

@@ -1,4 +1,5 @@
 'use client';
+import { useState, useEffect } from 'react';
 import { signOut, useSession } from 'next-auth/react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -17,10 +18,9 @@ const NAV: NavGroup[] = [
     { href: '/audit', label: 'Jurnal', icon: 'list' },
     { href: '/arhiva', label: 'Arhivă', icon: 'archive' }
   ] },
-  // Grup doar-admin: configurarea formatului fișei + import date din spreadsheet.
+  // Grup doar-admin: configurarea formatului fișei. (Importul de date e per-cont, în Setări.)
   { section: 'Configurare', roles: ['admin'], items: [
-    { href: '/admin/fisa', label: 'Format fișă', icon: 'sheet' },
-    { href: '/admin/import', label: 'Import date', icon: 'archive' }
+    { href: '/admin/fisa', label: 'Format fișă', icon: 'sheet' }
   ] },
   { section: 'Cont', items: [
     { href: '/settings', label: 'Setări', icon: 'gear' }
@@ -47,17 +47,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
   const pathname = usePathname() || '';
   const role = ((session?.user as any)?.role as string) || 'agent';
-  const { lang, setLang, t } = useT();
+  const { t } = useT();
+  // Meniu lateral pliabil (buton). Starea se ține minte pe dispozitiv.
+  const [navOpen, setNavOpen] = useState(true);
+  useEffect(() => { try { if (localStorage.getItem('amass-nav') === '0') setNavOpen(false); } catch {} }, []);
+  const toggleNav = () => setNavOpen(o => { const n = !o; try { localStorage.setItem('amass-nav', n ? '1' : '0'); } catch {} return n; });
 
   return (
     <div className="flex min-h-screen">
-      {/* Sidebar */}
-      <aside className="sidebar w-[220px] flex-shrink-0 flex flex-col px-3.5 py-5 sticky top-0 h-screen">
-        <div className="px-2 mb-7 flex items-center gap-2.5">
+      {/* Sidebar — pliabil din buton */}
+      {navOpen && (
+      <aside className="sidebar w-[220px] flex-shrink-0 flex flex-col px-3.5 py-5 sticky top-0 h-screen relative">
+        <button onClick={toggleNav} title="Ascunde meniul" className="absolute top-3 right-2.5 text-[var(--text-muted)] hover:text-[var(--text)] text-[18px] leading-none">«</button>
+        <div className="px-2 mb-7 flex items-center gap-2.5 pr-5">
           <img src="/logo-amass.png" alt="AMASS" className="h-7 w-auto" />
           <div className="leading-tight min-w-0">
             <div className="text-[14px] font-display font-bold text-[var(--text)] truncate">Pâlnie Clienți</div>
-            <div className="text-[10.5px] text-[var(--text-muted)] truncate max-w-[140px]">{session?.user?.name || 'Agent'}</div>
+            <div className="text-[10.5px] text-[var(--text-muted)] truncate max-w-[130px]">{session?.user?.name || 'Agent'}</div>
           </div>
         </div>
         <nav className="flex flex-col">
@@ -92,16 +98,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </button>
         </div>
       </aside>
+      )}
 
-      {/* Workspace — min-w-0 permite copiilor să se micșoreze; scroll-ul orizontal e DOAR în tabele */}
+      {/* Workspace — fără bară de sus (limba e în Setări). Meniul se ascunde/arată din buton. */}
       <main className="flex-1 min-w-0 flex flex-col">
-        {/* Bară de sus: comutator limbă RO/EN în dreapta (app-wide) */}
-        <div className="h-11 border-b border-[var(--border)] flex items-center justify-end gap-3 px-6 sticky top-0 z-30 bg-[var(--bg)]">
-          <div className="inline-flex rounded-[var(--r-sm)] border border-[var(--border-strong)] overflow-hidden text-[11px] font-semibold">
-            <button onClick={() => setLang('ro')} title="Română" className={'px-2.5 py-1 ' + (lang === 'ro' ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'text-[var(--text-secondary)] hover:bg-[var(--surface-2)]')}>RO</button>
-            <button onClick={() => setLang('en')} title="English" className={'px-2.5 py-1 border-l border-[var(--border-strong)] ' + (lang === 'en' ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'text-[var(--text-secondary)] hover:bg-[var(--surface-2)]')}>EN</button>
-          </div>
-        </div>
+        {!navOpen && (
+          <button onClick={toggleNav} title="Arată meniul"
+            className="fixed top-2 left-2 z-40 w-9 h-9 rounded-[var(--r-sm)] bg-[var(--surface)] border border-[var(--border-strong)] shadow grid place-items-center text-[16px] text-[var(--text)] hover:bg-[var(--surface-2)]">☰</button>
+        )}
         <div className="flex-1 min-w-0 px-6 py-6">{children}</div>
       </main>
     </div>

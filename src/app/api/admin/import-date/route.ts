@@ -27,7 +27,8 @@ function mergeBlob(existing: string | null, incoming: any): string | undefined {
 export async function POST(req: NextRequest) {
   const scope = await getScope();
   if (!scope) return NextResponse.json({ ok: false, error: 'Neautentificat' }, { status: 401 });
-  if (scope.role !== 'admin' && scope.role !== 'manager') return NextResponse.json({ ok: false, error: 'Doar admin/manager' }, { status: 403 });
+  // Orice user autentificat își poate importa PROPRIILE date — totul e filtrat pe ownerId: scope.userId
+  // (match pe idLucrare DOAR în clienții lui). NU afectează alți agenți.
 
   let body: any;
   try { body = await req.json(); } catch { return NextResponse.json({ ok: false, error: 'JSON invalid' }, { status: 400 }); }

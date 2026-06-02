@@ -1,8 +1,22 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Layout } from '@/components/Layout';
+import { useT } from '@/lib/i18n';
+
+// Mărimi interfață (zoom pe <html>). 1 = normal. Se ține minte pe dispozitiv (amass-scale).
+const SCALES: Array<{ v: string; label: string }> = [
+  { v: '0.9', label: 'Mic' }, { v: '1', label: 'Normal' }, { v: '1.1', label: 'Mare' }, { v: '1.25', label: 'Foarte mare' }
+];
 
 export default function SettingsPage() {
+  const { lang, setLang } = useT();
+  const [scale, setScale] = useState('1');
+  useEffect(() => { try { setScale(localStorage.getItem('amass-scale') || '1'); } catch {} }, []);
+  function applyScale(v: string) {
+    setScale(v);
+    try { localStorage.setItem('amass-scale', v); } catch {}
+    document.documentElement.style.zoom = v;
+  }
   const [crmUser, setCrmUser] = useState('');
   const [crmPass, setCrmPass] = useState('');
   const [hasCreds, setHasCreds] = useState(false);
@@ -90,6 +104,36 @@ export default function SettingsPage() {
         </span>
         <span className="text-[var(--text-muted)]">›</span>
       </a>
+
+      {/* Limbă + Mărime interfață — direct în Setări (nu mai mănâncă din înălțimea paginii) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl mb-5">
+        <div className="card p-4 rise">
+          <div className="text-[12px] font-semibold text-[var(--text-secondary)] mb-2">Limbă</div>
+          <div className="inline-flex rounded-[var(--r-sm)] border border-[var(--border-strong)] overflow-hidden text-[12px] font-semibold">
+            <button onClick={() => setLang('ro')} className={'px-3 py-1.5 ' + (lang === 'ro' ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'text-[var(--text-secondary)] hover:bg-[var(--surface-2)]')}>Română</button>
+            <button onClick={() => setLang('en')} className={'px-3 py-1.5 border-l border-[var(--border-strong)] ' + (lang === 'en' ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'text-[var(--text-secondary)] hover:bg-[var(--surface-2)]')}>English</button>
+          </div>
+        </div>
+        <div className="card p-4 rise">
+          <div className="text-[12px] font-semibold text-[var(--text-secondary)] mb-2">Mărime text / interfață</div>
+          <div className="inline-flex rounded-[var(--r-sm)] border border-[var(--border-strong)] overflow-hidden text-[12px] font-semibold">
+            {SCALES.map(o => (
+              <button key={o.v} onClick={() => applyScale(o.v)} className={'px-3 py-1.5 border-l first:border-l-0 border-[var(--border-strong)] ' + (scale === o.v ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'text-[var(--text-secondary)] hover:bg-[var(--surface-2)]')}>{o.label}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Import date din pâlnia veche — în contul TĂU (nu „pentru toți"); potrivire pe id_lucrare */}
+      <a href="/admin/import" className="card max-w-xl rise flex items-center gap-3 p-4 mb-5 hover:border-[var(--accent)] transition-colors no-underline">
+        <span className="w-9 h-9 rounded-[var(--r-sm)] bg-[var(--accent-soft)] text-[var(--accent)] grid place-items-center flex-shrink-0 font-bold">⤓</span>
+        <span className="flex-1 min-w-0">
+          <span className="block font-semibold text-[14px] text-[var(--text)]">Import date din pâlnia veche (spreadsheet)</span>
+          <span className="block text-[12px] text-[var(--fg-soft)]">Aduce strategiile + statusul tale din spreadsheet în contul TĂU (pe id_lucrare). Doar clienții tăi — nu afectează alți agenți.</span>
+        </span>
+        <span className="text-[var(--text-muted)]">›</span>
+      </a>
+
       <div className="card p-6 max-w-xl rise rise-1">
         {hasCreds && (
           <div className="toast toast-ok mb-5">

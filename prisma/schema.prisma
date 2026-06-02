@@ -13,6 +13,7 @@ model User {
   passwordHash  String
   name          String?
   role          String    @default("user")
+  active        Boolean   @default(true)   // false = cont „înghețat" (login blocat)
   createdAt     DateTime  @default(now())
 
   // Ierarhie org: cine raportează cui. Un manager vede pâlniile tuturor descendenților (recursiv).

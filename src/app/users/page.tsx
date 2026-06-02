@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { Layout } from '@/components/Layout';
 
-interface U { id: string; email: string; name: string | null; role: string; managerId: string | null; createdAt: string; _count: { clienti: number; reports: number }; crmCreds: { crmUser: string } | null; }
+interface U { id: string; email: string; name: string | null; role: string; active?: boolean; managerId: string | null; createdAt: string; _count: { clienti: number; reports: number }; crmCreds: { crmUser: string } | null; }
 
 const ROLE_LABEL: Record<string, string> = { agent: 'Agent', manager: 'Manager', admin: 'Admin' };
 
@@ -166,6 +166,22 @@ export default function UsersPage() {
     const j = await r.json();
     setMsg(j.ok ? '✅ Parolă resetată pentru ' + (u.name || u.email) : '❌ ' + j.error);
   }
+  // Freeze/unfreeze: blochează/deblochează login-ul (fără să șteargă date).
+  async function toggleActive(u: U) {
+    const next = !(u.active !== false);
+    const r = await fetch('/api/users', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: u.id, active: next }) });
+    const j = await r.json();
+    setMsg(j.ok ? (next ? '✅ Cont reactivat: ' + (u.name || u.email) : '🔒 Cont înghețat (login blocat): ' + (u.name || u.email)) : '❌ ' + j.error);
+    await load();
+  }
+  // Ștergere cont (cu confirmare). Serverul refuză self / ultimul admin / cont cu clienți.
+  async function removeUser(u: U) {
+    if (!window.confirm(`Ștergi definitiv contul ${u.name || u.email}?\n\n(Dacă deține clienți, vei primi eroare — folosește „Îngheață" sau reasignează întâi.)`)) return;
+    const r = await fetch('/api/users', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: u.id }) });
+    const j = await r.json();
+    setMsg(j.ok ? '🗑 Cont șters: ' + (u.name || u.email) : '❌ ' + j.error);
+    await load();
+  }
 
   if (forbidden) return <Layout><div className="card p-10 text-center text-[var(--fg-soft)]">Doar administratorul poate gestiona conturile.</div></Layout>;
 
@@ -205,6 +221,7 @@ export default function UsersPage() {
                       <span style={{ paddingLeft: depth * 18 }} className="inline-flex items-center gap-1.5">
                         {depth > 0 && <span className="text-[var(--fg-soft)] opacity-50">└</span>}
                         {u.name || u.email}
+                        {u.active === false && <span className="ml-1 pill pill-anulat !py-0 !px-1.5 !text-[9px]">înghețat</span>}
                       </span>
                       <div className="text-[11px] text-[var(--fg-soft)] font-normal" style={{ paddingLeft: depth * 18 + (depth > 0 ? 16 : 0) }}>{u.email}</div>
                     </td>
@@ -223,9 +240,11 @@ export default function UsersPage() {
                     <td className="tabular">{u._count.clienti}</td>
                     <td className="text-[11px] text-[var(--fg-soft)]">{u.crmCreds?.crmUser ?? '—'}</td>
                     <td>
-                      <button type="button" onClick={() => resetPassword(u)} className="btn btn-secondary !py-1 !px-2 !text-[11px] whitespace-nowrap">
-                        Resetează parola
-                      </button>
+                      <div className="flex gap-1 flex-wrap">
+                        <button type="button" onClick={() => resetPassword(u)} className="btn btn-secondary !py-1 !px-2 !text-[11px] whitespace-nowrap">Resetează parola</button>
+                        <button type="button" onClick={() => toggleActive(u)} className="btn btn-secondary !py-1 !px-2 !text-[11px] whitespace-nowrap" title="Blochează/deblochează login-ul (fără să ștergi date)">{u.active === false ? '▶ Reactivează' : '🔒 Îngheață'}</button>
+                        <button type="button" onClick={() => removeUser(u)} className="btn btn-secondary !py-1 !px-2 !text-[11px] whitespace-nowrap !text-[var(--danger)]" title="Șterge contul definitiv">🗑 Șterge</button>
+                      </div>
                     </td>
                   </tr>
                 ))}
