@@ -13,7 +13,7 @@ model User {
   passwordHash  String
   name          String?
   role          String    @default("user")
-  active        Boolean   @default(true)   // false = cont „înghețat" (login blocat)
+  active        Boolean?  @default(true)   // false = cont „înghețat" (login blocat). Nullable → o citire nu poate eșua niciodată din cauza acestei coloane.
   createdAt     DateTime  @default(now())
 
   // Ierarhie org: cine raportează cui. Un manager vede pâlniile tuturor descendenților (recursiv).
