@@ -3,10 +3,14 @@
 **Model:** UN container Docker = UN client. Datele (baza SQLite) stau într-un **volum local** (`amass-data`) → **independente și salvate local**, NU la comun cu alt client. Fiecare user/agent din instanță își vede DOAR clienții lui (+ subordonații, dacă e manager); arhiva fișelor se salvează per client/owner.
 
 ## Ce-ți trebuie pe server (o singură dată)
-- **Docker** + **Docker Compose**:
+- **Pe Linux** (recomandat pt producție — server ieftin, standard):
   ```
   curl -fsSL https://get.docker.com | sh
   ```
+- **Pe Windows** (PC sau Windows Server): comanda de mai sus NU merge (e doar Linux; în PowerShell nu există `sh`).
+  Instalezi **Docker Desktop pentru Windows** de la https://www.docker.com/products/docker-desktop/ →
+  rulezi installer-ul (lași bifat WSL 2) → restart → deschizi Docker Desktop și aștepți „Engine running".
+  Ai nevoie și de **Git pentru Windows** (https://git-scm.com/download/win). Vezi mai jos secțiunea „Windows / PowerShell".
 
 ## Instalare (3 pași)
 1. **Ia codul** (ultima versiune de pe GitHub):
@@ -58,3 +62,28 @@ docker run --rm -v amass-palnie_amass-data:/d -v $PWD:/b alpine tar czf /b/backu
 
 ## Izolare per client (mai mulți clienți pe același server)
 Pentru un al doilea client: clonează în alt folder, schimbă portul (ex. `3001:3000`) și numele containerului/volumului în `docker-compose.yml` → a doua instanță, complet **separată** (altă bază, alte date).
+
+## Windows / PowerShell (comenzi echivalente)
+Comenzile de mai sus sunt pentru Linux/Mac. Pe Windows, după ce ai instalat **Docker Desktop** + **Git pentru Windows**, folosește astea în PowerShell:
+```powershell
+# Cod
+git clone https://github.com/olteancristianradu/amass-palnie.git
+cd amass-palnie
+
+# Secrete: copiază exemplul
+Copy-Item .env.example .env
+
+# Generează cele 2 chei (rulează de DOUĂ ori; pui câte una la NEXTAUTH_SECRET și CRYPTO_KEY)
+$b = New-Object byte[] 32; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)
+
+# Editează .env (chei + NEXTAUTH_URL)
+notepad .env
+
+# Pornește
+docker compose up -d --build
+
+# Primul admin (în PowerShell, NU curl):
+Invoke-RestMethod -Uri http://localhost:3000/api/setup -Method Post -ContentType 'application/json' `
+  -Body '{"email":"admin@firma.ro","password":"ParolaTare123","name":"Admin"}'
+```
+Note Windows: în PowerShell `curl` e doar un alias (nu curl-ul real) și `sh`/`openssl`/`cp`/`nano` nu există — de aceea folosim variantele de mai sus. Backup-ul (volumul) se face din Docker Desktop sau cu aceeași comandă `docker run ... alpine tar ...` rulată în PowerShell (înlocuiește `$PWD` cu `${PWD}`).
