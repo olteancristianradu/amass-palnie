@@ -42,8 +42,27 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const scope = await requireAdmin();
   if (!scope) return NextResponse.json({ ok: false, error: 'Doar admin' }, { status: 403 });
-  const { id, role, password, managerId, active } = await req.json();
+  const { id, role, password, managerId, active, reassignTo } = await req.json();
   if (!id) return NextResponse.json({ ok: false, error: 'id lipsă' }, { status: 400 });
+
+  // REASIGNARE clienți: mută toți clienții lui `id` → `reassignTo`. DOAR în aplicație — NU atinge gestcom CRM.
+  // Sărim clienții al căror idLucrare există deja la destinație (constrângere unică @@unique([ownerId,idLucrare])).
+  if (reassignTo !== undefined) {
+    if (!reassignTo || reassignTo === id) return NextResponse.json({ ok: false, error: 'Alege un alt utilizator destinație' }, { status: 400 });
+    const tgt = await prisma.user.findUnique({ where: { id: reassignTo }, select: { id: true } });
+    if (!tgt) return NextResponse.json({ ok: false, error: 'Utilizator destinație inexistent' }, { status: 404 });
+    const src = await prisma.client.findMany({ where: { ownerId: id }, select: { id: true, idLucrare: true } });
+    const have = new Set((await prisma.client.findMany({ where: { ownerId: reassignTo }, select: { idLucrare: true } })).map(c => c.idLucrare));
+    let moved = 0, skipped = 0;
+    for (const c of src) {
+      if (have.has(c.idLucrare)) { skipped++; continue; }
+      await prisma.client.update({ where: { id: c.id }, data: { ownerId: reassignTo } });
+      moved++;
+    }
+    await auditLog({ userId: scope.userId, func: 'users/reassign', action: 'REASSIGN', entity: 'Client', entityId: id, fields: `moved=${moved} skipped=${skipped} to=${reassignTo}` });
+    return NextResponse.json({ ok: true, moved, skipped });
+  }
+
   const data: any = {};
   if (role && ['agent', 'manager', 'admin'].includes(role)) data.role = role;
   if (password && password.length >= 6) data.passwordHash = await bcrypt.hash(password, 10);
@@ -76,7 +95,7 @@ export async function PATCH(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const scope = await requireAdmin();
   if (!scope) return NextResponse.json({ ok: false, error: 'Doar admin' }, { status: 403 });
-  const { id } = await req.json().catch(() => ({}));
+  const { id, force } = await req.json().catch(() => ({}));
   if (!id) return NextResponse.json({ ok: false, error: 'id lipsă' }, { status: 400 });
   if (id === scope.userId) return NextResponse.json({ ok: false, error: 'Nu-ți poți șterge propriul cont' }, { status: 400 });
   const target = await prisma.user.findUnique({ where: { id }, select: { id: true, role: true, _count: { select: { clienti: true } } } });
@@ -85,10 +104,16 @@ export async function DELETE(req: NextRequest) {
     const admins = await prisma.user.count({ where: { role: 'admin' } });
     if (admins <= 1) return NextResponse.json({ ok: false, error: 'Nu poți șterge ultimul admin' }, { status: 400 });
   }
-  if (target._count.clienti > 0) {
-    return NextResponse.json({ ok: false, error: `Contul deține ${target._count.clienti} clienți. Reasignează-i întâi sau folosește „Îngheață" (suspendă login-ul fără să ștergi datele).` }, { status: 400 });
+  const n = target._count.clienti;
+  if (n > 0 && !force) {
+    // Implicit refuzăm (anti-pierdere). `hasClients` permite UI-ului să ofere ștergere forțată (duplicate).
+    return NextResponse.json({ ok: false, hasClients: n, error: `Contul deține ${n} clienți. Reasignează-i întâi (buton „Clienți →"), folosește „Îngheață", sau confirmă ștergerea forțată (duplicate).` }, { status: 400 });
+  }
+  if (force && n > 0) {
+    // Ștergere forțată (duplicate): șterge clienții lui (cascadă arhivă + remindere) apoi userul. DOAR în aplicație — NU atinge CRM.
+    await prisma.client.deleteMany({ where: { ownerId: id } });
   }
   await prisma.user.delete({ where: { id } });
-  await auditLog({ userId: scope.userId, func: 'users/delete', action: 'DELETE', entity: 'User', entityId: id });
-  return NextResponse.json({ ok: true });
+  await auditLog({ userId: scope.userId, func: 'users/delete', action: 'DELETE', entity: 'User', entityId: id, fields: force ? `force; clienti=${n}` : 'fără clienți' });
+  return NextResponse.json({ ok: true, deletedClients: force ? n : 0 });
 }

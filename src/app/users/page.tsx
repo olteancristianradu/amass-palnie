@@ -130,6 +130,8 @@ export default function UsersPage() {
   const [forbidden, setForbidden] = useState(false);
   const [f, setF] = useState({ email: '', password: '', name: '', role: 'agent' });
   const [view, setView] = useState<'arbore' | 'organigrama'>('arbore');
+  const [reassignFor, setReassignFor] = useState<U | null>(null);
+  const [reassignTo, setReassignTo] = useState('');
 
   async function load() {
     const r = await fetch('/api/users');
@@ -174,12 +176,28 @@ export default function UsersPage() {
     setMsg(j.ok ? (next ? '✅ Cont reactivat: ' + (u.name || u.email) : '🔒 Cont înghețat (login blocat): ' + (u.name || u.email)) : '❌ ' + j.error);
     await load();
   }
-  // Ștergere cont (cu confirmare). Serverul refuză self / ultimul admin / cont cu clienți.
+  // Ștergere cont. Dacă are clienți → oferă ștergere FORȚATĂ (pt duplicate) cu a doua confirmare.
+  // Totul e DOAR în aplicație — NU atinge gestcom CRM.
   async function removeUser(u: U) {
-    if (!window.confirm(`Ștergi definitiv contul ${u.name || u.email}?\n\n(Dacă deține clienți, vei primi eroare — folosește „Îngheață" sau reasignează întâi.)`)) return;
-    const r = await fetch('/api/users', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: u.id }) });
+    if (!window.confirm(`Ștergi contul ${u.name || u.email}?`)) return;
+    let r = await fetch('/api/users', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: u.id }) });
+    let j = await r.json();
+    if (!j.ok && j.hasClients) {
+      const ok = window.confirm(`Contul „${u.name || u.email}" are ${j.hasClients} clienți.\n\nDacă e DUPLICAT și vrei să ștergi contul ȘI cei ${j.hasClients} clienți (IREVERSIBIL în aplicație — NU afectează CRM-ul gestcom), apasă OK.\nAltfel Anulează și folosește „Clienți →" (reasignare) sau „Îngheață".`);
+      if (!ok) { setMsg('Anulat — contul NU a fost șters.'); return; }
+      r = await fetch('/api/users', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: u.id, force: true }) });
+      j = await r.json();
+    }
+    setMsg(j.ok ? `🗑 Cont șters: ${u.name || u.email}${j.deletedClients ? ` (+ ${j.deletedClients} clienți)` : ''}` : '❌ ' + j.error);
+    await load();
+  }
+  // Reasignare: mută toți clienții lui `u` către alt agent (DOAR în aplicație, NU în CRM).
+  async function doReassign() {
+    if (!reassignFor || !reassignTo) return;
+    const r = await fetch('/api/users', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: reassignFor.id, reassignTo }) });
     const j = await r.json();
-    setMsg(j.ok ? '🗑 Cont șters: ' + (u.name || u.email) : '❌ ' + j.error);
+    setMsg(j.ok ? `✅ Mutați ${j.moved} clienți${j.skipped ? ` (${j.skipped} săriți — existau deja la destinație)` : ''}. (doar în aplicație, nu în CRM)` : '❌ ' + j.error);
+    setReassignFor(null); setReassignTo('');
     await load();
   }
 
@@ -243,7 +261,8 @@ export default function UsersPage() {
                       <div className="flex gap-1 flex-wrap">
                         <button type="button" onClick={() => resetPassword(u)} className="btn btn-secondary !py-1 !px-2 !text-[11px] whitespace-nowrap">Resetează parola</button>
                         <button type="button" onClick={() => toggleActive(u)} className="btn btn-secondary !py-1 !px-2 !text-[11px] whitespace-nowrap" title="Blochează/deblochează login-ul (fără să ștergi date)">{u.active === false ? '▶ Reactivează' : '🔒 Îngheață'}</button>
-                        <button type="button" onClick={() => removeUser(u)} className="btn btn-secondary !py-1 !px-2 !text-[11px] whitespace-nowrap !text-[var(--danger)]" title="Șterge contul definitiv">🗑 Șterge</button>
+                        <button type="button" onClick={() => { setReassignFor(u); setReassignTo(''); }} className="btn btn-secondary !py-1 !px-2 !text-[11px] whitespace-nowrap" title="Mută clienții acestui cont către alt agent (doar în aplicație, NU în CRM)">↪ Clienți ({u._count.clienti})</button>
+                        <button type="button" onClick={() => removeUser(u)} className="btn btn-secondary !py-1 !px-2 !text-[11px] whitespace-nowrap !text-[var(--danger)]" title="Șterge contul (cu opțiune de ștergere forțată pt duplicate)">🗑 Șterge</button>
                       </div>
                     </td>
                   </tr>
@@ -273,6 +292,27 @@ export default function UsersPage() {
           {msg && <div className={'toast ' + (msg.startsWith('✅') ? 'toast-ok' : 'toast-err')}>{msg}</div>}
         </form>
       </div>
+
+      {/* MODAL reasignare clienți — DOAR în aplicație, nu în CRM */}
+      {reassignFor && (
+        <div className="fixed inset-0 bg-[rgba(20,32,28,.5)] backdrop-blur-sm flex items-center justify-center z-50 p-6" onClick={() => setReassignFor(null)}>
+          <div className="card !shadow-[var(--shadow-lg)] max-w-md w-full p-6 rise" onClick={e => e.stopPropagation()}>
+            <h2 className="text-[17px] mb-1">Reasignează clienții lui {reassignFor.name || reassignFor.email}</h2>
+            <p className="text-[12px] text-[var(--fg-soft)] mb-3">
+              Mută cei <b>{reassignFor._count.clienti}</b> clienți către alt agent. <b className="text-[var(--text)]">Doar în aplicație — NU în gestcom CRM.</b> Clienții al căror <i>id_lucrare</i> există deja la destinație (duplicate) sunt săriți.
+            </p>
+            <label className="kpi-label block mb-1">Mută către</label>
+            <select className="field w-full mb-4" value={reassignTo} onChange={e => setReassignTo(e.target.value)}>
+              <option value="">— alege agentul —</option>
+              {users.filter(o => o.id !== reassignFor.id).map(o => <option key={o.id} value={o.id}>{o.name || o.email} · {o.role} ({o._count.clienti} clienți)</option>)}
+            </select>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setReassignFor(null)} className="btn btn-secondary">Anulează</button>
+              <button onClick={doReassign} disabled={!reassignTo} className="btn btn-primary">Mută clienții</button>
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 }
