@@ -1,0 +1,4 @@
+# Forțează LF pe scripturile shell — altfel git pe Windows le-ar checkout cu CRLF,
+# iar containerul Linux ar da „exec ./docker-entrypoint.sh: no such file or directory".
+*.sh text eol=lf
+docker-entrypoint.sh text eol=lf

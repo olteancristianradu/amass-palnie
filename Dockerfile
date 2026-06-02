@@ -40,7 +40,10 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
-RUN chmod +x docker-entrypoint.sh
+# Normalizează CRLF→LF (dacă repo-ul a fost clonat pe Windows, git poate pune CRLF →
+# linia „#!/bin/sh" devine invalidă în container → „exec ... no such file or directory") + exec bit.
+RUN sed -i 's/\r$//' docker-entrypoint.sh && chmod +x docker-entrypoint.sh
 EXPOSE 3000
 # La pornire: asigură schema în DB-ul din volum, apoi pornește serverul standalone (+ auto-sync).
-ENTRYPOINT ["./docker-entrypoint.sh"]
+# Rulat prin „sh" explicit → robust chiar dacă lipsește bitul de execuție (checkout Windows).
+ENTRYPOINT ["sh", "./docker-entrypoint.sh"]
