@@ -140,6 +140,8 @@ export default function PalniePage() {
   async function load(silent = false) {
     if (!silent) setLoading(true);
     const r = await fetch('/api/clienti?limit=5000&owner=' + ownerFilter);
+    // Sesiune expirată/invalidă → NU lăsa pagina goală; trimite la login.
+    if (r.status === 401) { window.location.href = '/login'; return; }
     const j = await r.json();
     if (j.ok) { setClienti(j.clienti); setIsManager(j.isManager); }
     if (!silent) setLoading(false);

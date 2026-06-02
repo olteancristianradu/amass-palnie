@@ -4,8 +4,10 @@ import { Layout } from '@/components/Layout';
 import { useT } from '@/lib/i18n';
 
 // Mărimi interfață (zoom pe <html>). 1 = normal. Se ține minte pe dispozitiv (amass-scale).
+// Pași dramatici (cu %) ca efectul să fie EVIDENT, nu subtil.
 const SCALES: Array<{ v: string; label: string }> = [
-  { v: '0.9', label: 'Mic' }, { v: '1', label: 'Normal' }, { v: '1.1', label: 'Mare' }, { v: '1.25', label: 'Foarte mare' }
+  { v: '0.9', label: 'Compact 90%' }, { v: '1', label: 'Normal 100%' }, { v: '1.15', label: 'Mare 115%' },
+  { v: '1.3', label: 'Foarte mare 130%' }, { v: '1.5', label: 'Maxim 150%' }
 ];
 
 export default function SettingsPage() {

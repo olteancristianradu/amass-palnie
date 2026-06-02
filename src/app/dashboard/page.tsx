@@ -27,7 +27,10 @@ export default function DashboardPage() {
     const qs = new URLSearchParams({ owner: o });
     if (st) qs.set('start', st);
     if (en) qs.set('end', en);
-    fetch('/api/dashboard?' + qs.toString()).then(r => r.json()).then(j => { if (j.ok) { setS(j.stats); setIsManager(j.isManager); } });
+    fetch('/api/dashboard?' + qs.toString()).then(r => {
+      if (r.status === 401) { window.location.href = '/login'; return null; }  // sesiune expirată → login (nu lăsa dashboard gol)
+      return r.json();
+    }).then(j => { if (j && j.ok) { setS(j.stats); setIsManager(j.isManager); } });
   }
   useEffect(() => { load(); }, [owner, start, end]);
   // Auto-refresh la 30s (păstrează indicatorii la zi, respectă filtrele curente)

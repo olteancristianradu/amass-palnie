@@ -21,11 +21,26 @@ model User {
   manager       User?     @relation("OrgTree", fields: [managerId], references: [id], onDelete: SetNull)
   reports       User[]    @relation("OrgTree")
 
+  // Departament (grupare) + Funcție/titlu (text liber, ex. „Coordonator Vânzări").
+  // Separate de cele 3 ROLURI de permisiuni (agent/manager/admin) — acestea controlează accesul.
+  departmentId  String?
+  department    Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  position      String?
+
   crmCreds      CrmCredentials?
   clienti       Client[]
   audits        AuditLog[]
   syncRuns      SyncRun[]
   outlook       OutlookToken?
+}
+
+// Departament (grupare organizațională) — gestionat de ADMIN. Useri pot aparține unui departament.
+// NU înlocuiește rolurile de permisiuni; e doar o grupare + (împreună cu User.position) un „titlu" pentru afișare.
+model Department {
+  id            String    @id @default(cuid())
+  name          String    @unique
+  createdAt     DateTime  @default(now())
+  users         User[]
 }
 
 // Token-uri Microsoft Graph (Outlook) per user — access+refresh criptate AES-256.

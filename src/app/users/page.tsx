@@ -2,7 +2,8 @@
 import { useEffect, useState } from 'react';
 import { Layout } from '@/components/Layout';
 
-interface U { id: string; email: string; name: string | null; role: string; active?: boolean; managerId: string | null; createdAt: string; _count: { clienti: number; reports: number }; crmCreds: { crmUser: string } | null; }
+interface U { id: string; email: string; name: string | null; role: string; active?: boolean; managerId: string | null; position?: string | null; department?: { id: string; name: string } | null; createdAt: string; _count: { clienti: number; reports: number }; crmCreds: { crmUser: string } | null; }
+interface Dept { id: string; name: string; createdAt: string; _count: { users: number }; }
 
 const ROLE_LABEL: Record<string, string> = { agent: 'Agent', manager: 'Manager', admin: 'Admin' };
 
@@ -96,6 +97,8 @@ function OrgBox({ node }: { node: OrgNode }) {
     <li className="amass-org-li">
       <div className="amass-org-card">
         <div className="amass-org-name" title={u.email}>{u.name || u.email}</div>
+        {u.position && <div className="amass-org-sub" style={{ fontWeight: 600, marginTop: 2 }}>{u.position}</div>}
+        {u.department && <div className="amass-org-sub" style={{ marginTop: 1 }}>{u.department.name}</div>}
         <div className="amass-org-meta">
           <span className="pill pill-lucru">{ROLE_LABEL[u.role] ?? u.role}</span>
           {u._count.reports > 0 && <span className="amass-org-sub">{u._count.reports} în echipă</span>}
@@ -126,12 +129,19 @@ function OrgChart({ users }: { users: U[] }) {
 
 export default function UsersPage() {
   const [users, setUsers] = useState<U[]>([]);
+  const [depts, setDepts] = useState<Dept[]>([]);
   const [msg, setMsg] = useState('');
   const [forbidden, setForbidden] = useState(false);
   const [f, setF] = useState({ email: '', password: '', name: '', role: 'agent' });
   const [view, setView] = useState<'arbore' | 'organigrama'>('arbore');
   const [reassignFor, setReassignFor] = useState<U | null>(null);
   const [reassignTo, setReassignTo] = useState('');
+  // Departamente (admin): nume nou + redenumire inline.
+  const [newDept, setNewDept] = useState('');
+  const [editDeptId, setEditDeptId] = useState<string | null>(null);
+  const [editDeptName, setEditDeptName] = useState('');
+  // Funcție (position) editată local înainte de salvare la blur, per user.
+  const [posDraft, setPosDraft] = useState<Record<string, string>>({});
 
   async function load() {
     const r = await fetch('/api/users');
@@ -139,7 +149,60 @@ export default function UsersPage() {
     const j = await r.json();
     if (j.ok) setUsers(j.users);
   }
-  useEffect(() => { load(); }, []);
+  async function loadDepts() {
+    const r = await fetch('/api/admin/departamente');
+    if (r.status === 403) return;
+    const j = await r.json();
+    if (j.ok) setDepts(j.departments);
+  }
+  useEffect(() => { load(); loadDepts(); }, []);
+
+  // --- Departamente ---
+  async function createDept(e: React.FormEvent) {
+    e.preventDefault(); setMsg('');
+    const name = newDept.trim();
+    if (!name) return;
+    const r = await fetch('/api/admin/departamente', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+    const j = await r.json();
+    if (j.ok) { setMsg('✅ Departament creat: ' + name); setNewDept(''); await loadDepts(); }
+    else setMsg('❌ ' + j.error);
+  }
+  async function renameDept(id: string) {
+    setMsg('');
+    const name = editDeptName.trim();
+    if (!name) { setEditDeptId(null); return; }
+    const r = await fetch('/api/admin/departamente', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, name }) });
+    const j = await r.json();
+    if (j.ok) { setMsg('✅ Departament redenumit: ' + name); setEditDeptId(null); setEditDeptName(''); await loadDepts(); }
+    else setMsg('❌ ' + j.error);
+  }
+  async function removeDept(d: Dept) {
+    if (!window.confirm(`Ștergi departamentul „${d.name}"?${d._count.users > 0 ? `\n\nCei ${d._count.users} utilizatori vor rămâne FĂRĂ departament (nu se șterg).` : ''}`)) return;
+    setMsg('');
+    const r = await fetch('/api/admin/departamente', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: d.id }) });
+    const j = await r.json();
+    if (j.ok) { setMsg(`🗑 Departament șters: ${d.name}${j.detachedUsers ? ` (${j.detachedUsers} useri rămași fără departament)` : ''}`); await loadDepts(); await load(); }
+    else setMsg('❌ ' + j.error);
+  }
+  // --- Departament + funcție per user ---
+  async function changeDepartment(id: string, departmentId: string) {
+    setMsg('');
+    const r = await fetch('/api/users', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, departmentId: departmentId || null }) });
+    const j = await r.json();
+    if (!j.ok) setMsg('❌ ' + j.error);
+    await load(); await loadDepts();
+  }
+  async function savePosition(u: U) {
+    const draft = posDraft[u.id];
+    if (draft === undefined) return; // nimic schimbat
+    const next = draft.trim();
+    if ((u.position ?? '') === next) return; // identic, nu salvăm
+    setMsg('');
+    const r = await fetch('/api/users', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: u.id, position: next }) });
+    const j = await r.json();
+    if (j.ok) { setMsg('✅ Funcție salvată: ' + (u.name || u.email)); await load(); }
+    else setMsg('❌ ' + j.error);
+  }
 
   async function create(e: React.FormEvent) {
     e.preventDefault(); setMsg('');
@@ -231,7 +294,7 @@ export default function UsersPage() {
           {view === 'arbore' ? (
           <div className="overflow-x-auto scroll-area">
             <table className="tbl">
-              <thead><tr><th>Nume (organigramă)</th><th>Rol</th><th>Raportează către</th><th>Echipă</th><th>Clienți</th><th>CRM</th><th>Acțiuni</th></tr></thead>
+              <thead><tr><th>Nume (organigramă)</th><th>Rol</th><th>Departament</th><th>Funcție</th><th>Raportează către</th><th>Echipă</th><th>Clienți</th><th>CRM</th><th>Acțiuni</th></tr></thead>
               <tbody>
                 {tree.map(({ u, depth }) => (
                   <tr key={u.id}>
@@ -247,6 +310,22 @@ export default function UsersPage() {
                       <select className="pill border-0 cursor-pointer pill-lucru" value={u.role} onChange={e => changeRole(u.id, e.target.value)}>
                         {Object.keys(ROLE_LABEL).map(r => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
                       </select>
+                    </td>
+                    <td>
+                      <select className="field !py-1 !text-[12px] max-w-[160px]" value={u.department?.id ?? ''} onChange={e => changeDepartment(u.id, e.target.value)} title="Departament (grupare). Nu afectează rolul/vizibilitatea.">
+                        <option value="">— fără</option>
+                        {depts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                      </select>
+                    </td>
+                    <td>
+                      <input
+                        className="field !py-1 !text-[12px] max-w-[150px]"
+                        placeholder="ex. Coordonator Vânzări"
+                        value={posDraft[u.id] ?? u.position ?? ''}
+                        onChange={e => setPosDraft({ ...posDraft, [u.id]: e.target.value })}
+                        onBlur={() => savePosition(u)}
+                        title="Funcție / titlu (text liber). Salvat automat când ieși din câmp."
+                      />
                     </td>
                     <td>
                       <select className="field !py-1 !text-[12px] max-w-[160px]" value={u.managerId ?? ''} onChange={e => changeManager(u.id, e.target.value)}>
@@ -275,7 +354,48 @@ export default function UsersPage() {
           )}
         </div>
 
-        <form onSubmit={create} className="card p-5 rise rise-2 space-y-3 self-start">
+        <div className="space-y-4 self-start">
+        {/* CARD Departamente — grupare gestionată de admin. NU înlocuiește rolurile de permisiuni. */}
+        <div className="card p-5 rise rise-2 space-y-3">
+          <div className="panel-head"><span className="dot" />Departamente</div>
+          <p className="text-[11px] text-[var(--fg-soft)] -mt-1">Grupare a echipei (ex. „Vânzări", „Logistică"). Nu afectează rolul de permisiuni sau vizibilitatea — alocarea pe user e în tabelul „Departament".</p>
+          <form onSubmit={createDept} className="flex gap-2">
+            <input className="field flex-1" placeholder="Nume departament nou" value={newDept} onChange={e => setNewDept(e.target.value)} />
+            <button className="btn btn-primary whitespace-nowrap" disabled={!newDept.trim()}>Creează</button>
+          </form>
+          {depts.length === 0 ? (
+            <div className="text-[12px] text-[var(--fg-soft)] py-1">Niciun departament încă.</div>
+          ) : (
+            <ul className="space-y-1.5">
+              {depts.map(d => (
+                <li key={d.id} className="flex items-center gap-2">
+                  {editDeptId === d.id ? (
+                    <>
+                      <input
+                        className="field !py-1 !text-[12px] flex-1"
+                        value={editDeptName}
+                        autoFocus
+                        onChange={e => setEditDeptName(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') renameDept(d.id); if (e.key === 'Escape') { setEditDeptId(null); setEditDeptName(''); } }}
+                      />
+                      <button type="button" onClick={() => renameDept(d.id)} className="btn btn-primary !py-1 !px-2 !text-[11px]">Salvează</button>
+                      <button type="button" onClick={() => { setEditDeptId(null); setEditDeptName(''); }} className="btn btn-secondary !py-1 !px-2 !text-[11px]">Anulează</button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="flex-1 text-[13px] font-semibold whitespace-nowrap overflow-hidden text-ellipsis">{d.name}</span>
+                      <span className="pill pill-lucru !text-[10px] whitespace-nowrap">{d._count.users} useri</span>
+                      <button type="button" onClick={() => { setEditDeptId(d.id); setEditDeptName(d.name); }} className="btn btn-secondary !py-1 !px-2 !text-[11px]" title="Redenumește">Redenumește</button>
+                      <button type="button" onClick={() => removeDept(d)} className="btn btn-secondary !py-1 !px-2 !text-[11px] !text-[var(--danger)]" title="Șterge departamentul (userii rămân fără departament)">🗑</button>
+                    </>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <form onSubmit={create} className="card p-5 rise rise-2 space-y-3">
           <div className="panel-head"><span className="dot" />Adaugă cont</div>
           <div><label className="kpi-label block mb-1">Nume</label><input className="field" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} /></div>
           <div><label className="kpi-label block mb-1">Email firmă</label><input className="field" type="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} required /></div>
@@ -291,6 +411,7 @@ export default function UsersPage() {
           <button className="btn btn-primary w-full justify-center">Creează cont</button>
           {msg && <div className={'toast ' + (msg.startsWith('✅') ? 'toast-ok' : 'toast-err')}>{msg}</div>}
         </form>
+        </div>
       </div>
 
       {/* MODAL reasignare clienți — DOAR în aplicație, nu în CRM */}

@@ -15,7 +15,7 @@ export async function GET() {
   const scope = await requireAdmin();
   if (!scope) return NextResponse.json({ ok: false, error: 'Doar admin' }, { status: 403 });
   const users = await prisma.user.findMany({
-    select: { id: true, email: true, name: true, role: true, active: true, managerId: true, createdAt: true, _count: { select: { clienti: true, reports: true } }, crmCreds: { select: { crmUser: true } } },
+    select: { id: true, email: true, name: true, role: true, active: true, managerId: true, position: true, departmentId: true, department: { select: { id: true, name: true } }, createdAt: true, _count: { select: { clienti: true, reports: true } }, crmCreds: { select: { crmUser: true } } },
     orderBy: { createdAt: 'asc' }
   });
   return NextResponse.json({ ok: true, users });
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const scope = await requireAdmin();
   if (!scope) return NextResponse.json({ ok: false, error: 'Doar admin' }, { status: 403 });
-  const { id, role, password, managerId, active, reassignTo } = await req.json();
+  const { id, role, password, managerId, active, reassignTo, departmentId, position } = await req.json();
   if (!id) return NextResponse.json({ ok: false, error: 'id lipsă' }, { status: 400 });
 
   // REASIGNARE clienți: mută toți clienții lui `id` → `reassignTo`. DOAR în aplicație — NU atinge gestcom CRM.
@@ -83,6 +83,21 @@ export async function PATCH(req: NextRequest) {
       if (sub.has(managerId)) return NextResponse.json({ ok: false, error: 'Ciclu interzis: managerul ales e în subordinea acestui user' }, { status: 400 });
     }
     data.managerId = managerId || null;
+  }
+  // Departament (grupare) — string = setează (validat să existe), null/'' = scoate din departament.
+  if (departmentId !== undefined) {
+    if (departmentId) {
+      const dep = await prisma.department.findUnique({ where: { id: departmentId }, select: { id: true } });
+      if (!dep) return NextResponse.json({ ok: false, error: 'Departament inexistent' }, { status: 404 });
+      data.departmentId = departmentId;
+    } else {
+      data.departmentId = null;
+    }
+  }
+  // Funcție/titlu (text liber). String gol → null.
+  if (position !== undefined) {
+    const p = String(position ?? '').trim();
+    data.position = p || null;
   }
   if (Object.keys(data).length === 0) return NextResponse.json({ ok: false, error: 'Nimic de schimbat' }, { status: 400 });
   await prisma.user.update({ where: { id }, data });
