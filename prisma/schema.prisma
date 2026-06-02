@@ -1,0 +1,171 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  name          String?
+  role          String    @default("user")
+  createdAt     DateTime  @default(now())
+
+  // Ierarhie org: cine raportează cui. Un manager vede pâlniile tuturor descendenților (recursiv).
+  managerId     String?
+  manager       User?     @relation("OrgTree", fields: [managerId], references: [id], onDelete: SetNull)
+  reports       User[]    @relation("OrgTree")
+
+  crmCreds      CrmCredentials?
+  clienti       Client[]
+  audits        AuditLog[]
+  syncRuns      SyncRun[]
+  outlook       OutlookToken?
+}
+
+// Token-uri Microsoft Graph (Outlook) per user — access+refresh criptate AES-256.
+model OutlookToken {
+  id            String    @id @default(cuid())
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account       String              // email-ul contului Microsoft conectat
+  accessEnc     String              // access_token criptat
+  refreshEnc    String              // refresh_token criptat
+  expiresAt     DateTime            // când expiră access_token-ul
+  updatedAt     DateTime  @updatedAt
+}
+
+model CrmCredentials {
+  id            String    @id @default(cuid())
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  crmUser       String
+  crmPassEnc    String
+  cookieJar     String?
+  cookieTs      DateTime?
+  utilizatorId  String?
+  autoSync      Boolean   @default(true)   // auto-sync pornit pentru acest cont
+  updatedAt     DateTime  @updatedAt
+}
+
+model Client {
+  id            String    @id @default(cuid())
+  idLucrare     String
+  ownerId       String
+  owner         User      @relation(fields: [ownerId], references: [id])
+
+  nume          String
+  localitate    String?
+  judet         String?
+  sursa         String?
+  telefon       String?
+  email         String?
+  categorie     Int
+  isDT          Boolean   @default(false)
+  suprafata     Float?
+  dataIntrare   DateTime?
+  t1            String?
+  hasAudio      Boolean   @default(true)
+  nevoia        String?
+  schitaStatus  String?
+  preOfertat    String?
+  ofertat       String?
+  stadiu        String?
+  stelutaCat    Int       @default(0)
+  reminderText  String?
+  observatii    String?
+  notaManager   String?   // notă privată a managerului (editabilă în webapp); separată de observatii (read-only din CRM)
+
+  strategieV1   String?
+  strategieV2   String?
+  obsSituatie   String?
+  obsSistem     String?
+  strategieNevoi String?
+
+  t1Locked      Boolean   @default(false)
+
+  lastDetailAt  DateTime?   // ultima reîmprospătare de detalii (pt rotația auto-sync)
+
+  // Câmpuri de "deal" (blueprint Salesforce → AMASS, 2026-06-01) — toate opționale.
+  probabilitate     Int?        // 0-100; null = auto din stadiu
+  closeDate         DateTime?   // dată-țintă de contractare
+  forecastCategory  String?     // Pipeline | BestCase | Commit | Closed | Omitted
+  closureReason     String?     // Won | Lost (la Contractat/Anulat)
+  closureReasonDetail String?   // motivul concret (preț, concurență, ROI...)
+  nextStepText      String?     // pasul următor
+  nextStepDue       DateTime?   // scadența pasului următor
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  arhive        ArhivaEntry[]
+  remindere     Reminder[]
+
+  @@unique([ownerId, idLucrare])
+  @@index([ownerId])
+  @@index([stadiu])
+}
+
+model ArhivaEntry {
+  id            String    @id @default(cuid())
+  clientId      String
+  client        Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  versiune      String
+  dataSnapshot  String
+  obsExtra      String?
+  createdAt     DateTime  @default(now())
+
+  @@index([clientId])
+}
+
+model Reminder {
+  id            String    @id @default(cuid())
+  clientId      String
+  client        Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  idReminderCrm String?
+  data          DateTime
+  ora           String?
+  tip           String
+  subtip        String?
+  info          String
+  status        String    @default("deschis")
+  createdAt     DateTime  @default(now())
+
+  @@index([clientId])
+  @@index([data])
+}
+
+model AuditLog {
+  id            String    @id @default(cuid())
+  userId        String?
+  user          User?     @relation(fields: [userId], references: [id])
+  func          String
+  action        String
+  entity        String?
+  entityId      String?
+  fields        String?
+  diff          String?
+  createdAt     DateTime  @default(now())
+
+  @@index([createdAt])
+  @@index([userId])
+}
+
+model SyncRun {
+  id            String    @id @default(cuid())
+  userId        String?
+  user          User?     @relation(fields: [userId], references: [id])
+  type          String
+  startedAt     DateTime  @default(now())
+  completedAt   DateTime?
+  status        String
+  processed     Int       @default(0)
+  total         Int       @default(0)
+  fetchesUsed   Int       @default(0)
+  errorMessage  String?
+  checkpoint    String?
+}

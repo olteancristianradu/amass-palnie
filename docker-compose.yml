@@ -1,0 +1,25 @@
+# AMASS Energy Console — un container = un client = date IZOLATE + LOCALE (volumul amass-data).
+# Pornire:  docker compose up -d --build
+# Logs:     docker compose logs -f
+# Oprire:   docker compose down   (datele rămân în volum)
+services:
+  amass:
+    build: .
+    container_name: amass-console
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # DB-ul SQLite stă în volumul montat → date persistente, independente per deployment.
+      DATABASE_URL: "file:/app/prisma/dev.db"
+      # OBLIGATORIU: pune valorile tale (vezi .env.example). NU lăsa goale în producție.
+      NEXTAUTH_URL: "${NEXTAUTH_URL:-http://localhost:3000}"
+      NEXTAUTH_SECRET: "${NEXTAUTH_SECRET:?seteaza NEXTAUTH_SECRET}"
+      CRYPTO_KEY: "${CRYPTO_KEY:?seteaza CRYPTO_KEY (32 bytes base64)}"
+      AZURE_CLIENT_ID: "${AZURE_CLIENT_ID:-}"
+      AZURE_CLIENT_SECRET: "${AZURE_CLIENT_SECRET:-}"
+    volumes:
+      # Datele clientului (baza SQLite) — LOCALE, independente, persistente între reporniri.
+      - amass-data:/app/prisma
+volumes:
+  amass-data:

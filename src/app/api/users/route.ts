@@ -1,0 +1,67 @@
+import { NextRequest, NextResponse } from 'next/server';
+import bcrypt from 'bcryptjs';
+import { prisma } from '@/lib/db';
+import { getScope } from '@/lib/scope';
+import { auditLog } from '@/lib/audit';
+
+// Doar admin gestionează conturile.
+async function requireAdmin() {
+  const scope = await getScope();
+  if (!scope || scope.role !== 'admin') return null;
+  return scope;
+}
+
+export async function GET() {
+  const scope = await requireAdmin();
+  if (!scope) return NextResponse.json({ ok: false, error: 'Doar admin' }, { status: 403 });
+  const users = await prisma.user.findMany({
+    select: { id: true, email: true, name: true, role: true, managerId: true, createdAt: true, _count: { select: { clienti: true, reports: true } }, crmCreds: { select: { crmUser: true } } },
+    orderBy: { createdAt: 'asc' }
+  });
+  return NextResponse.json({ ok: true, users });
+}
+
+export async function POST(req: NextRequest) {
+  const scope = await requireAdmin();
+  if (!scope) return NextResponse.json({ ok: false, error: 'Doar admin' }, { status: 403 });
+  const { email, password, name, role } = await req.json();
+  if (!email || !password || password.length < 6) {
+    return NextResponse.json({ ok: false, error: 'Email + parolă (min 6 caractere) necesare' }, { status: 400 });
+  }
+  const r = ['agent', 'manager', 'admin'].includes(role) ? role : 'agent';
+  const exists = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+  if (exists) return NextResponse.json({ ok: false, error: 'Email deja folosit' }, { status: 400 });
+  const hash = await bcrypt.hash(password, 10);
+  const u = await prisma.user.create({
+    data: { email: email.toLowerCase(), passwordHash: hash, name: name || email, role: r }
+  });
+  await auditLog({ userId: scope.userId, func: 'users/create', action: 'CREATE', entity: 'User', entityId: u.id, fields: 'email=' + u.email + '; role=' + r });
+  return NextResponse.json({ ok: true, id: u.id });
+}
+
+export async function PATCH(req: NextRequest) {
+  const scope = await requireAdmin();
+  if (!scope) return NextResponse.json({ ok: false, error: 'Doar admin' }, { status: 403 });
+  const { id, role, password, managerId } = await req.json();
+  if (!id) return NextResponse.json({ ok: false, error: 'id lipsă' }, { status: 400 });
+  const data: any = {};
+  if (role && ['agent', 'manager', 'admin'].includes(role)) data.role = role;
+  if (password && password.length >= 6) data.passwordHash = await bcrypt.hash(password, 10);
+  if (managerId !== undefined) {
+    // Previne cicluri: managerId nou nu poate fi în subtree-ul lui id (sau el însuși).
+    if (managerId === id) return NextResponse.json({ ok: false, error: 'Un user nu poate fi propriul manager' }, { status: 400 });
+    if (managerId) {
+      const all = await prisma.user.findMany({ select: { id: true, managerId: true } });
+      const childrenOf = new Map<string, string[]>();
+      all.forEach(u => { if (u.managerId) { const a = childrenOf.get(u.managerId) || []; a.push(u.id); childrenOf.set(u.managerId, a); } });
+      const sub = new Set<string>([id]); const q = [id];
+      while (q.length) { const c = q.shift()!; (childrenOf.get(c) || []).forEach(ch => { if (!sub.has(ch)) { sub.add(ch); q.push(ch); } }); }
+      if (sub.has(managerId)) return NextResponse.json({ ok: false, error: 'Ciclu interzis: managerul ales e în subordinea acestui user' }, { status: 400 });
+    }
+    data.managerId = managerId || null;
+  }
+  if (Object.keys(data).length === 0) return NextResponse.json({ ok: false, error: 'Nimic de schimbat' }, { status: 400 });
+  await prisma.user.update({ where: { id }, data });
+  await auditLog({ userId: scope.userId, func: 'users/update', action: 'UPDATE', entity: 'User', entityId: id, fields: Object.keys(data).join(',') });
+  return NextResponse.json({ ok: true });
+}
