@@ -5,6 +5,7 @@ import { Layout } from '@/components/Layout';
 import { PriorityStars, SyncBadge, type SyncInfo, type AutoSyncInfo } from '@/components/ui';
 import { KanbanBoard } from '@/components/KanbanBoard';
 import { useT } from '@/lib/i18n';
+import { deriveStage } from '@/lib/stage-rules';
 
 interface Client {
   id: string;
@@ -36,6 +37,49 @@ interface Client {
 const STADII = ['', 'Anulat', 'Contractat', 'Amanat', 'Finalizat'];
 const NEVOI = ['', 'Nevoie Acoperita', 'Tentativa', 'Nu il putem ajuta', 'Nevoie viitoare', 'Nevoie Acoperita in anumite conditii'];
 
+// Etape (deriveStage) — cheie internă + etichetă afișată. Ordinea = pâlnia liniară.
+const STAGE_OPTIONS: Array<{ key: string; label: string }> = [
+  { key: 'intrare', label: 'Intrare' },
+  { key: 't1', label: 'T1' },
+  { key: 'schita', label: 'Schiță' },
+  { key: 'preofertat', label: 'Pre-ofertat' },
+  { key: 'ofertat', label: 'Ofertat' },
+  { key: 'amanat', label: 'Amânat' },
+  { key: 'contractat', label: 'Contractat' },
+  { key: 'finalizat', label: 'Finalizat' },
+  { key: 'anulat', label: 'Anulat' },
+];
+const STAGE_ORDER: Record<string, number> = Object.fromEntries(STAGE_OPTIONS.map((s, i) => [s.key, i]));
+
+// Steluță (prioritate culoare) — index 0..4 (parity cu PriorityStars / stelutaCat).
+const STELUTA_OPTIONS = ['Fără', 'Roșu', 'Portocaliu', 'Albastru', 'Verde'];
+
+// Opțiuni de sortare. `cmp` întoarce comparatorul; folosit pe lista `filtered`.
+type SortKey = 'supr-desc' | 'supr-asc' | 'data-desc' | 'data-asc' | 'prio-desc' | 'nume-asc' | 'etapa';
+const SORT_OPTIONS: Array<{ key: SortKey; label: string }> = [
+  { key: 'supr-desc', label: 'Suprafață ↓' },
+  { key: 'supr-asc', label: 'Suprafață ↑' },
+  { key: 'data-desc', label: 'Dată intrare ↓' },
+  { key: 'data-asc', label: 'Dată intrare ↑' },
+  { key: 'prio-desc', label: 'Prioritate (steluță) ↓' },
+  { key: 'nume-asc', label: 'Nume A-Z' },
+  { key: 'etapa', label: 'Etapă' },
+];
+
+// Default-ul de filtre (pt. reset + persistență localStorage).
+interface FilterState {
+  stage: string;        // cheie deriveStage sau ''
+  stadiu: string;       // valoare STADII sau ''
+  nevoia: string;       // valoare NEVOI sau ''
+  steluta: string;      // '' sau '0'..'4'
+  audio: 'all' | 'yes' | 'no';
+  mpMin: string;
+  mpMax: string;
+  dateFrom: string;     // yyyy-mm-dd
+  dateTo: string;       // yyyy-mm-dd
+}
+const DEFAULT_FILTERS: FilterState = { stage: '', stadiu: '', nevoia: '', steluta: '', audio: 'all', mpMin: '', mpMax: '', dateFrom: '', dateTo: '' };
+
 // Chip colors pe Nevoia (parity cu Palnie.js ~175-183): verde / gri / roșu / galben / portocaliu.
 function nevoiaChip(v: string | null): React.CSSProperties {
   const s = (v || '').toLowerCase();
@@ -56,7 +100,11 @@ export default function PalniePage() {
   const [lastSync, setLastSync] = useState<SyncInfo | null>(null);
   const [autoSync, setAutoSync] = useState<AutoSyncInfo | null>(null);
   const [filter, setFilter] = useState('');
-  const [stadiuFilter, setStadiuFilter] = useState('');
+  // Panou de filtre ample (colapsabil). `stadiuFilter` rămâne în obiectul `filters`.
+  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>('data-desc');
+  const setF = <K extends keyof FilterState>(k: K, v: FilterState[K]) => setFilters(prev => ({ ...prev, [k]: v }));
   const [msg, setMsg] = useState('');
   const [isManager, setIsManager] = useState(false);
   const [ownerFilter, setOwnerFilter] = useState('all');
@@ -66,6 +114,18 @@ export default function PalniePage() {
   const [closeModal, setCloseModal] = useState<{ id: string; stadiu: 'Contractat' | 'Anulat' } | null>(null);
   useEffect(() => { const v = localStorage.getItem('amass-palnie-view'); if (v === 'tabel' || v === 'cards' || v === 'kanban') setView(v); }, []);
   const switchView = (v: 'cards' | 'tabel' | 'kanban') => { setView(v); try { localStorage.setItem('amass-palnie-view', v); } catch {} };
+
+  // Persistență filtre + sortare în localStorage (opțional, restaurat la mount).
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('amass-palnie-filters');
+      if (raw) { const p = JSON.parse(raw); if (p && typeof p === 'object') setFilters({ ...DEFAULT_FILTERS, ...p }); }
+      const sk = localStorage.getItem('amass-palnie-sort');
+      if (sk && SORT_OPTIONS.some(o => o.key === sk)) setSortKey(sk as SortKey);
+    } catch {}
+  }, []);
+  useEffect(() => { try { localStorage.setItem('amass-palnie-filters', JSON.stringify(filters)); } catch {} }, [filters]);
+  useEffect(() => { try { localStorage.setItem('amass-palnie-sort', sortKey); } catch {} }, [sortKey]);
   // Update optimist local — folosit de Kanban (drag & drop) ca să reflecte mutarea instant.
   const patchLocal = (id: string, patch: Record<string, any>) => setClienti(prev => prev.map(c => c.id === id ? { ...c, ...patch } : c));
 
@@ -158,12 +218,71 @@ export default function PalniePage() {
     }
   }
 
-  const filtered = clienti.filter(c => {
-    if (stadiuFilter && (c.stadiu ?? '') !== stadiuFilter) return false;
-    if (!filter) return true;
-    const q = filter.toLowerCase();
-    return (c.nume + ' ' + (c.localitate ?? '') + ' ' + c.idLucrare).toLowerCase().includes(q);
-  });
+  // Helpers comparatori sortare.
+  const mp = (c: Client) => (c.suprafata == null ? null : Number(c.suprafata));
+  const dt = (c: Client) => { const t = c.dataIntrare ? new Date(c.dataIntrare).getTime() : NaN; return Number.isNaN(t) ? null : t; };
+  // null-urile cad mereu la coadă, indiferent de direcție.
+  const nullsLast = <T,>(av: T | null, bv: T | null, body: (a: T, b: T) => number) => {
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    return body(av, bv);
+  };
+
+  const filtered = clienti
+    .filter(c => {
+      // Etapă (deriveStage)
+      if (filters.stage && deriveStage(c) !== filters.stage) return false;
+      // Stadiu (existent)
+      if (filters.stadiu && (c.stadiu ?? '') !== filters.stadiu) return false;
+      // Nevoia
+      if (filters.nevoia && (c.nevoia ?? '') !== filters.nevoia) return false;
+      // Steluță (prioritate culoare)
+      if (filters.steluta !== '' && (c.stelutaCat ?? 0) !== Number(filters.steluta)) return false;
+      // Audio
+      if (filters.audio === 'yes' && !c.hasAudio) return false;
+      if (filters.audio === 'no' && c.hasAudio) return false;
+      // Suprafață min/max
+      const supr = mp(c);
+      if (filters.mpMin !== '') { if (supr == null || supr < Number(filters.mpMin)) return false; }
+      if (filters.mpMax !== '') { if (supr == null || supr > Number(filters.mpMax)) return false; }
+      // Dată intrare de la / până la (compar pe yyyy-mm-dd local)
+      if (filters.dateFrom || filters.dateTo) {
+        const t = dt(c);
+        if (t == null) return false;
+        const d = new Date(t);
+        const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        if (filters.dateFrom && iso < filters.dateFrom) return false;
+        if (filters.dateTo && iso > filters.dateTo) return false;
+      }
+      // Search liber (păstrat)
+      if (filter) {
+        const q = filter.toLowerCase();
+        if (!(c.nume + ' ' + (c.localitate ?? '') + ' ' + c.idLucrare).toLowerCase().includes(q)) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      switch (sortKey) {
+        case 'supr-desc': return nullsLast(mp(a), mp(b), (x, y) => y - x);
+        case 'supr-asc': return nullsLast(mp(a), mp(b), (x, y) => x - y);
+        case 'data-desc': return nullsLast(dt(a), dt(b), (x, y) => y - x);
+        case 'data-asc': return nullsLast(dt(a), dt(b), (x, y) => x - y);
+        case 'prio-desc': return (b.stelutaCat ?? 0) - (a.stelutaCat ?? 0);
+        case 'nume-asc': return (a.nume || '').localeCompare(b.nume || '', 'ro', { sensitivity: 'base' });
+        case 'etapa': return (STAGE_ORDER[deriveStage(a)] ?? 99) - (STAGE_ORDER[deriveStage(b)] ?? 99);
+        default: return 0;
+      }
+    });
+
+  // Nr. de filtre active (pt. badge) — search-ul nu intră, are propriul input.
+  const activeFilterCount = (
+    (filters.stage ? 1 : 0) + (filters.stadiu ? 1 : 0) + (filters.nevoia ? 1 : 0) +
+    (filters.steluta !== '' ? 1 : 0) + (filters.audio !== 'all' ? 1 : 0) +
+    (filters.mpMin !== '' || filters.mpMax !== '' ? 1 : 0) +
+    (filters.dateFrom || filters.dateTo ? 1 : 0)
+  );
+  const resetFilters = () => setFilters(DEFAULT_FILTERS);
 
   const pillClass = (s: string | null) => {
     const m: Record<string, string> = { Anulat: 'pill-anulat', Contractat: 'pill-contractat', Amanat: 'pill-amanat', Finalizat: 'pill-finalizat' };
@@ -197,12 +316,18 @@ export default function PalniePage() {
               </select>
             )}
             <input className="field w-40" placeholder={t('Caută client, oraș, #id…')} value={filter} onChange={e => setFilter(e.target.value)} />
-            {view !== 'kanban' && (
-              <select className="field w-32" value={stadiuFilter} onChange={e => setStadiuFilter(e.target.value)}>
-                <option value="">{t('Toate stadiile')}</option>
-                {STADII.filter(s => s).map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            )}
+            {/* SORTARE — vizibilă lângă search/comutator */}
+            <select className="field w-44" value={sortKey} onChange={e => setSortKey(e.target.value as SortKey)} title="Sortează lista (toate vizualizările)">
+              {SORT_OPTIONS.map(o => <option key={o.key} value={o.key}>{t('Sortare')}: {o.label}</option>)}
+            </select>
+            {/* FILTRE — buton compact colapsabil cu badge nr. filtre active */}
+            <button onClick={() => setFiltersOpen(o => !o)}
+              className={'btn ' + (activeFilterCount > 0 ? 'btn-primary' : 'btn-secondary')}
+              aria-expanded={filtersOpen} title="Filtre ample (etapă, nevoie, suprafață, dată…)">
+              ⌕ {t('Filtre')}
+              {activeFilterCount > 0 && <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[var(--on-accent)] text-[var(--accent)] text-[10px] font-bold leading-none">{activeFilterCount}</span>}
+              <span className="ml-1 text-[10px]">{filtersOpen ? '▲' : '▼'}</span>
+            </button>
             <button onClick={() => runSync('/api/crm/sync-clienti', 'Sync clienți')} disabled={!!sync} className="btn btn-primary">{sync ? '⏳' : '↻'} {t('Sync clienți')}</button>
             <button onClick={() => runSync('/api/crm/sync-detalii', 'Sync detalii')} disabled={!!sync} className="btn btn-secondary">↻ {t('Detalii')}</button>
             <button onClick={() => runSync('/api/crm/sync-remindere', 'Sync remindere')} disabled={!!sync} className="btn btn-secondary">↻ {t('Remindere')}</button>
@@ -211,6 +336,86 @@ export default function PalniePage() {
         <p className="text-[var(--fg-soft)] text-[12px] mt-1.5">
           <span className="font-semibold text-[var(--fg)]">{filtered.length}</span> {t('afișați din')} {clienti.length} · steluțe, observații și remindere merg <b>live</b> în CRM
         </p>
+
+        {/* PANOU FILTRE — colapsabil, compact; aplicat pe `filtered` → afectează cards/tabel/kanban */}
+        {filtersOpen && (
+          <div className="mt-2.5 p-3 rounded-[var(--r-sm)] border border-[var(--border-strong)] bg-[var(--surface)] shadow-sm rise">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-x-3 gap-y-2.5">
+              {/* Etapă (deriveStage) */}
+              <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                {t('Etapă')}
+                <select className="field !text-[12px] !py-1.5" value={filters.stage} onChange={e => setF('stage', e.target.value)}>
+                  <option value="">{t('Toate etapele')}</option>
+                  {STAGE_OPTIONS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+                </select>
+              </label>
+              {/* Stadiu */}
+              <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                {t('Stadiu')}
+                <select className="field !text-[12px] !py-1.5" value={filters.stadiu} onChange={e => setF('stadiu', e.target.value)}>
+                  <option value="">{t('Toate stadiile')}</option>
+                  {STADII.filter(s => s).map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </label>
+              {/* Nevoia */}
+              <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                {t('Nevoia')}
+                <select className="field !text-[12px] !py-1.5" value={filters.nevoia} onChange={e => setF('nevoia', e.target.value)}>
+                  <option value="">{t('Orice nevoie')}</option>
+                  {NEVOI.filter(n => n).map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+              {/* Steluță (prioritate culoare) */}
+              <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                {t('Prioritate (steluță)')}
+                <select className="field !text-[12px] !py-1.5" value={filters.steluta} onChange={e => setF('steluta', e.target.value)}>
+                  <option value="">{t('Orice prioritate')}</option>
+                  {STELUTA_OPTIONS.map((s, i) => <option key={i} value={String(i)}>{s}</option>)}
+                </select>
+              </label>
+              {/* Audio */}
+              <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                {t('Audio')}
+                <select className="field !text-[12px] !py-1.5" value={filters.audio} onChange={e => setF('audio', e.target.value as FilterState['audio'])}>
+                  <option value="all">{t('Toate')}</option>
+                  <option value="yes">{t('Cu audio')}</option>
+                  <option value="no">{t('Fără audio')}</option>
+                </select>
+              </label>
+              {/* Suprafață min/max */}
+              <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                {t('Suprafață (mp)')}
+                <div className="flex items-center gap-1">
+                  <input type="number" min={0} inputMode="numeric" placeholder={t('min')} className="field !text-[12px] !py-1.5 w-full"
+                    value={filters.mpMin} onChange={e => setF('mpMin', e.target.value)} />
+                  <span className="text-[var(--fg-faint)]">–</span>
+                  <input type="number" min={0} inputMode="numeric" placeholder={t('max')} className="field !text-[12px] !py-1.5 w-full"
+                    value={filters.mpMax} onChange={e => setF('mpMax', e.target.value)} />
+                </div>
+              </label>
+              {/* Dată intrare de la / până la */}
+              <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--text-secondary)] sm:col-span-2 xl:col-span-2">
+                {t('Dată intrare')}
+                <div className="flex items-center gap-1">
+                  <input type="date" className="field !text-[12px] !py-1.5 w-full" title={t('de la')}
+                    value={filters.dateFrom} onChange={e => setF('dateFrom', e.target.value)} />
+                  <span className="text-[var(--fg-faint)]">–</span>
+                  <input type="date" className="field !text-[12px] !py-1.5 w-full" title={t('până la')}
+                    value={filters.dateTo} onChange={e => setF('dateTo', e.target.value)} />
+                </div>
+              </label>
+            </div>
+            <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-[var(--border)]">
+              <span className="text-[11px] text-[var(--fg-faint)]">
+                {activeFilterCount > 0 ? `${activeFilterCount} ${t('filtre active')}` : t('Niciun filtru activ')}
+              </span>
+              <div className="flex gap-2">
+                <button onClick={resetFilters} disabled={activeFilterCount === 0} className="btn btn-secondary !py-1 !text-[12px]">↺ {t('Resetează filtrele')}</button>
+                <button onClick={() => setFiltersOpen(false)} className="btn btn-secondary !py-1 !text-[12px]">{t('Închide')}</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {msg && <div className={'toast mb-4 whitespace-pre-wrap ' + (msg.startsWith('✅') ? 'toast-ok' : msg.startsWith('❌') ? 'toast-err' : 'toast-info')}>{msg}</div>}

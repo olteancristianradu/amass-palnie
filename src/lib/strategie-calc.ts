@@ -19,14 +19,13 @@
  *   F29 (Profit anual lei)    = ROUND((MAX(C7,C8) - F8) * 0.6)   (C7 = prod_aplicatie)
  *   C30 (Diferenta PFTV kW)   = ROUND(C6 - F9, 2)
  *
- *   F30 (Amortizare ANI) — RECTIFICAT 2026-06-01 (metodologia Radu: investiție / economie anuală).
- *     Vechea formulă din sheet `F10 / ((MAX(C7,C8)-F8)*0.6 + C13) / 5` era incoerentă dimensional
- *     (aduna profit ANUAL lei cu cost LUNAR lei, împărțea EUR la lei, apoi /5). Înlocuită cu:
- *       investiție_lei   = F10(EUR) × CURS_EUR_LEI
- *       economie_anuală  = C29(economie lunară vs sistem actual) × 6 luni-sezon  +  F29(profit anual PFTV)
- *       amortizare_ani   = investiție_lei / economie_anuală
- *     Termenul F29 încodează implicit categoria: cu PFTV → scurtează amortizarea; fără PFTV → 0.
- *     (Modelul de CONSUM — F7 = supraf×6 kWh/lună — rămâne 1:1 cu spreadsheet-ul; vezi nota din raport.)
+ *   F30 (Amortizare ANI) — CA-N SPREADSHEET (FisaV2.js F32, 1:1, fără rectificare).
+ *     Formula exactă din celula F32 (cu re-referențierea de layout webapp C8/F8/F10/C13):
+ *       F32 = F11 / ((MAX(C7,C9)-F9)*0.6 + C14) / 5
+ *     unde, în notația webapp:  F11→F10 (cost investiție = suprafață×50),
+ *       C9→C8 (producție estimată = C6×4×365), F9→F8 (consum ANUAL), C14→C13 (suma).
+ *     =>  amortizare_ani = F10 / ((MAX(C7,C8)-F8)*0.6 + C13) / 5
+ *     Numitorul = Profit anual (F29 înainte de ROUND) + suma lunară (C13); aceleași numere ca fișa.
  */
 
 export interface StrategieInput {
@@ -105,14 +104,14 @@ export function calculate(input: StrategieInput): StrategieCalc {
   // C30 diferenta PFTV = ROUND(C6 - F9, 2)
   const C30 = (C6 !== null && F9 !== null) ? round2(C6 - F9) : null;
 
-  // F30 amortizare (ANI) — RECTIFICAT: investiție / economie anuală (vezi nota din header).
-  // economie anuală = economie lunară din consum (C29) pe sezonul de încălzire (6 luni)
-  //                 + profit anual din surplus PFTV vândut (F29, =0 dacă nu există PFTV).
-  const CURS_EUR_LEI = 5; // curs aproximativ EUR→lei, folosit DOAR pentru amortizare în ani
+  // F30 amortizare (ANI) — CA-N SPREADSHEET (FisaV2.js F32, 1:1):
+  //   F32 = F11 / ((MAX(C7,C9)-F9)*0.6 + C14) / 5
+  //   webapp:  F10 / ((MAX(C7,C8)-F8)*0.6 + C13) / 5
+  // (numitor = profit anual brut + suma lunară C13; nu se aplică ROUND, ca în celulă).
   let F30: number | null = null;
-  if (F10 !== null) {
-    const economieAnuala = (C29 ?? 0) * 6 + (F29 ?? 0);
-    if (economieAnuala > 0) F30 = round1((F10 * CURS_EUR_LEI) / economieAnuala);
+  if (F10 !== null && F8 !== null && maxProd > 0) {
+    const numitor = (maxProd - F8) * 0.6 + (C13 ?? 0);
+    if (numitor !== 0) F30 = round2(F10 / numitor / 5);
   }
 
   return {
