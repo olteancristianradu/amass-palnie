@@ -9,12 +9,26 @@ export default function RapoartePage() {
   const [active, setActive] = useState<string>('');
   const [content, setContent] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [forbidden, setForbidden] = useState(false); // rapoartele conțin PII → doar manager/admin
 
   useEffect(() => {
-    fetch('/api/rapoarte').then(r => r.json()).then(j => {
-      if (j.ok) { setReports(j.reports); if (j.reports[0]) open(j.reports[0].file); }
-    });
+    fetch('/api/rapoarte').then(r => {
+      if (r.status === 403) { setForbidden(true); return null; }
+      return r.json();
+    }).then(j => {
+      if (j && j.ok) { setReports(j.reports); if (j.reports[0]) open(j.reports[0].file); }
+    }).catch(() => {});
   }, []);
+
+  if (forbidden) return (
+    <Layout>
+      <div className="card p-10 text-center rise max-w-md mx-auto mt-10">
+        <div className="text-[32px] mb-2">🔒</div>
+        <h1 className="text-[20px] mb-1">Acces restricționat</h1>
+        <p className="text-[var(--fg-soft)] text-[13px]">Rapoartele conțin date ale clienților și sunt vizibile doar pentru manager/admin.</p>
+      </div>
+    </Layout>
+  );
 
   async function open(file: string) {
     setActive(file); setLoading(true);

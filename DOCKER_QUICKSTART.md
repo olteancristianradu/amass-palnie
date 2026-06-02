@@ -30,13 +30,17 @@
    Gata — aplicația rulează pe `http://IP-server:3000`. Logs: `docker compose logs -f`.
 
 ## Primul login + folosire
-- Aplicația pornește cu baza **goală** (date independente pentru acest client).
-- Creează primul **admin**: rulează o dată (înlocuiește emailul/parola):
+- Aplicația pornește cu baza **goală** (date independente pentru acest client). La prima pornire
+  containerul creează automat tabelele (`prisma db push` din entrypoint) — nu faci nimic manual.
+- Creează primul **admin** (o singură dată) — un simplu apel HTTP către `/api/setup`
+  (înlocuiește emailul/parola; după ce există un user, apelul e refuzat automat):
   ```
-  docker compose exec amass node_modules/.bin/tsx prisma/seed.ts
+  curl -X POST http://localhost:3000/api/setup \
+    -H 'Content-Type: application/json' \
+    -d '{"email":"admin@firma.ro","password":"ParolăTare123","name":"Admin"}'
   ```
-  *(sau, dacă există un script de creare admin — vezi README; altfel adminul se creează prin /api/setup la prima pornire.)*
-- Intri în aplicație → **Echipă**: adminul creează agenții + le dă parole.
+  *(De pe alt calculator înlocuiește `localhost` cu IP-ul/adresa serverului.)*
+- Intri în aplicație (`/login`) cu adminul creat → **Echipă**: adminul creează agenții + le dă parole.
 - Fiecare agent → **Setări**: introduce userul + parola lui de **gestcom** (se criptează AES-256) → apasă „Sync clienți" → își importă pâlnia lui.
 - De acolo: lucrează pâlnia (Carduri/Tabel/Kanban), fișa de strategie, steluțe/observații/remindere merg live în gestcom.
 

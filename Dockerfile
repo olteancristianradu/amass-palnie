@@ -17,6 +17,11 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npx prisma generate
+# Secrete „de unică folosință" DOAR pentru build (next build evaluează modulele de auth la „Collecting page data").
+# NU ajung în imaginea finală (stage separat) și NU se folosesc la runtime — acolo vin din docker-compose.
+ENV NEXTAUTH_SECRET="build-time-placeholder-not-used-at-runtime"
+ENV CRYPTO_KEY="YnVpbGQtdGltZS1wbGFjZWhvbGRlci0zMmJ5dGVzLWtleQ=="
+ENV DATABASE_URL="file:/tmp/build.db"
 RUN npm run build
 
 # 3) Runtime (mic, standalone)
@@ -34,7 +39,6 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
-COPY --from=builder /app/node_modules/.bin/prisma ./node_modules/.bin/prisma
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x docker-entrypoint.sh
 EXPOSE 3000
