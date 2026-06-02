@@ -35,3 +35,7 @@ next-env.d.ts
 
 # build cache TS
 tsconfig.tsbuildinfo
+
+# backup-uri locale (NU în git)
+*.tgz
+dev.db.bak-*

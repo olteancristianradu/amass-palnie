@@ -13,7 +13,9 @@ if "%LOCAL%"=="%REMOTE%" (
   echo [%date% %time%] La zi - nimic de actualizat.>> auto-update.log
   exit /b 0
 )
-echo [%date% %time%] Versiune noua gasita - actualizez...>> auto-update.log
+echo [%date% %time%] Versiune noua gasita - BACKUP apoi actualizez...>> auto-update.log
+REM BACKUP automat al datelor INAINTE de update (siguranta anti-pierdere).
+docker run --rm -v amass-palnie_amass-data:/d -v "%cd%":/b alpine tar czf /b/backup-before-update.tgz -C /d . >> auto-update.log 2>&1
 git pull origin main >> auto-update.log 2>&1
 docker compose up -d --build >> auto-update.log 2>&1
 echo [%date% %time%] GATA - aplicatie actualizata.>> auto-update.log
