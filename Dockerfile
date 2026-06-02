@@ -40,6 +40,7 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+COPY scripts ./scripts
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 # Normalizează CRLF→LF (dacă repo-ul a fost clonat pe Windows, git poate pune CRLF →
 # linia „#!/bin/sh" devine invalidă în container → „exec ... no such file or directory") + exec bit.
