@@ -309,17 +309,8 @@ export default function PalniePage() {
           </div>
           <div className="flex gap-2 items-center flex-wrap justify-end">
             <SyncBadge last={lastSync} syncing={!!sync} auto={autoSync} />
-            {isManager && (
-              <select className="field w-40" value={ownerFilter} onChange={e => setOwnerFilter(e.target.value)} title="Vizualizezi pâlnia unui agent din echipa ta">
-                <option value="all">{t('👥 Echipa mea')}</option>
-                {agentList.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
-            )}
-            <input className="field w-40" placeholder={t('Caută client, oraș, #id…')} value={filter} onChange={e => setFilter(e.target.value)} />
-            {/* SORTARE — vizibilă lângă search/comutator */}
-            <select className="field w-44" value={sortKey} onChange={e => setSortKey(e.target.value as SortKey)} title="Sortează lista (toate vizualizările)">
-              {SORT_OPTIONS.map(o => <option key={o.key} value={o.key}>{t('Sortare')}: {o.label}</option>)}
-            </select>
+            <input className="field w-44" placeholder={t('Caută client, oraș, #id…')} value={filter} onChange={e => setFilter(e.target.value)} />
+            {/* (Agent + Sortare au fost mutate în panoul Filtre → rând de sus minimal, mai mult loc clienți) */}
             {/* FILTRE — buton compact colapsabil cu badge nr. filtre active */}
             <button onClick={() => setFiltersOpen(o => !o)}
               className={'btn ' + (activeFilterCount > 0 ? 'btn-primary' : 'btn-secondary')}
@@ -344,6 +335,23 @@ export default function PalniePage() {
         {filtersOpen && (
           <div className="mt-2.5 p-3 rounded-[var(--r-sm)] border border-[var(--border-strong)] bg-[var(--surface)] shadow-sm rise">
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-x-3 gap-y-2.5">
+              {/* Sortare (mutată aici din rândul de sus) */}
+              <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                {t('Sortare')}
+                <select className="field !text-[12px] !py-1.5" value={sortKey} onChange={e => setSortKey(e.target.value as SortKey)}>
+                  {SORT_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+                </select>
+              </label>
+              {/* Agent (echipă) — doar manager (mutat aici din rândul de sus) */}
+              {isManager && (
+                <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--text-secondary)]">
+                  {t('Agent (echipă)')}
+                  <select className="field !text-[12px] !py-1.5" value={ownerFilter} onChange={e => setOwnerFilter(e.target.value)}>
+                    <option value="all">{t('👥 Echipa mea')}</option>
+                    {agentList.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                </label>
+              )}
               {/* Etapă (deriveStage) */}
               <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--text-secondary)]">
                 {t('Etapă')}
