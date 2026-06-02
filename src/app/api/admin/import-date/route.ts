@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { getScope } from '@/lib/scope';
+import { getScope, getVisibleOwnerIds } from '@/lib/scope';
 import { auditLog } from '@/lib/audit';
 
-// Import O SINGURĂ DATĂ al datelor din spreadsheet (strategii + status) în contul propriu.
+// Import O SINGURĂ DATĂ al datelor din spreadsheet (strategii + status).
 // Body: { clients: [ { idLucrare, strategieV1?, strategieV2?, stadiu?, nevoia?,
 //                       schitaStatus?, preOfertat?, ofertat?, strategieNevoi?, obsSituatie?, t1? } ] }
-// Match pe idLucrare în clienții DEȚINUȚI de user (UPDATE, nu creează clienți noi — aceia vin din sync CRM).
-// Blob-ul strategieV1/V2 se face MERGE (valorile din import au prioritate per cheie; nu pierdem ce era).
+// Match pe idLucrare în SCOPUL userului: admin = TOȚI clienții (chiar dacă-s deținuți de agenți),
+// manager = subtree-ul lui, agent = doar ai lui. Așa adminul poate popula strategiile tuturor din spreadsheet.
+// UPDATE, nu creează clienți noi (aceia vin din sync CRM). Blob strategie = MERGE (nu pierde ce era).
 
 function mergeBlob(existing: string | null, incoming: any): string | undefined {
   if (incoming == null || incoming === '') return undefined;
@@ -37,6 +38,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'Lipsește lista de clienți (clients[]) sau e goală' }, { status: 400 });
   }
 
+  // Scopul: admin → toți; manager → subtree; agent → doar ai lui.
+  const visible = await getVisibleOwnerIds(scope);
+
   let updated = 0, notFound = 0, skipped = 0;
   const notFoundSample: string[] = [];
   const SCALAR = ['stadiu', 'nevoia', 'schitaStatus', 'preOfertat', 'ofertat', 'strategieNevoi', 'obsSituatie', 't1'];
@@ -44,8 +48,9 @@ export async function POST(req: NextRequest) {
   for (const it of items) {
     const idLucrare = String(it?.idLucrare ?? it?.id_lucrare ?? '').trim();
     if (!idLucrare) { skipped++; continue; }
+    const where: any = visible === 'ALL' ? { idLucrare } : { idLucrare, ownerId: { in: visible } };
     const client = await prisma.client.findFirst({
-      where: { ownerId: scope.userId, idLucrare },
+      where,
       select: { id: true, strategieV1: true, strategieV2: true }
     });
     if (!client) { notFound++; if (notFoundSample.length < 50) notFoundSample.push(idLucrare); continue; }
