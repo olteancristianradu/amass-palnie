@@ -11,8 +11,8 @@
 ## Instalare (3 pași)
 1. **Ia codul** (ultima versiune de pe GitHub):
    ```
-   git clone https://github.com/olteancristianradu/amass-energy-console.git
-   cd amass-energy-console
+   git clone https://github.com/olteancristianradu/amass-palnie.git
+   cd amass-palnie
    ```
    *(Update ulterior la ultima versiune: `git pull` apoi `docker compose up -d --build`.)*
 2. **Secretele** — copiază exemplul și pune valori:
@@ -53,7 +53,7 @@ Datele rămân (sunt în volumul `amass-data`, nu în imagine).
 
 ## Backup-ul datelor (volumul local)
 ```
-docker run --rm -v amass-energy-console_amass-data:/d -v $PWD:/b alpine tar czf /b/backup-amass.tgz -C /d .
+docker run --rm -v amass-palnie_amass-data:/d -v $PWD:/b alpine tar czf /b/backup-amass.tgz -C /d .
 ```
 
 ## Izolare per client (mai mulți clienți pe același server)

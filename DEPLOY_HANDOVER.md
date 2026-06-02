@@ -16,22 +16,22 @@ Un server Linux (Ubuntu 22+ e cel mai simplu) — la firmă sau un VPS (Hetzner/
 4. (opțional, pentru domeniu+HTTPS) **nginx**: `sudo apt-get install -y nginx`
 
 ## PARTEA 2 — Pune codul pe GitHub (de pe mașina ta actuală)
-1. Cont GitHub → creează un **repo PRIVAT** (ex. `amass-energy-console`). NU public (conține logică de business).
+1. Cont GitHub → creează un **repo PRIVAT** (ex. `amass-palnie`). NU public (conține logică de business).
 2. Pe mașina ta, în `/Users/radu-server/amass-webapp`:
    ```
    git init
    git add .
    git commit -m "AMASS Energy Console"
    git branch -M main
-   git remote add origin https://github.com/<user>/amass-energy-console.git
+   git remote add origin https://github.com/<user>/amass-palnie.git
    git push -u origin main
    ```
    *(`.env.local` și `node_modules` NU se urcă — sunt în .gitignore; secretele le dai separat — vezi Partea 6.)*
 
 ## PARTEA 3 — Adu codul pe server
 ```
-git clone https://github.com/<user>/amass-energy-console.git
-cd amass-energy-console
+git clone https://github.com/<user>/amass-palnie.git
+cd amass-palnie
 npm install
 ```
 
