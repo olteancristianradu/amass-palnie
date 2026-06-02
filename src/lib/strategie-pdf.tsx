@@ -2,6 +2,7 @@
  * Generator PDF fișă strategie — partajat de /api/export/pdf ȘI atașamentul Outlook.
  */
 import { calculate } from '@/lib/strategie-calc';
+import { fieldValueToText } from '@/lib/fisa-template';
 import { Document, Page, Text, View, StyleSheet, renderToBuffer } from '@react-pdf/renderer';
 import React from 'react';
 
@@ -17,7 +18,9 @@ const styles = StyleSheet.create({
 });
 
 function row(label: string, value: any, unit = '') {
-  const text = value !== null && value !== undefined && value !== '' ? value + (unit ? ' ' + unit : '') : '—';
+  // normalizează valorile multiselect (array în blob) → text cu virgule, nu '[object Object]'
+  const norm = fieldValueToText(value);
+  const text = norm !== '' ? norm + (unit ? ' ' + unit : '') : '—';
   return React.createElement(View, { style: styles.row, key: label },
     React.createElement(Text, { style: styles.label }, label + ':'),
     React.createElement(Text, { style: styles.value }, ' ' + text)
@@ -72,7 +75,7 @@ export async function renderStrategiePdf(c: any): Promise<Buffer> {
       row('Diferență PFTV', f.diferenta_pftv_kw, 'kW'),
       row('Amortizare', f.amortizare_ani, 'ani'),
       React.createElement(Text, { style: styles.zone }, 'Strategie & nevoi identificate'),
-      React.createElement(Text, { style: styles.obs }, v.strategie_nevoi || '—')
+      React.createElement(Text, { style: styles.obs }, fieldValueToText(v.strategie_nevoi) || '—')
     )
   );
   return await renderToBuffer(docEl as any);

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { calculate } from '@/lib/strategie-calc';
+import { fieldValueToText } from '@/lib/fisa-template';
 import { getScope, canAccessClient } from '@/lib/scope';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx';
 
@@ -17,12 +18,16 @@ export async function GET(req: NextRequest) {
   v.suprafata = c.suprafata;
   const f = calculate(v);
 
-  const par = (label: string, value: any, unit = '') => new Paragraph({
-    children: [
-      new TextRun({ text: label + ': ', bold: false, color: '475569' }),
-      new TextRun({ text: value !== null && value !== undefined && value !== '' ? value + (unit ? ' ' + unit : '') : '—', bold: true })
-    ]
-  });
+  const par = (label: string, value: any, unit = '') => {
+    // normalizează valorile multiselect (array în blob) → text cu virgule, nu '[object Object]'
+    const norm = fieldValueToText(value);
+    return new Paragraph({
+      children: [
+        new TextRun({ text: label + ': ', bold: false, color: '475569' }),
+        new TextRun({ text: norm !== '' ? norm + (unit ? ' ' + unit : '') : '—', bold: true })
+      ]
+    });
+  };
   const heading = (text: string) => new Paragraph({
     heading: HeadingLevel.HEADING_2,
     children: [new TextRun({ text: text.toUpperCase(), bold: true, color: '1E2A3A' })]
@@ -78,7 +83,7 @@ export async function GET(req: NextRequest) {
         par('Amortizare investiție', f.amortizare_ani, 'ani'),
         blank(),
         heading('Strategie & nevoi identificate'),
-        new Paragraph({ children: [new TextRun({ text: v.strategie_nevoi || '—' })] })
+        new Paragraph({ children: [new TextRun({ text: fieldValueToText(v.strategie_nevoi) || '—' })] })
       ]
     }]
   });

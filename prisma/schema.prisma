@@ -169,3 +169,16 @@ model SyncRun {
   errorMessage  String?
   checkpoint    String?
 }
+
+// Template-ul fișei de strategie — EDITABIL de admin, citit de TOȚI agenții (singleton per variantă).
+// `zones` = JSON (FisaTemplateZone[]): structura completă (zone → câmpuri: key/label/control/options/source).
+// Seed-ul inițial = paritate 1:1 cu fișa din spreadsheet (V1 = categoria 1, V2 = restul).
+model FisaTemplate {
+  id            String    @id @default(cuid())
+  variant       String    @unique   // 'V1' | 'V2'
+  titlu         String
+  zones         String              // JSON serializat: FisaTemplateZone[]
+  version       Int       @default(1)
+  updatedAt     DateTime  @updatedAt
+  updatedBy     String?
+}

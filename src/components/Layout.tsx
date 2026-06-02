@@ -17,6 +17,10 @@ const NAV: NavGroup[] = [
     { href: '/audit', label: 'Jurnal', icon: 'list' },
     { href: '/arhiva', label: 'Arhivă', icon: 'archive' }
   ] },
+  // Grup doar-admin: configurarea formatului fișei de strategie.
+  { section: 'Configurare', roles: ['admin'], items: [
+    { href: '/admin/fisa', label: 'Format fișă', icon: 'sheet' }
+  ] },
   { section: 'Cont', items: [
     { href: '/settings', label: 'Setări', icon: 'gear' }
   ] }

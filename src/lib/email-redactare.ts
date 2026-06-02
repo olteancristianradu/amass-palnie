@@ -4,6 +4,8 @@
  * Plus reminder schițe + dovezi primire la final.
  */
 
+import { fieldValueToText } from '@/lib/fisa-template';
+
 export interface EmailInput {
   nume: string;
   localitate: string;
@@ -22,11 +24,16 @@ const TO_LIST = 'backoffice@amass.ro; Tehnic Amass <tehnic@amass.ro>; AMASS <adm
 const CC_LIST = 'Dana Rulea <danarulea@amass.ro>';
 
 function esc(s: any): string {
-  return String(s == null ? '' : s)
+  // fieldValueToText normalizează multiselect (array în blob) → text cu virgule; pe non-array e identitate
+  return fieldValueToText(s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
-function v_(x: any, suffix = ''): string { return x ? esc(x) + suffix : '<b>_____________</b>'; }
+function v_(x: any, suffix = ''): string {
+  // pentru multiselect: array gol e truthy în JS → folosim textul normalizat ca test de "are valoare"
+  const text = fieldValueToText(x);
+  return text ? esc(x) + suffix : '<b>_____________</b>';
+}
 function m_(label: string): string { return '<b>' + esc(label) + '</b>'; }
 function h_(text: string): string { return '<b style="text-transform:uppercase;letter-spacing:0.5px">' + esc(text) + '</b>'; }
 

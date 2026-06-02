@@ -32,3 +32,6 @@ next-env.d.ts
 # fișiere de lucru temporare
 /reports/_*.csv
 /reports/_*.txt
+
+# build cache TS
+tsconfig.tsbuildinfo

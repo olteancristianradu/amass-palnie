@@ -4,15 +4,10 @@ import { Layout } from '@/components/Layout';
 import { calculate, type StrategieInput } from '@/lib/strategie-calc';
 import { parseObservatii } from '@/lib/strategie-autofill';
 import { buildEmail } from '@/lib/email-redactare';
+import { asMulti, type FisaTemplateData, type FisaField } from '@/lib/fisa-template';
+import { SEED_V1, SEED_V2 } from '@/lib/fisa-template-seed';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-
-// Dropdown-uri cu valori EXACTE din Apps Script FisaV2.js (aliniere mapping arhivă).
-const SISTEM_OPTS = ['', 'CT gaz', 'CT lemne', 'CT peleti', 'CT electrica', 'Pompa caldura', 'Calorifere electrice', 'Aer conditionat', 'Soba', 'Nu are sistem'];
-const MOTIV_OPTS = ['', 'Efort scazut', 'Confort termic', 'Economie financiara', 'Independenta energetica', 'Sanatate', 'Valoare imobil', 'Eco / mediu', 'Siguranta'];
-const NIVEL_OPTS = ['', 'Necumpatat', 'Cumpatat', 'Smart', 'Lux'];
-const TIPOLOGIE_OPTS = ['', 'Logic', 'Emotional', 'Vanator de pret', 'Nehotarat', 'Grabit', 'Increzator', 'Sceptic'];
-const TIPPLATA_OPTS = ['', 'Integral', 'Esalonat', 'Mixt', 'Credit bancar', 'Nehotarat'];
 
 interface Client {
   id: string;
@@ -38,6 +33,7 @@ export default function StrategiePage() {
   const params = useParams<{ id: string }>();
   const [client, setClient] = useState<Client | null>(null);
   const [form, setForm] = useState<Record<string, any>>({});
+  const [template, setTemplate] = useState<FisaTemplateData | null>(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const [emailOpen, setEmailOpen] = useState(false);
@@ -87,6 +83,23 @@ export default function StrategiePage() {
           fillEmpty('plata_esalonata', parsed.bugetAchizitie);
         }
         setForm(base);
+
+        // Template-ul fișei (editabil de admin). Alegem după categorie: 1 -> V1, restul -> V2.
+        // Fallback: dacă fetch-ul eșuează sau nu găsește varianta, folosim SEED-ul local.
+        const seed = isV1 ? SEED_V1 : SEED_V2;
+        const wantVariant = isV1 ? 'V1' : 'V2';
+        fetch('/api/admin/fisa-template')
+          .then(r => (r.ok ? r.json() : null))
+          .then(t => {
+            // Acceptăm mai multe forme de răspuns: array, {templates:[...]}, {template} sau template direct.
+            const list: FisaTemplateData[] = Array.isArray(t) ? t
+              : Array.isArray(t?.templates) ? t.templates
+              : t?.template ? [t.template]
+              : (t?.variant ? [t] : []);
+            const tpl = list.find(x => x && x.variant === wantVariant);
+            setTemplate(tpl || seed);
+          })
+          .catch(() => setTemplate(seed));
       }
     });
   }, [params?.id]);
@@ -104,6 +117,35 @@ export default function StrategiePage() {
   } as StrategieInput), [form, isV1]);
 
   function set(key: string, val: any) { setForm(prev => ({ ...prev, [key]: val })); }
+
+  // Randare dinamică a unui câmp din template, în funcție de control.
+  // Câmpurile stau într-o coloană (space-y-2), deci ocupă deja toată lățimea cardului (f.full = informativ).
+  function renderField(f: FisaField) {
+    // Etichetele din template se termină în ':'; componentele adaugă tot ':' → tăiem dublura.
+    const label = f.label.replace(/:\s*$/, '');
+    switch (f.control) {
+      case 'calc': {
+        // Valoarea read-only vine din obiectul `calc` (prin calcKey).
+        const v = f.calcKey ? (calc as any)[f.calcKey] : null;
+        // String -> CalcText (intervale/text), numeric/null -> Calc.
+        return typeof v === 'string'
+          ? <CalcText key={f.key} label={label} value={v} />
+          : <Calc key={f.key} label={label} value={typeof v === 'number' ? v : null} />;
+      }
+      case 'textarea':
+        return <Field key={f.key} label={label} value={form[f.key] ?? ''} onChange={v => set(f.key, v)} textarea />;
+      case 'multiselect':
+        return <MultiSelect key={f.key} label={label} value={asMulti(form[f.key])} options={f.options ?? []} onChange={v => set(f.key, v)} />;
+      case 'dropdown':
+        // Prepend '' pentru opțiunea goală (ca înainte); Field păstrează valoarea curentă chiar dacă nu e în listă.
+        return <Field key={f.key} label={label} value={form[f.key] ?? ''} onChange={v => set(f.key, v)} options={['', ...(f.options ?? [])]} />;
+      case 'number':
+        return <Field key={f.key} label={label} value={form[f.key] ?? ''} onChange={v => set(f.key, v)} type="number" />;
+      case 'text':
+      default:
+        return <Field key={f.key} label={label} value={form[f.key] ?? ''} onChange={v => set(f.key, v)} />;
+    }
+  }
 
   async function save() {
     if (!client) return;
@@ -177,7 +219,7 @@ export default function StrategiePage() {
     setMsg('✅ Word descărcat');
   }
 
-  if (!client) return <Layout><div className="card p-10 text-center text-[var(--fg-soft)]">Se încarcă fișa…</div></Layout>;
+  if (!client || !template) return <Layout><div className="card p-10 text-center text-[var(--fg-soft)]">Se încarcă fișa…</div></Layout>;
 
   const email = buildEmail({
     nume: client.nume, localitate: client.localitate ?? '',
@@ -231,85 +273,16 @@ export default function StrategiePage() {
 
       {msg && <div className={'toast mb-4 ' + (msg.startsWith('✅') ? 'toast-ok' : msg.startsWith('❌') ? 'toast-err' : 'toast-info')}>{msg}</div>}
 
+      {/* Fișă RANDATĂ DINAMIC din template (nu mai e hardcodată). Grid pe 2 coloane păstrat.
+          Zona 'strategie_nevoi' rămâne în blocul dedicat full-width de mai jos. */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 rise rise-1">
-        {isV1 ? (
-          <Zone title="01 SITUAȚIA ACTUALĂ (proiect în construcție)">
-            <Field label="Suprafață (mp)" value={form.suprafata ?? ''} onChange={v => set('suprafata', v)} type="number" />
-            <Field label="Stadiu construcție" value={form.stadiu_constructie ?? ''} onChange={v => set('stadiu_constructie', v)} />
-            <Field label="Când intră electricianul" value={form.cand_electrician ?? ''} onChange={v => set('cand_electrician', v)} />
-            <Field label="Când toarnă șapele" value={form.cand_sape ?? ''} onChange={v => set('cand_sape', v)} />
-            <Field label="Când estimează mutarea" value={form.cand_mutare ?? ''} onChange={v => set('cand_mutare', v)} />
-            <Field label="Branșament" value={form.bransament ?? ''} onChange={v => set('bransament', v)} options={['', 'Monofazic', 'Trifazic', 'Nedecis']} />
-            <Field label="Construcție / izolație / etaje" value={form.constructie_izolatie ?? ''} onChange={v => set('constructie_izolatie', v)} />
-            <Field label="Dorește PFTV" value={form.doreste_pftv ?? ''} onChange={v => set('doreste_pftv', v)} options={['', 'Da', 'Nu', 'Nehotărât', 'De evaluat']} />
-            <Field label="Putere PFTV existentă (kW)" value={form.putere_pftv ?? ''} onChange={v => set('putere_pftv', v)} type="number" />
-            <Field label="Producție anuală PFTV (Aplicație)" value={form.prod_aplicatie ?? ''} onChange={v => set('prod_aplicatie', v)} type="number" />
-          </Zone>
-        ) : (
-          <Zone title="01 SITUAȚIA ACTUALĂ">
-            <Field label="Suprafață (mp)" value={form.suprafata ?? ''} onChange={v => set('suprafata', v)} type="number" />
-            <Field label="Branșament" value={form.bransament ?? ''} onChange={v => set('bransament', v)} options={['', 'Monofazic', 'Trifazic', 'Nedecis']} />
-            <Field label="Putere PFTV existentă (kW)" value={form.putere_pftv ?? ''} onChange={v => set('putere_pftv', v)} type="number" />
-            <Field label="Producție anuală PFTV (Aplicație)" value={form.prod_aplicatie ?? ''} onChange={v => set('prod_aplicatie', v)} type="number" />
-            <Field label="Consum anual PFTV (Aplicație)" value={form.consum_pftv_aplicatie ?? ''} onChange={v => set('consum_pftv_aplicatie', v)} type="number" />
-            <Field label="Construcție / izolație / etaje" value={form.constructie ?? ''} onChange={v => set('constructie', v)} />
-          </Zone>
-        )}
-
-        <Zone title="→ Cu sistemul AMASS (auto-calc)" pine>
-          <Calc label="Putere necesară" value={calc.putere_necesara_kw} unit="kW" />
-          <Calc label="Consum zilnic" value={calc.consum_zilnic_kwh} unit="kWh" />
-          <Calc label="Consum lunar" value={calc.consum_lunar_kwh} unit="kWh" />
-          <Calc label="Consum anual" value={calc.consum_anual_kwh} unit="kWh" />
-          <Calc label="Necesar PFTV AMASS" value={calc.necesar_pftv_amass_kw} unit="kW" />
-          <Calc label="Cost investiție AMASS (F10)" value={calc.cost_investitie_eur} unit="EUR" big />
-          <CalcText label="Cost eșalonare lunară (F11)" value={calc.cost_esalonare_range} />
-        </Zone>
-
-        {isV1 ? (
-          <Zone title="02 INFO CASA ACTUALĂ (obișnuința clientului)">
-            <Field label="Suprafață casa actuală (mp)" value={form.ca_suprafata ?? ''} onChange={v => set('ca_suprafata', v)} type="number" />
-            <Field label="Ce sistem de încălzire folosește" value={form.ca_sistem ?? ''} onChange={v => set('ca_sistem', v)} options={SISTEM_OPTS} />
-            <Field label="Cost lunar actual (lei)" value={form.ca_cost_lunar ?? ''} onChange={v => set('ca_cost_lunar', v)} type="number" />
-            <Field label="Cost sezon actual (lei)" value={form.ca_cost_sezon ?? ''} onChange={v => set('ca_cost_sezon', v)} type="number" />
-            <Field label="Observații situație actuală" value={form.obs_situatie ?? ''} onChange={v => set('obs_situatie', v)} textarea />
-          </Zone>
-        ) : (
-          <Zone title="02 SISTEM ACTUAL & OBSERVAȚII">
-            <Field label="Sistem actual încălzire" value={form.sistem_actual ?? ''} onChange={v => set('sistem_actual', v)} options={SISTEM_OPTS} />
-            <Field label="Consum unitate" value={form.consum_unitate ?? ''} onChange={v => set('consum_unitate', v)} options={['', 'lei/luna', 'lei/sezon', 'kWh/luna', 'litri/luna', 'mc/luna']} />
-            <Field label="Suma (cost actual)" value={form.suma ?? ''} onChange={v => set('suma', v)} type="number" />
-            <Field label="Observații situație actuală" value={form.obs_situatie ?? ''} onChange={v => set('obs_situatie', v)} textarea />
-          </Zone>
-        )}
-
-        <Zone title="03 REACȚII FINANCIARE (auto)">
-          <Calc label="Reacție limita buget (C17)" value={calc.cost_investitie_economic_eur} unit="EUR" />
-          <Calc label="Reacție plată integrală + Promo (C18)" value={calc.cost_promo_eur} unit="EUR" />
-          <CalcText label="Reacție eșalonare (C19)" value={calc.reactie_esalonare_range} />
-          <Field label="Tip plată preferat" value={form.tip_plata ?? ''} onChange={v => set('tip_plata', v)} options={TIPPLATA_OPTS} />
-          <Field label="Interval buget / eșalonare" value={form.interval_buget ?? ''} onChange={v => set('interval_buget', v)} />
-        </Zone>
-
-        <Zone title="04 CUM GÂNDEȘTE CLIENTUL">
-          <Field label='Motivul principal ("Doriti sa...?")' value={form.motiv_principal ?? ''} onChange={v => set('motiv_principal', v)} options={MOTIV_OPTS} />
-          <Field label="Plată eșalonată (din formular)" value={form.plata_esalonata ?? ''} onChange={v => set('plata_esalonata', v)} />
-          <Field label="Alternative de încălzire" value={form.alternativa ?? ''} onChange={v => set('alternativa', v)} />
-          <Field label="Preventie (sistem / brand)" value={form.preventie ?? ''} onChange={v => set('preventie', v)} options={['', 'Sistem', 'Brand']} />
-          <Field label="Detalii preventie (ce sistem / brand)" value={form.obs_preventie ?? ''} onChange={v => set('obs_preventie', v)} />
-          <Field label="Tipologie emoțională" value={form.tipologie ?? ''} onChange={v => set('tipologie', v)} options={TIPOLOGIE_OPTS} />
-        </Zone>
-
-        <Zone title="05 DIFERENȚE & CONCLUZII (auto)">
-          <Calc label="Diferență consum (C29)" value={calc.diferenta_consum_lei} unit="lei/lună" />
-          <Calc label="Diferență PFTV (C30)" value={calc.diferenta_pftv_kw} unit="kW" />
-          {/* Profit/Amortizare (ROI) — DOAR V2 (casă locuită cu istoric de consum real).
-              Pentru V1 (construcție) nu există baseline de cost actual → ROI ar fi înșelător. */}
-          {!isV1 && <>
-            <Calc label="Profit anual estimat (F29)" value={calc.profit_anual_lei} unit="lei" big />
-            <Calc label="Amortizare investiție (F30)" value={calc.amortizare_ani} unit="ani" />
-          </>}
-        </Zone>
+        {template.zones
+          .filter(zone => !zone.fields.some(f => f.key === 'strategie_nevoi'))
+          .map(zone => (
+            <Zone key={zone.id} title={zone.titlu} pine={zone.id === 'zamass'}>
+              {zone.fields.map(renderField)}
+            </Zone>
+          ))}
       </div>
 
       <div className="mt-4"><Zone title="Strategie & nevoi identificate / note diverse">
@@ -359,13 +332,43 @@ function Field({ label, value, onChange, type = 'text', options, textarea }: {
       {textarea ? (
         <textarea className="field min-h-[64px] mt-1" value={value} onChange={e => onChange(e.target.value)} />
       ) : options ? (
-        <select className="field !py-1.5" value={value} onChange={e => onChange(e.target.value)}>
-          {options.map(o => <option key={o} value={o}>{o || '—'}</option>)}
+        // Dacă valoarea curentă (ex. din date vechi) nu e în options, o injectăm ca să rămână vizibilă.
+        <select className="field !py-1.5" value={value ?? ''} onChange={e => onChange(e.target.value)}>
+          {(value && !options.includes(String(value)) ? [String(value), ...options] : options)
+            .map(o => <option key={o} value={o}>{o || '—'}</option>)}
         </select>
       ) : (
         <input type={type} className="field !py-1.5" value={value}
                onChange={e => onChange(type === 'number' ? (e.target.value ? Number(e.target.value) : '') : e.target.value)} />
       )}
+    </div>
+  );
+}
+
+// Selecție multiplă prin chip-uri toggle. Valoarea în form e string[]; click adaugă/scoate o opțiune.
+function MultiSelect({ label, value, options, onChange }: {
+  label: string; value: string[]; options: string[]; onChange: (v: string[]) => void;
+}) {
+  function toggle(opt: string) {
+    onChange(value.includes(opt) ? value.filter(x => x !== opt) : [...value, opt]);
+  }
+  // Valori vechi care nu mai sunt în options rămân vizibile (selectate) ca să nu se piardă.
+  const extra = value.filter(v => !options.includes(v));
+  const all = [...options, ...extra];
+  return (
+    <div className="grid grid-cols-[170px_1fr] gap-2 items-start text-[12.5px]">
+      <label className="text-[var(--fg-soft)] pt-1">{label}:</label>
+      <div className="flex flex-wrap gap-1.5">
+        {all.map(o => {
+          const on = value.includes(o);
+          return (
+            <button key={o} type="button" onClick={() => toggle(o)}
+              className={'pill cursor-pointer border-0 ' + (on ? 'pill-contractat' : 'pill-lucru')}>
+              {on ? '✓ ' : ''}{o}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
