@@ -20,7 +20,7 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'AMASS Energy Console',
+  title: 'Pâlnie Clienți — AMASS',
   description: 'AMASS Sales — pâlnie clienți & strategie, conectat la CRM'
 };
 

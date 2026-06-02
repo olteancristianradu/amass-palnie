@@ -37,7 +37,7 @@ export default function LoginPage() {
             <span className="w-2.5 h-2.5 rounded-full bg-[var(--gold)]" />
           </div>
         </div>
-        <div className="text-[11px] uppercase tracking-[.22em] text-[var(--on-ink-soft)]">Energy Console</div>
+        <div className="text-[11px] uppercase tracking-[.22em] text-[var(--on-ink-soft)]">Pâlnie Clienți</div>
       </div>
 
       {/* Form */}

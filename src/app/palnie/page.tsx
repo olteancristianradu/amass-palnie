@@ -129,6 +129,14 @@ export default function PalniePage() {
   // Update optimist local — folosit de Kanban (drag & drop) ca să reflecte mutarea instant.
   const patchLocal = (id: string, patch: Record<string, any>) => setClienti(prev => prev.map(c => c.id === id ? { ...c, ...patch } : c));
 
+  // Toast-ul dispare SINGUR: succes/info după 4s, eroare după 8s (înainte rămânea agățat după sync).
+  useEffect(() => {
+    if (!msg) return;
+    const ms = msg.startsWith('❌') ? 8000 : 4000;
+    const id = setTimeout(() => setMsg(''), ms);
+    return () => clearTimeout(id);
+  }, [msg]);
+
   async function load(silent = false) {
     if (!silent) setLoading(true);
     const r = await fetch('/api/clienti?limit=5000&owner=' + ownerFilter);
@@ -319,15 +327,8 @@ export default function PalniePage() {
               {activeFilterCount > 0 && <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[var(--on-accent)] text-[var(--accent)] text-[10px] font-bold leading-none">{activeFilterCount}</span>}
               <span className="ml-1 text-[10px]">{filtersOpen ? '▲' : '▼'}</span>
             </button>
-            {/* SYNC consolidat într-un singur dropdown compact (era 3 butoane care umpleau rândul) */}
-            <select disabled={!!sync} value="" title="Sincronizare din CRM"
-              onChange={e => { const v = e.currentTarget.value; e.currentTarget.value = ''; if (v === 'clienti') runSync('/api/crm/sync-clienti', 'Sync clienți'); else if (v === 'detalii') runSync('/api/crm/sync-detalii', 'Sync detalii'); else if (v === 'remindere') runSync('/api/crm/sync-remindere', 'Sync remindere'); }}
-              className="field w-32 !py-1 !text-[12px] font-semibold">
-              <option value="">{sync ? '⏳ Sync…' : '↻ ' + t('Sync') + ' ▾'}</option>
-              <option value="clienti">↻ {t('Clienți (noi)')}</option>
-              <option value="detalii">↻ {t('Detalii')}</option>
-              <option value="remindere">↻ {t('Remindere')}</option>
-            </select>
+            {/* Sync NU mai e în rândul de sus (ocupa spațiu). Auto-sync rulează în fundal;
+                sincronizarea manuală e în panoul „Filtre" (jos). */}
           </div>
         </div>
 
@@ -416,7 +417,15 @@ export default function PalniePage() {
                 </div>
               </label>
             </div>
-            <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-[var(--border)]">
+            {/* SINCRONIZARE CRM — mutată aici din rândul de sus (auto-sync rulează oricum în fundal) */}
+            <div className="mt-3 pt-2.5 border-t border-[var(--border)] flex items-center gap-2 flex-wrap">
+              <span className="text-[11px] font-semibold text-[var(--text-secondary)]">{t('Sincronizare CRM')}:</span>
+              <button onClick={() => runSync('/api/crm/sync-clienti', 'Sync clienți')} disabled={!!sync} className="btn btn-secondary !py-1 !text-[12px]" title="Importă clienți noi din CRM">{sync ? '⏳' : '↻'} {t('Clienți')}</button>
+              <button onClick={() => runSync('/api/crm/sync-detalii', 'Sync detalii')} disabled={!!sync} className="btn btn-secondary !py-1 !text-[12px]" title="Reîmprospătează detalii (steluțe, audio, suprafață, observații→strategie)">↻ {t('Detalii')}</button>
+              <button onClick={() => runSync('/api/crm/sync-remindere', 'Sync remindere')} disabled={!!sync} className="btn btn-secondary !py-1 !text-[12px]" title="Reîmprospătează ultimul reminder">↻ {t('Remindere')}</button>
+              <span className="text-[10px] text-[var(--fg-faint)]">{t('(auto la 90s/10min în fundal)')}</span>
+            </div>
+            <div className="flex items-center justify-between mt-2.5 pt-2.5 border-t border-[var(--border)]">
               <span className="text-[11px] text-[var(--fg-faint)]">
                 {activeFilterCount > 0 ? `${activeFilterCount} ${t('filtre active')}` : t('Niciun filtru activ')}
               </span>

@@ -54,7 +54,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <aside className="sidebar w-[220px] flex-shrink-0 flex flex-col px-3.5 py-5 sticky top-0 h-screen">
         <div className="px-2 mb-7 flex items-center gap-2.5">
           <img src="/logo-amass.png" alt="AMASS" className="h-7 w-auto" />
-          <div className="text-[10px] uppercase tracking-[.18em] text-[var(--text-muted)] font-semibold leading-tight">Energy<br/>Console</div>
+          <div className="leading-tight min-w-0">
+            <div className="text-[14px] font-display font-bold text-[var(--text)] truncate">Pâlnie Clienți</div>
+            <div className="text-[10.5px] text-[var(--text-muted)] truncate max-w-[140px]">{session?.user?.name || 'Agent'}</div>
+          </div>
         </div>
         <nav className="flex flex-col">
           {NAV.filter(g => !g.roles || g.roles.includes(role)).map((g, gi) => (
