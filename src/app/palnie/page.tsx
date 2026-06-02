@@ -328,9 +328,15 @@ export default function PalniePage() {
               {activeFilterCount > 0 && <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[var(--on-accent)] text-[var(--accent)] text-[10px] font-bold leading-none">{activeFilterCount}</span>}
               <span className="ml-1 text-[10px]">{filtersOpen ? '▲' : '▼'}</span>
             </button>
-            <button onClick={() => runSync('/api/crm/sync-clienti', 'Sync clienți')} disabled={!!sync} className="btn btn-primary !py-1 !text-[12px]" title="Importă clienți noi din CRM">{sync ? '⏳' : '↻'} {t('Sync')}</button>
-            <button onClick={() => runSync('/api/crm/sync-detalii', 'Sync detalii')} disabled={!!sync} className="btn btn-secondary !py-1 !text-[12px]" title="Reîmprospătează detalii (audio, steluțe, suprafață…)">↻ {t('Detalii')}</button>
-            <button onClick={() => runSync('/api/crm/sync-remindere', 'Sync remindere')} disabled={!!sync} className="btn btn-secondary !py-1 !text-[12px]" title="Reîmprospătează remindere">↻ {t('Remindere')}</button>
+            {/* SYNC consolidat într-un singur dropdown compact (era 3 butoane care umpleau rândul) */}
+            <select disabled={!!sync} value="" title="Sincronizare din CRM"
+              onChange={e => { const v = e.currentTarget.value; e.currentTarget.value = ''; if (v === 'clienti') runSync('/api/crm/sync-clienti', 'Sync clienți'); else if (v === 'detalii') runSync('/api/crm/sync-detalii', 'Sync detalii'); else if (v === 'remindere') runSync('/api/crm/sync-remindere', 'Sync remindere'); }}
+              className="field w-32 !py-1 !text-[12px] font-semibold">
+              <option value="">{sync ? '⏳ Sync…' : '↻ ' + t('Sync') + ' ▾'}</option>
+              <option value="clienti">↻ {t('Clienți (noi)')}</option>
+              <option value="detalii">↻ {t('Detalii')}</option>
+              <option value="remindere">↻ {t('Remindere')}</option>
+            </select>
           </div>
         </div>
 
