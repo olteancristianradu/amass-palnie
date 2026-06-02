@@ -12,12 +12,28 @@ Write-Host "=== AMASS Palnie - acces din retea ===" -ForegroundColor Cyan
 
 if (-not (Test-Path .env)) { Write-Host "[EROARE] lipseste .env - ruleaza intai install.ps1." -ForegroundColor Red; Read-Host "Enter"; exit 1 }
 
-# 1) IP-ul LAN al serverului (primul IPv4 privat, non-loopback)
-$ip = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-       Where-Object { $_.IPAddress -match '^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)' } |
-       Select-Object -First 1).IPAddress
-if (-not $ip) { $ip = Read-Host "Nu am gasit IP-ul automat. Scrie IP-ul serverului (ex. 192.168.1.50)" }
-Write-Host "IP server: $ip" -ForegroundColor Cyan
+# 1) IP-ul LAN REAL: adaptorul Up CU gateway, EXCLUZAND adaptoarele virtuale (Docker/WSL/Hyper-V/VPN).
+#    (Adaptoarele Docker/WSL au IP-uri gen 192.168.x.1 care NU sunt accesibile din retea.)
+$auto = $null
+try {
+  $auto = (Get-NetIPConfiguration -ErrorAction SilentlyContinue | Where-Object {
+            $_.NetAdapter.Status -eq 'Up' -and $_.IPv4DefaultGateway -ne $null -and
+            $_.InterfaceAlias -notmatch 'vEthernet|WSL|Docker|VirtualBox|VMware|Loopback|Hyper-V'
+          } | Select-Object -First 1).IPv4Address.IPAddress
+} catch {}
+
+Write-Host "Adrese IPv4 pe acest PC:" -ForegroundColor Cyan
+Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -ne '127.0.0.1' } |
+  ForEach-Object { Write-Host ("  - {0,-16} ({1})" -f $_.IPAddress, $_.InterfaceAlias) }
+if ($auto) { Write-Host "Recomandat (reteaua principala): $auto" -ForegroundColor Green }
+else { Write-Host "Nu am putut detecta automat adaptorul principal." -ForegroundColor Yellow }
+
+$ans = Read-Host "Apasa ENTER pentru $auto, SAU scrie IP-ul corect din lista de mai sus"
+if (-not [string]::IsNullOrWhiteSpace($ans)) { $ip = $ans.Trim() }
+elseif ($auto) { $ip = $auto }
+else { $ip = (Read-Host "Scrie IP-ul serverului (ex. 192.168.1.50)").Trim() }
+if ($ip -notmatch '^\d{1,3}(\.\d{1,3}){3}$') { Write-Host "[EROARE] IP invalid: '$ip'" -ForegroundColor Red; Read-Host "Enter"; exit 1 }
+Write-Host "IP ales: $ip" -ForegroundColor Cyan
 
 # 2) NEXTAUTH_URL = http://IP:3000 (altfel login-ul de pe alt PC nu merge)
 (Get-Content .env) -replace '^NEXTAUTH_URL=.*', "NEXTAUTH_URL=http://${ip}:3000" | Set-Content .env -Encoding ascii
