@@ -62,6 +62,9 @@ export function Layout({ children, title, topbar, contentMod }: {
   const initial = (name.trim().charAt(0) || 'A').toUpperCase();
   let pageTitle = title || TITLES[pathname] || '';
   if (!pageTitle) { for (const k of Object.keys(TITLES)) if (pathname.startsWith(k + '/')) { pageTitle = TITLES[k]; break; } }
+  // Titlu în topbar DOAR pe paginile FĂRĂ titlu propriu (palnie + paginile cărora #10 le-a scos <h1>).
+  // Dashboard/Fișă/Aspect/Setări au propriul titlu (.dash2__bar/.fisa__title/<h1>) → nu-l dublăm.
+  const TOPBAR_TITLE_PAGES = ['/palnie', '/users', '/audit', '/arhiva', '/admin/import', '/rapoarte'];
 
   return (
     <div className={'app' + (collapsed ? ' is-collapsed' : '')}>
@@ -124,8 +127,7 @@ export function Layout({ children, title, topbar, contentMod }: {
       <main className="main">
         <header className="topbar">
           <button className="topbar__menu btn btn-ghost btn-icon" onClick={() => setNavOpen(true)} aria-label="Meniu"><Icon name="menu" size={20} /></button>
-          {/* Titlu în topbar DOAR pentru Pâlnie (celelalte pagini au propriul titlu → evităm dublarea). */}
-          {pageTitle && pathname === '/palnie' && <h1 className="topbar__title">{pageTitle}</h1>}
+          {pageTitle && TOPBAR_TITLE_PAGES.includes(pathname) && <h1 className="topbar__title">{pageTitle}</h1>}
           {topbar}
           <button className="btn btn-ghost btn-sm help-btn" style={{ marginLeft: 'auto' }} onClick={() => setHelpOpen(true)} title="Ajutor: ghid și explicații pentru fiecare buton"><Icon name="help" size={17} /><span className="help-btn__lbl">Ajutor</span></button>
         </header>
