@@ -24,7 +24,7 @@
 .avatar { width: 32px; height: 32px; border-radius: 999px; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; font-size: .8125rem; flex: 0 0 32px; }
 
 /* topbar */
-.topbar { height: var(--header-h); display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-5); border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 30; }
+.topbar { min-height: var(--header-h); display: flex; align-items: center; gap: var(--sp-3); padding: 8px var(--sp-5); border-bottom: 1px solid var(--border); background: var(--surface); position: sticky; top: 0; z-index: 30; flex-wrap: wrap; row-gap: 8px; }
 .topbar__menu { display: none; }
 .topbar__title { font-size: 1.125rem; font-weight: 700; white-space: nowrap; }
 .topbar__switch { margin-left: var(--sp-3); }

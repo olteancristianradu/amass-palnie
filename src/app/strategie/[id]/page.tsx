@@ -6,8 +6,9 @@ import { calculate, type StrategieInput } from '@/lib/strategie-calc';
 import { parseObservatii } from '@/lib/strategie-autofill';
 import { buildEmail } from '@/lib/email-redactare';
 import { buildInfoCrmText } from '@/lib/info-crm-text';
-import { asMulti, type FisaTemplateData, type FisaField } from '@/lib/fisa-template';
+import { asMulti, type FisaTemplateData, type FisaField, type FisaColorFam } from '@/lib/fisa-template';
 import { SEED_V1, SEED_V2 } from '@/lib/fisa-template-seed';
+import { migrateFisaBlob } from '@/lib/fisa-migrate';
 import { useParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
@@ -30,6 +31,21 @@ interface Client {
   obsSituatie: string | null;
   strategieNevoi: string | null;
   observatii: string | null;
+}
+
+// Micro-definiții pentru chip-urile de tipologie emoțională (tooltip pe chip).
+const TIPOLOGIE_DEF: Record<string, string> = {
+  'Logic': 'Decide pe cifre, ROI, specificații. Dă-i date.',
+  'Emoțional': 'Decide pe confort, familie, siguranță. Spune-i povești.',
+  'Vânător de preț': 'Caută cel mai bun preț. Arată-i valoarea, nu doar costul.',
+  'Nehotărât': 'Amână decizia. Ghidează-l ferm spre următorul pas.',
+  'Grăbit': 'Vrea repede. Mergi direct la soluție și ofertă.',
+  'Sceptic': 'Neîncrezător. Studii de caz, garanții, dovezi.',
+};
+
+// Format numeric RO pentru valorile calculate (read-only).
+function nfmt(n: number, d = 0): string {
+  return Number(n).toLocaleString('ro-RO', { minimumFractionDigits: d, maximumFractionDigits: d });
 }
 
 export default function StrategiePage() {
@@ -60,9 +76,14 @@ export default function StrategiePage() {
     fetch(`/api/clienti/${params.id}`).then(r => r.json()).then(j => {
       if (j.ok) {
         setClient(j.client);
+        const isV1 = j.client.categorie === 1;
+        const variant: 'V1' | 'V2' = isV1 ? 'V1' : 'V2';
         const stored = j.client.categorie === 1 ? j.client.strategieV1 : j.client.strategieV2;
+        // A) MIGRARE LAZY: după ce iau blob-ul stocat, aplic migrarea aditivă (cheile vechi → cheile noi).
+        // Datele vechi apar în cheile noi ale template-ului. Idempotentă, fill-only-empty, nu pierde nimic.
+        const { blob: migrated } = migrateFisaBlob(stored ? JSON.parse(stored) : {}, variant);
         const base: Record<string, any> = {
-          ...(stored ? JSON.parse(stored) : {}),
+          ...migrated,
           suprafata: j.client.suprafata,
           obs_situatie: j.client.obsSituatie ?? '',
           strategie_nevoi: j.client.strategieNevoi ?? ''
@@ -70,7 +91,6 @@ export default function StrategiePage() {
         // Autofill din Observatii CRM — parser portat 1:1 din Apps Script (strategie-autofill.ts).
         // FILL-ONLY-EMPTY: completăm doar câmpurile goale, nu suprascriem ce a pus agentul.
         const parsed = parseObservatii(j.client.observatii);
-        const isV1 = j.client.categorie === 1;
         // helper: setează cheia DOAR dacă e goală în form și valoarea parsată e utilă.
         const fillEmpty = (key: string, val: any) => {
           const cur = base[key];
@@ -99,7 +119,10 @@ export default function StrategiePage() {
           }
           fillEmpty('plata_esalonata', parsed.bugetAchizitie);
         }
-        setForm(base);
+        // Re-migrare după autofill: cheile vechi completate ACUM din CRM (ca_sistem / sistem_actual)
+        // se propagă în cheile noi ale template-ului (ca_sursa_caldura / sursa_caldura). Idempotent, fill-only-empty.
+        const { blob: finalBase } = migrateFisaBlob(base, variant);
+        setForm(finalBase);
 
         // Template-ul fișei (editabil de admin). Alegem după categorie: 1 -> V1, restul -> V2.
         // Fallback: dacă fetch-ul eșuează sau nu găsește varianta, folosim SEED-ul local.
@@ -148,7 +171,7 @@ export default function StrategiePage() {
     prod_aplicatie: form.prod_aplicatie,
     suma: isV1 ? form.ca_cost_lunar : form.suma,
     consum_unitate: form.consum_unitate,
-    sistem_actual: isV1 ? form.ca_sistem : form.sistem_actual,
+    sistem_actual: isV1 ? (form.ca_sursa_caldura ?? form.ca_sistem) : (form.sursa_caldura ?? form.sistem_actual),
     bransament: form.bransament
   } as StrategieInput), [form, isV1]);
 
@@ -156,6 +179,17 @@ export default function StrategiePage() {
     // Orice editare a userului marchează form-ul ca „dirty" → permite salvarea automată.
     formDirty.current = true;
     setForm(prev => ({ ...prev, [key]: val }));
+  }
+  // Cost lunar ↔ sezon (×6 / ÷6) reciproc — păstrat din comportamentul fișei (V1, casa actuală).
+  function setLunar(v: any) {
+    const sezon = v !== '' && v != null ? String(Math.round(Number(v) * 6)) : '';
+    formDirty.current = true;
+    setForm(prev => ({ ...prev, ca_cost_lunar: v, ca_cost_sezon: sezon }));
+  }
+  function setSezon(v: any) {
+    const lunar = v !== '' && v != null ? String(Math.round(Number(v) / 6)) : '';
+    formDirty.current = true;
+    setForm(prev => ({ ...prev, ca_cost_sezon: v, ca_cost_lunar: lunar }));
   }
 
   // SALVARE AUTOMATĂ: la modificarea `form` (după ce userul a editat), debounce ~1200ms,
@@ -173,35 +207,6 @@ export default function StrategiePage() {
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
     if (savedTimer.current) clearTimeout(savedTimer.current);
   }, []);
-
-  // Randare dinamică a unui câmp din template, în funcție de control.
-  // Câmpurile stau în corpul zonei (.fz__body), pe rânduri .frow (label stânga / control dreapta).
-  function renderField(f: FisaField) {
-    // Etichetele din template se termină în ':'; componentele adaugă tot ':' → tăiem dublura.
-    const label = f.label.replace(/:\s*$/, '');
-    switch (f.control) {
-      case 'calc': {
-        // Valoarea read-only vine din obiectul `calc` (prin calcKey).
-        const v = f.calcKey ? (calc as any)[f.calcKey] : null;
-        // String -> CalcText (intervale/text), numeric/null -> Calc.
-        return typeof v === 'string'
-          ? <CalcText key={f.key} label={label} value={v} />
-          : <Calc key={f.key} label={label} value={typeof v === 'number' ? v : null} />;
-      }
-      case 'textarea':
-        return <Field key={f.key} label={label} value={form[f.key] ?? ''} onChange={v => set(f.key, v)} textarea />;
-      case 'multiselect':
-        return <MultiSelect key={f.key} label={label} value={asMulti(form[f.key])} options={f.options ?? []} onChange={v => set(f.key, v)} />;
-      case 'dropdown':
-        // Prepend '' pentru opțiunea goală (ca înainte); Field păstrează valoarea curentă chiar dacă nu e în listă.
-        return <Field key={f.key} label={label} value={form[f.key] ?? ''} onChange={v => set(f.key, v)} options={['', ...(f.options ?? [])]} />;
-      case 'number':
-        return <Field key={f.key} label={label} value={form[f.key] ?? ''} onChange={v => set(f.key, v)} type="number" />;
-      case 'text':
-      default:
-        return <Field key={f.key} label={label} value={form[f.key] ?? ''} onChange={v => set(f.key, v)} />;
-    }
-  }
 
   async function save() {
     if (!client) return;
@@ -281,6 +286,9 @@ export default function StrategiePage() {
     );
   }
 
+  // Mod „în CRM": clientul are id_lucrare real (numeric) → există în gestcom.
+  const inCRM = !!client.idLucrare && /\d/.test(client.idLucrare);
+
   const email = buildEmail({
     nume: client.nume, localitate: client.localitate ?? '',
     categorie: client.categorie + (client.isDT ? ' DT' : ''), isDT: client.isDT,
@@ -289,16 +297,332 @@ export default function StrategiePage() {
     v: form, f: calc
   });
 
+  // Câmpul cu o cheie dată dintr-o zonă (helper pentru randarea custom a blocului construcție etc.).
+  const zone = (id: string) => template.zones.find(z => z.id === id);
+  const fld = (zid: string, key: string) => zone(zid)?.fields.find(f => f.key === key);
+
+  // Verifică `cond`: câmpul apare doar dacă valoarea din form[cond.key] ∈ cond.in.
+  const condOk = (f: FisaField) => !f.cond || (f.cond.in || []).includes(String(form[f.cond.key] ?? ''));
+
+  // ── Bara de progres: câmpuri cheie completate (min 15%), ca în pa-fisa.jsx ──
+  const progressFields = [
+    form.suprafata, form.bransament, form.putere_pftv,
+    isV1 ? form.ca_sursa_caldura : form.sursa_caldura, form.distributie ?? form.ca_distributie,
+    form.material, form.izolatie_tip, form.izolatie_cm, form.tip_locuinta,
+    isV1 ? form.ca_cost_lunar : form.suma, form.consum_unitate, form.tip_plata,
+    form.motiv_principal, form.nivel_bani, form.tipologie, form.strategie_nevoi,
+  ];
+  const filledCount = progressFields.filter(v => v && (Array.isArray(v) ? v.length : String(v).trim())).length;
+  const pct = Math.max(15, Math.round(filledCount / progressFields.length * 100));
+
+  // Randare a unui câmp din template (renderField NOU), respectând control + cond + fam + source.
+  const renderField = (f: FisaField, opts?: { bare?: boolean; famLabel?: boolean }) => {
+    if (!condOk(f)) return null;
+    const label = f.label.replace(/:\s*$/, '');
+    const src = srcFor(f);
+
+    // 'calc' → CalcRow read-only cu InfoDot (formula + note); valoarea din `calc` prin calcKey.
+    if (f.control === 'calc') {
+      const raw = f.calcKey ? (calc as any)[f.calcKey] : null;
+      const value = typeof raw === 'number'
+        ? nfmt(raw, Number.isInteger(raw) ? 0 : 2)
+        : (raw == null || raw === '' ? '—' : String(raw));
+      return <CalcRow key={f.key} label={label} value={value} formula={f.formula} note={f.note} fam={f.fam} />;
+    }
+
+    const control = renderControl(f);
+
+    // 'textarea' din corpul zonei (obs etc.) → rând pe coloană, cu badge „opțional · după apel" dacă e obs.
+    if (f.control === 'textarea') {
+      const isObs = /^obs/i.test(f.key);
+      return (
+        <div className="inrow inrow--col" key={f.key}>
+          <div className="inrow__lbl">
+            <Icon name="note" size={13} style={{ color: 'var(--text-muted)' }} />{label}
+            {src && <Src t={src} />}
+            {isObs && <span className="after-call">opțional · după apel</span>}
+          </div>
+          {control}
+        </div>
+      );
+    }
+
+    // Câmp „bare" (fără wrapper InRow) — folosit în blocul construcție unde eticheta e colorată separat.
+    if (opts?.bare) return <div key={f.key}>{control}</div>;
+
+    return <InRow key={f.key} label={label} src={src} fam={opts?.famLabel ? f.fam : undefined}>{control}</InRow>;
+  };
+
+  // Randează DOAR controlul (input/select/chips/pills/textarea), fără etichetă.
+  function renderControl(f: FisaField) {
+    const v = form[f.key];
+    switch (f.control) {
+      case 'number':
+        return f.unit ? (
+          <div className="unitfield">
+            <input className="input mono" type="number" value={v ?? ''}
+              onChange={e => set(f.key, e.target.value === '' ? '' : Number(e.target.value))} />
+            <span className="unitfield__u">{f.unit}</span>
+          </div>
+        ) : (
+          <input className="input mono" type="number" value={v ?? ''}
+            onChange={e => set(f.key, e.target.value === '' ? '' : Number(e.target.value))} />
+        );
+      case 'dropdown': {
+        const opts = f.options ?? [];
+        const cls = 'select' + (f.fam ? ' fam-' + f.fam + '-b' : '');
+        const cur = v ?? '';
+        const all = (cur && !opts.includes(String(cur))) ? [String(cur), ...opts] : opts;
+        return (
+          <select className={cls} value={cur} onChange={e => set(f.key, e.target.value)}>
+            <option value="">—</option>
+            {all.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+        );
+      }
+      case 'pills':
+        return <Pills options={f.options ?? []} value={v ?? ''} fam={f.fam}
+          defs={f.key === 'tipologie' ? TIPOLOGIE_DEF : undefined} onChange={nv => set(f.key, nv)} />;
+      case 'chips':
+      case 'multiselect': {
+        const arr = asMulti(v);
+        const toggle = (o: string) => set(f.key, arr.includes(o) ? arr.filter(x => x !== o) : [...arr, o]);
+        return <ChipSet options={f.options ?? []} value={arr} fam={f.fam} onToggle={toggle} />;
+      }
+      case 'textarea':
+        return <textarea className="input" rows={3} value={v ?? ''} onChange={e => set(f.key, e.target.value)}
+          placeholder="Ce a spus clientul, context, facturi, istoric…" />;
+      case 'text':
+      default:
+        return <input className="input" value={v ?? ''} onChange={e => set(f.key, e.target.value)} />;
+    }
+  }
+
+  // ── Bloc CONSTRUCȚIE: 4 câmpuri tipizate + progressive disclosure (.constr), ca în pa-fisa.jsx ──
+  function renderConstr(zid: string) {
+    const fMaterial = fld(zid, 'material');
+    const fMaterialAlt = fld(zid, 'material_altele');
+    const fIzol = fld(zid, 'izolatie_tip');
+    const fIzolAlt = fld(zid, 'izolatie_tip_altele');
+    const fGrosime = fld(zid, 'izolatie_cm');
+    const fLoc = fld(zid, 'tip_locuinta');
+    const fNiv = fld(zid, 'niveluri');
+    const fAptEtaj = fld(zid, 'apartament_etaj');
+    const fAptDin = fld(zid, 'apartament_din');
+    const fAptPoz = fld(zid, 'apartament_pozitie');
+    const fLocAlt = fld(zid, 'tip_locuinta_altele');
+    if (!fMaterial && !fIzol && !fGrosime && !fLoc) return null;
+    return (
+      <div className="constr">
+        <div className="constr__t">Construcție / izolație / locuință <Src t="list" /></div>
+        <div className="constr__grid">
+          {fMaterial && <label className="constr__f"><span className="fam-coral">Material pereți</span>{renderControl(fMaterial)}</label>}
+          {fIzol && <label className="constr__f"><span className="fam-teal">Tip izolație</span>{renderControl(fIzol)}</label>}
+        </div>
+        {fMaterialAlt && condOk(fMaterialAlt) && <label className="constr__f cond"><span>Din ce e construită?</span>{renderControl(fMaterialAlt)}</label>}
+        {fIzolAlt && condOk(fIzolAlt) && <label className="constr__f cond"><span>Ce izolație?</span>{renderControl(fIzolAlt)}</label>}
+        {fGrosime && <div className="constr__niv"><span className="fam-gri">Grosime izolație</span>{renderControl(fGrosime)}</div>}
+        {fLoc && <div className="constr__niv"><span className="fam-roz">Tip locuință</span>{renderControl(fLoc)}</div>}
+        {fNiv && condOk(fNiv) && <div className="constr__niv cond"><span>Niveluri</span>{renderControl(fNiv)}</div>}
+        {fAptEtaj && condOk(fAptEtaj) && (
+          <div className="apt-grid cond">
+            <label className="constr__f"><span>Etaj</span>{renderControl(fAptEtaj)}</label>
+            {fAptDin && <label className="constr__f"><span>din</span>{renderControl(fAptDin)}</label>}
+            {fAptPoz && <label className="constr__f"><span>Poziție</span>{renderControl(fAptPoz)}</label>}
+          </div>
+        )}
+        {fLocAlt && condOk(fLocAlt) && <label className="constr__f cond"><span>Ce tip de locuință?</span>{renderControl(fLocAlt)}</label>}
+      </div>
+    );
+  }
+
+  // Câmpurile „construcție" gestionate separat în blocul .constr → excluse din randarea liniară a zonei 01.
+  const CONSTR_KEYS = new Set(['material', 'material_altele', 'izolatie_tip', 'izolatie_tip_altele',
+    'izolatie_cm', 'tip_locuinta', 'niveluri', 'apartament_etaj', 'apartament_din',
+    'apartament_pozitie', 'tip_locuinta_altele']);
+
+  // ── Randare zona 01 (Situația actuală) cu blocul construcție inserat ──
+  function renderZone01() {
+    const z = zone('z01');
+    if (!z) return null;
+    return (
+      <section className="fz card">
+        <header className="fz__head"><span className="fz__num">01</span><h3>Situația actuală</h3></header>
+        <div className="fz__body">
+          {z.fields.filter(f => !CONSTR_KEYS.has(f.key)).map(f => renderField(f))}
+          {renderConstr('z01')}
+        </div>
+      </section>
+    );
+  }
+
+  // ── Randare zona 02 (sistem actual / casă actuală) + linked cost lunar↔sezon la V1 ──
+  function renderZone02() {
+    const z = zone('z02');
+    if (!z) return null;
+    const num = '02';
+    const title = isV1 ? 'Info casă actuală (obișnuința clientului)' : 'Sistemul actual & observații';
+    const linkedKeys = new Set(['ca_cost_lunar', 'ca_cost_sezon']);
+    const fLunar = fld('z02', 'ca_cost_lunar');
+    const fSezon = fld('z02', 'ca_cost_sezon');
+    return (
+      <section className="fz card">
+        <header className="fz__head"><span className="fz__num">{num}</span><h3>{title}</h3></header>
+        <div className="fz__body">
+          {/* Sursa de căldură (dropdown) primește border colorat (fam-<fam>-b) — randată prin InRow standard. */}
+          {z.fields.filter(f => !linkedKeys.has(f.key)).map(f => renderField(f))}
+          {/* Cost lunar ↔ sezon (×6 / ÷6) — doar V1, în bloc .linked */}
+          {isV1 && fLunar && fSezon && (
+            <div className="linked">
+              <InRow label="Cost lunar actual" src="man">
+                <div className="unitfield">
+                  <input className="input mono" value={form.ca_cost_lunar ?? ''} onChange={e => setLunar(e.target.value)} placeholder="lei/lună" />
+                  <span className="unitfield__u">lei</span>
+                </div>
+              </InRow>
+              <span className="linked__x" title="Legat: ×6 / ÷6"><Icon name="swap" size={14} /></span>
+              <InRow label="Cost sezon (×6)" src="man">
+                <div className="unitfield">
+                  <input className="input mono" value={form.ca_cost_sezon ?? ''} onChange={e => setSezon(e.target.value)} placeholder="lei/sezon" />
+                  <span className="unitfield__u">lei</span>
+                </div>
+              </InRow>
+            </div>
+          )}
+        </div>
+      </section>
+    );
+  }
+
+  // ── Coloana DREAPTA: zona AMASS calc (.fz--amass) cu ∑ auto-calc ──
+  function renderZoneAmass() {
+    const z = zone('zamass');
+    if (!z) return null;
+    return (
+      <section className="fz card fz--amass">
+        <header className="fz__head fz__head--amass"><Icon name="trending" size={16} /><h3>Cu sistemul AMASS</h3><span className="fz__autobadge">∑ auto-calc</span></header>
+        <div className="fz__body">{z.fields.map(f => renderField(f))}</div>
+      </section>
+    );
+  }
+
+  // ── Zonă „valoare calculată ← → citat client" (03 & 04), layout .qrow ──
+  function renderQuoteZone(zid: string, num: string, title: string, hint: string) {
+    const z = zone(zid);
+    if (!z) return null;
+    // Perechi: câmp de control (calc/pills/text/dropdown/chips) ↔ obs_* corespunzător (citat).
+    const obsFields = z.fields.filter(f => /^obs/i.test(f.key) || f.control === 'textarea');
+    const mainFields = z.fields.filter(f => !(/^obs/i.test(f.key) || f.control === 'textarea'));
+    // Asociem fiecărui câmp principal un câmp de citat în ordine; restul de obs rămân randate jos.
+    return (
+      <section className="fz card">
+        <header className="fz__head"><span className="fz__num">{num}</span><h3>{title}</h3><span className="fz__hint-r">{hint}</span></header>
+        <div className="fz__body qbody">
+          {mainFields.map((f, i) => {
+            const obs = obsFields[i];
+            return (
+              <div className="qrow" key={f.key}>
+                <div className="qrow__left">
+                  <div className="qrow__lbl">{f.label.replace(/:\s*$/, '')}{srcFor(f) && <Src t={srcFor(f)!} />}</div>
+                  <div className="qrow__ctl">{f.control === 'calc' ? renderCalcInline(f) : renderControl(f)}</div>
+                </div>
+                <div className="qrow__right">
+                  {obs ? (
+                    <textarea className="qrow__quote" rows={2} value={form[obs.key] ?? ''}
+                      onChange={e => set(obs.key, e.target.value)}
+                      placeholder="Ce a spus clientul, cuvânt-cu-cuvânt…" />
+                  ) : <span />}
+                </div>
+              </div>
+            );
+          })}
+          {/* Câmpuri obs rămase (mai multe decât câmpurile principale) — randate ca rânduri pe coloană. */}
+          {obsFields.slice(mainFields.length).map(f => (
+            <div className="inrow inrow--col" key={f.key}>
+              <div className="inrow__lbl"><Icon name="note" size={13} style={{ color: 'var(--text-muted)' }} />{f.label.replace(/:\s*$/, '')} <span className="after-call">opțional · după apel</span></div>
+              <textarea className="input" rows={2} value={form[f.key] ?? ''} onChange={e => set(f.key, e.target.value)} placeholder="Ce a spus clientul…" />
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
+
+  // Valoare calc afișată inline (în .qrow, zona 03) cu InfoDot.
+  function renderCalcInline(f: FisaField) {
+    const raw = f.calcKey ? (calc as any)[f.calcKey] : null;
+    const value = typeof raw === 'number' ? nfmt(raw, Number.isInteger(raw) ? 0 : 2) : (raw == null || raw === '' ? '—' : String(raw));
+    return (
+      <div className="calcinline">
+        <b className="mono">{value}</b>
+        {(f.formula || f.note) && <InfoDot formula={f.formula} note={f.note} />}
+      </div>
+    );
+  }
+
+  // ── Secțiunea 05 · Diferențe & concluzii (DOAR V2), layout .concl ──
+  function renderConcl() {
+    if (isV1) return null;
+    const z = zone('z05');
+    if (!z) return null;
+    const cell = (key: string, unit: string, accent?: boolean, signed?: boolean) => {
+      const f = z.fields.find(x => x.key === key);
+      if (!f) return null;
+      const raw = f.calcKey ? (calc as any)[f.calcKey] : null;
+      const num = typeof raw === 'number' ? raw : null;
+      const tone = accent ? 'accent' : num != null && num > 0 ? 'pos' : num != null && num < 0 ? 'neg' : '';
+      const txt = num == null ? '—' : (signed && num > 0 ? '+' : '') + nfmt(num, Number.isInteger(num) ? 0 : (key === '_c_dif_pftv' || key === '_c_amortizare' ? (Number.isInteger(num) ? 0 : (key === '_c_amortizare' ? 1 : 2)) : 0));
+      return (
+        <div className={'concl__cell' + (accent ? ' concl__cell--accent' : '')}>
+          <span className="concl__l">{f.label.replace(/:\s*$/, '')}
+            {(f.formula || f.note) && <InfoDot formula={f.formula} note={f.note} />}
+          </span>
+          <span className={'concl__v ' + tone}>{txt}<i>{unit}</i></span>
+        </div>
+      );
+    };
+    const ready = calc.diferenta_consum_lei != null || calc.profit_anual_lei != null || calc.diferenta_pftv_kw != null;
+    return (
+      <section className="fz card fz--concl">
+        <header className="fz__head"><span className="fz__num">05</span><h3>Diferențe & concluzii</h3><span className="fz__hint-r">comparație client ↔ AMASS</span></header>
+        <div className="fz__body">
+          <div className="concl">
+            {cell('_c_dif_consum', 'lei/lună', false, true)}
+            {cell('_c_profit', 'lei/an', false, true)}
+            {cell('_c_dif_pftv', 'kW', false, false)}
+            {cell('_c_amortizare', 'ani', true, false)}
+          </div>
+          {!ready && <p className="aspect__hint" style={{ marginTop: 12 }}><Icon name="alert" size={13} style={{ color: 'var(--warning)' }} /> Completează Suprafață + Suma (cost actual) + Putere PFTV ca să apară cifrele.</p>}
+        </div>
+      </section>
+    );
+  }
+
+  // ── Secțiunea 06 · Strategie & nevoi (zona cu strategie_nevoi din template) ──
+  function renderStrategie() {
+    const num = isV1 ? '05' : '06';
+    return (
+      <section className="fz card">
+        <header className="fz__head"><span className="fz__num">{num}</span><h3>Strategie & rezistențe & nevoi identificate</h3></header>
+        <div className="fz__body">
+          <textarea className="input fisa__notes" rows={5} value={form.strategie_nevoi ?? ''}
+            onChange={e => set('strategie_nevoi', e.target.value)}
+            placeholder="Notează nevoi, strategie, obiecții, rezistențe, butoane de apăsat…" />
+        </div>
+      </section>
+    );
+  }
+
   return (
     <Layout contentMod="content--fisa" title={client.nume}>
       <div className="fisa rise">
-        {/* ── breadcrumb + bară de acțiuni ── */}
+        {/* ── breadcrumb (Pâlnie + cat-tag) + Stadiu + bară de acțiuni (autosave + butoane colorate) ── */}
         <header className="fisa__top">
           <div className="fisa__crumbs">
             <Link href="/palnie" className="crumb"><Icon name="chevL" size={14} />Pâlnie</Link>
             <span className="crumb-sep">·</span>
-            <span className="crumb-tag">
-              {client.categorie === 1 ? 'V1 — construcție' : 'V2 — casă locuită'} (cat {client.categorie}{client.isDT ? ' DT' : ''})
+            <span className={'cat-tag cat-tag--' + (isV1 ? 'v1' : 'v2')}>
+              {isV1 ? 'V1 — casă în construcție' : 'V2 — casă locuită'} (cat {client.categorie}{client.isDT ? ' DT' : ''})
             </span>
             <span className="crumb-sep">·</span>
             <span className="crumb-muted">Stadiu:</span>
@@ -314,28 +638,29 @@ export default function StrategiePage() {
               }}>
               {['', 'Anulat', 'Contractat', 'Amanat', 'Finalizat'].map(s => <option key={s} value={s}>{s || 'în lucru'}</option>)}
             </select>
-            <CompletenessBadge form={form} />
           </div>
           {/* Bară de acțiuni — salvare automată + butoane colorate ca în design. */}
           <div className="fisa__actions">
             {/* Indicator salvare automată (înlocuiește butonul „✔ Salvează"). */}
             <span className={'autosave autosave--' + saveState} title="Modificările se salvează automat">
               {saveState === 'saving'
-                ? <><Icon name="refresh" size={13} className="spin" />⟳ Se salvează…</>
-                : <><Icon name="check" size={13} />{saveState === 'saved' ? '✓ Salvat' : 'Salvare automată'}</>}
+                ? <><Icon name="refresh" size={13} className="spin" />Se salvează…</>
+                : <><Icon name="check" size={13} />{saveState === 'saved' ? 'Salvat' : 'Salvare automată'}</>}
             </span>
-            <button onClick={openInfoCrm} className="btn btn-sm text-white" style={{ background: '#1e7a3c' }}>📋 INFO CRM</button>
-            <button onClick={() => setReminderOpen(true)} className="btn btn-amber btn-sm">⏰ Reminder</button>
-            <button onClick={() => setEmailOpen(true)} className="btn btn-sm text-white" style={{ background: '#3f7d4e' }}>✉ Email redactare</button>
-            <button onClick={downloadPDF} className="btn btn-pdf btn-sm">📄 PDF</button>
-            <button onClick={downloadWord} className="btn btn-word btn-sm">📝 Word</button>
+            {/* „Push CRM" deschide modalul INFO CRM (preview), NU pushează orbește. */}
+            <button onClick={openInfoCrm} className="btn btn-pine btn-sm"><Icon name="upload" size={14} />Push CRM</button>
+            <button onClick={() => setEmailOpen(true)} className="btn btn-info btn-sm"><Icon name="mail" size={14} />Email</button>
+            <button onClick={() => setReminderOpen(true)} className="btn btn-amber btn-sm"><Icon name="bell" size={14} />Reminder</button>
+            <button onClick={downloadPDF} className="btn btn-pdf btn-sm"><Icon name="download" size={14} />PDF</button>
+            <button onClick={downloadWord} className="btn btn-word btn-sm"><Icon name="note" size={14} />Word</button>
             <a href={`https://gestcom.ro/amass/index.php?m=lucrari&a=view&id_lucrare=${client.idLucrare}`}
                target="_blank" rel="noopener" className="btn btn-secondary btn-sm">CRM ↗</a>
           </div>
         </header>
 
-        {/* ── titlu: nume + oraș + id + contact ── */}
+        {/* ── titlu: ⚠ (dacă !inCRM) + nume + oraș + id + contact ── */}
         <div className="fisa__title">
+          {!inCRM && <span className="cnm__warn" title="Fără înregistrare în CRM"><Icon name="alert" size={16} /></span>}
           <h1>{client.nume}</h1>
           {client.localitate && <span className="fisa__city">· {client.localitate}</span>}
           <span className="fisa__id mono">#{client.idLucrare}{client.judet ? ' · ' + client.judet : ''}</span>
@@ -353,33 +678,45 @@ export default function StrategiePage() {
           })()}
         </div>
 
+        {/* ── bară de progres (min 15%) ── */}
+        <div className="fisa__progress" title={filledCount + ' din ' + progressFields.length + ' câmpuri cheie completate'}>
+          <div className="fisa__progress-bar"><span style={{ width: pct + '%' }} /></div>
+          <span className="fisa__progress-lbl mono">{pct}% completată</span>
+        </div>
+
         {msg && <div className={'toast mb-4 ' + (msg.startsWith('✅') ? 'toast--success' : msg.startsWith('❌') ? 'toast--error' : 'toast--info')}>{msg}</div>}
 
-        {/* Fișă RANDATĂ DINAMIC din template. Grid pe 2 coloane.
-            Zona 'strategie_nevoi' rămâne în blocul dedicat full-width de mai jos. */}
-        <div className="fisa__grid">
-          {template.zones
-            .filter(zone => !zone.fields.some(f => f.key === 'strategie_nevoi'))
-            .map(zone => (
-              <Zone key={zone.id} title={zone.titlu} auto={zone.id === 'zamass'}>
-                {zone.fields.map(renderField)}
-              </Zone>
-            ))}
+        {/* ── două coloane: STÂNGA (01 + 02) ↔ DREAPTA (AMASS calc) ── */}
+        <div className="fisa__cols">
+          <div className="fisa__colL">
+            {renderZone01()}
+            {renderZone02()}
+          </div>
+          <div className="fisa__colR">
+            {renderZoneAmass()}
+          </div>
         </div>
 
-        <div style={{ marginTop: 'var(--sp-4)' }}>
-          <Zone title="Strategie & nevoi identificate / note diverse">
-            <textarea className="input fisa__notes" rows={5} value={form.strategie_nevoi ?? ''}
-                      onChange={e => set('strategie_nevoi', e.target.value)}
-                      placeholder="Notez aici nevoi, strategie, ce a spus clientul, observații..." />
-          </Zone>
-        </div>
+        {/* ── 03 · Reacții financiare ── */}
+        {renderQuoteZone('z03', '03', 'Reacții financiare', 'valoare calculată ← → ce a spus clientul')}
+
+        {/* ── 04 · Cum gândește clientul ── */}
+        {renderQuoteZone('z04', '04', 'Cum gândește clientul', 'profil ← → ce a spus clientul')}
+
+        {/* ── 05 · Diferențe & concluzii (DOAR V2) ── */}
+        {renderConcl()}
+
+        {/* ── 06 · Strategie & nevoi ── */}
+        {renderStrategie()}
 
         {client.observatii && (
           <div style={{ marginTop: 'var(--sp-4)' }}>
-            <Zone title="Observații CRM (read-only)">
-              <pre className="mono" style={{ fontSize: '11px', lineHeight: 1.55, whiteSpace: 'pre-wrap', background: 'var(--surface-sunk)', padding: 12, borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', maxHeight: 176, overflowY: 'auto', color: 'var(--text-secondary)', margin: 0 }}>{client.observatii}</pre>
-            </Zone>
+            <section className="fz card">
+              <header className="fz__head"><span className="fz__num">CRM</span><h3>Observații CRM (read-only)</h3></header>
+              <div className="fz__body">
+                <pre className="mono" style={{ fontSize: '11px', lineHeight: 1.55, whiteSpace: 'pre-wrap', background: 'var(--surface-sunk)', padding: 12, borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', maxHeight: 176, overflowY: 'auto', color: 'var(--text-secondary)', margin: 0 }}>{client.observatii}</pre>
+              </div>
+            </section>
           </div>
         )}
       </div>
@@ -391,104 +728,115 @@ export default function StrategiePage() {
   );
 }
 
-// Indicator de completitudine a fișei — semnal vizual cât de „gata" e strategia.
-// În noul design: badge-todo când fișa e prea goală, altfel un badge „completă/în completare".
-function CompletenessBadge({ form }: { form: Record<string, any> }) {
-  const keys = ['suprafata', 'bransament', 'sistem_actual', 'ca_sistem', 'putere_pftv', 'suma', 'ca_cost_lunar',
-    'motiv_principal', 'nivel_bani', 'tipologie', 'tip_plata', 'strategie_nevoi', 'obs_situatie'];
-  const present = keys.filter(k => { const v = form[k]; return v !== undefined && v !== null && String(v).trim() !== ''; }).length;
-  const ratio = present / keys.length;
-  if (ratio >= 0.6) return <span className="badge-todo" style={{ color: 'var(--success)', background: 'var(--success-soft)' }}><Icon name="check" size={12} />Strategie completă</span>;
-  if (ratio >= 0.3) return <span className="badge-todo" style={{ color: 'var(--warning)', background: 'var(--warning-soft)' }}><Icon name="clock" size={12} />În completare</span>;
-  return <span className="badge-todo"><Icon name="alert" size={12} />De completat</span>;
+// ── Badge sursă completare (.srcb) — manual / listă / CRM / calc / chip ──
+type SrcKind = 'man' | 'list' | 'crm' | 'calc' | 'chip';
+const SRC_META: Record<SrcKind, { ic: string; t: string }> = {
+  man: { ic: 'note', t: 'Completat manual' },
+  list: { ic: 'chevD', t: 'Alegi din listă' },
+  crm: { ic: 'refresh', t: 'Auto din CRM (doar pe gol)' },
+  calc: { ic: 'trending', t: 'Calculat automat (read-only)' },
+  chip: { ic: 'grip', t: 'Selecție multiplă' },
+};
+function Src({ t }: { t: SrcKind }) {
+  const s = SRC_META[t];
+  if (!s) return null;
+  return <span className={'srcb srcb--' + t} title={s.t}><Icon name={s.ic} size={10} /></span>;
+}
+// Mapă f.source + control → tipul de badge afișat lângă etichetă.
+function srcFor(f: FisaField): SrcKind | null {
+  if (f.source === 'autofill') return 'crm';
+  if (f.source === 'calc' || f.control === 'calc') return 'calc';
+  if (f.source === 'manual' && (f.control === 'chips' || f.control === 'multiselect')) return 'chip';
+  if (f.control === 'dropdown' || f.control === 'pills') return 'list';
+  if (f.control === 'chips' || f.control === 'multiselect') return 'chip';
+  if (f.source === 'manual') return 'man';
+  return null;
 }
 
-// Zonă = card .fz (design Claude). Zona auto-calc primește .fz--auto + badge „auto-calc".
-function Zone({ title, children, auto }: { title: string; children: React.ReactNode; auto?: boolean }) {
+// ── Rând input (stânga): etichetă + badge sursă + control ──
+function InRow({ label, src, fam, children }: { label: string; src?: SrcKind | null; fam?: FisaColorFam; children: React.ReactNode }) {
   return (
-    <section className={'fz card' + (auto ? ' fz--auto' : '')}>
-      <header className="fz__head">
-        <span className={'fz__dot' + (auto ? '' : ' is-accent')} />
-        <h3>{title}</h3>
-        {auto && <span className="fz__autobadge">auto-calc</span>}
-      </header>
-      <div className="fz__body">{children}</div>
-    </section>
+    <div className="inrow">
+      <div className="inrow__lbl">
+        {fam ? <span className={'fam-' + fam}>{label}</span> : label}
+        {src && <Src t={src} />}
+      </div>
+      <div className="inrow__ctl">{children}</div>
+    </div>
   );
 }
 
-// Câmp editabil — rând .frow (label / control). Textarea folosește .frow--col (full-width).
-function Field({ label, value, onChange, type = 'text', options, textarea }: {
-  label: string; value: any; onChange: (v: any) => void; type?: string; options?: string[]; textarea?: boolean;
-}) {
-  if (textarea) {
-    return (
-      <div className="frow frow--col">
-        <span className="frow__l">{label}</span>
-        <textarea className="input" rows={3} value={value} onChange={e => onChange(e.target.value)} />
-      </div>
-    );
-  }
+// ── Buton info CLICKABIL (formula + nota din spreadsheet) — închidere la click în afară ──
+function InfoDot({ formula, note }: { formula?: string; note?: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
   return (
-    <label className="frow">
-      <span className="frow__l">{label}</span>
-      <div className="frow__c">
-        {options ? (
-          // Dacă valoarea curentă (ex. din date vechi) nu e în options, o injectăm ca să rămână vizibilă.
-          <select className="select" value={value ?? ''} onChange={e => onChange(e.target.value)}>
-            {(value && !options.includes(String(value)) ? [String(value), ...options] : options)
-              .map(o => <option key={o} value={o}>{o || '—'}</option>)}
-          </select>
-        ) : (
-          <input type={type} className="input" value={value}
-                 onChange={e => onChange(type === 'number' ? (e.target.value ? Number(e.target.value) : '') : e.target.value)} />
-        )}
-      </div>
-    </label>
+    <span className="infodot" ref={ref}>
+      <button type="button" className={'infodot__btn' + (open ? ' is-on' : '')} onClick={e => { e.stopPropagation(); setOpen(o => !o); }} aria-label="Cum se calculează">
+        <Icon name="info" size={12} />
+      </button>
+      {open && (
+        <span className="infodot__pop" onClick={e => e.stopPropagation()}>
+          <span className="infodot__t">Din fișa AMASS (spreadsheet)</span>
+          {formula && <code className="infodot__f">{formula}</code>}
+          {note && <span className="infodot__n">{note}</span>}
+        </span>
+      )}
+    </span>
   );
 }
 
-// Selecție multiplă prin chip-uri toggle (.chipset). Valoarea în form e string[]; click adaugă/scoate o opțiune.
-function MultiSelect({ label, value, options, onChange }: {
-  label: string; value: string[]; options: string[]; onChange: (v: string[]) => void;
+// ── Câmp calculat AMASS (read-only) cu info clickabil (.calcrow) ──
+function CalcRow({ label, value, formula, note, fam }: { label: string; value: string; formula?: string; note?: string; fam?: FisaColorFam }) {
+  const strong = fam === 'verde';
+  return (
+    <div className={'calcrow' + (strong ? ' is-strong' : '')}>
+      <span className="calcrow__lbl">{label}
+        {(formula || note) && <InfoDot formula={formula} note={note} />}
+      </span>
+      <span className="calcrow__v mono">{value}</span>
+    </div>
+  );
+}
+
+// ── Selecție multiplă (chips multi, colorate pe familie) ──
+function ChipSet({ options, value, onToggle, fam, defs }: {
+  options: string[]; value: string[]; onToggle: (o: string) => void; fam?: FisaColorFam; defs?: Record<string, string>;
 }) {
-  function toggle(opt: string) {
-    onChange(value.includes(opt) ? value.filter(x => x !== opt) : [...value, opt]);
-  }
+  const cls = fam ? ' chipfam--' + fam : '';
   // Valori vechi care nu mai sunt în options rămân vizibile (selectate) ca să nu se piardă.
   const extra = value.filter(v => !options.includes(v));
   const all = [...options, ...extra];
   return (
-    <div className="frow frow--col">
-      <span className="frow__l">{label}</span>
-      <div className="chipset">
-        {all.map(o => (
-          <button key={o} type="button" onClick={() => toggle(o)}
-            className={'chipset__c' + (value.includes(o) ? ' is-on' : '')}>{o}</button>
-        ))}
-      </div>
+    <div className="chipset">
+      {all.map(o => (
+        <button key={o} type="button" title={defs?.[o]}
+          className={'chipset__c' + cls + (value.includes(o) ? ' is-on' : '')}
+          onClick={() => onToggle(o)}>{o}</button>
+      ))}
     </div>
   );
 }
 
-// Valoare calculată text (intervale etc.) — rând .fstat read-only.
-function CalcText({ label, value }: { label: string; value: string | null }) {
+// ── Pills single-select (one-tap, colorat pe familie) ──
+function Pills({ options, value, onChange, fam, defs }: {
+  options: string[]; value: string; onChange: (v: string) => void; fam?: FisaColorFam; defs?: Record<string, string>;
+}) {
+  const cls = fam ? ' chipfam--' + fam : '';
+  const all = (value && !options.includes(value)) ? [...options, value] : options;
   return (
-    <div className="fstat">
-      <span className="fstat__l">{label}</span>
-      <span className="fstat__v mono">{value || '—'}</span>
-    </div>
-  );
-}
-
-// Valoare calculată numerică — rând .fstat read-only.
-function Calc({ label, value, unit, big }: { label: string; value: number | null; unit?: string; big?: boolean }) {
-  return (
-    <div className="fstat">
-      <span className="fstat__l">{label}</span>
-      <span className={'fstat__v mono' + (big ? ' is-strong' : '')}>
-        {value !== null ? (value.toLocaleString('ro-RO') + (unit ? ' ' + unit : '')) : '—'}
-      </span>
+    <div className="chipset">
+      {all.map(o => (
+        <button key={o} type="button" title={defs?.[o]}
+          className={'chipset__c' + cls + (value === o ? ' is-on' : '')}
+          onClick={() => onChange(value === o ? '' : o)}>{o}</button>
+      ))}
     </div>
   );
 }

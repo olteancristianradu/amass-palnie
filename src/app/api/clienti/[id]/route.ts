@@ -86,8 +86,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     if (DATE_FIELDS.includes(f)) data[f] = updates[f] ? new Date(updates[f]) : null;
     else data[f] = updates[f];
   }
-  if (updates.strategieV1 !== undefined) data.strategieV1 = JSON.stringify(updates.strategieV1);
-  if (updates.strategieV2 !== undefined) data.strategieV2 = JSON.stringify(updates.strategieV2);
+  // ANTI-WIPE (restaurat — fusese revertit la JSON.stringify): gol nu suprascrie non-gol.
+  if (updates.strategieV1 !== undefined) data.strategieV1 = mergeStrategieBlob(before.strategieV1, updates.strategieV1);
+  if (updates.strategieV2 !== undefined) data.strategieV2 = mergeStrategieBlob(before.strategieV2, updates.strategieV2);
 
   // `categorie` (Int) și `isDT` (Boolean) — permise la update, cu coerciție de tip (nu sunt în
   // SIMPLE_FIELDS fiindcă acolo valorile se scriu brute). NOTĂ: categoria poate să NU fie încă
@@ -131,7 +132,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
   const updated = await prisma.client.update({ where: { id: params.id }, data });
   // Snapshot arhivă DOAR la salvarea strategiei (nu la editări inline stadiu/nevoia/schiță — ar spama).
+  // THROTTLE anti-spam: salvarea AUTOMATĂ (debounce ~1.2s) ar crea zeci de snapshoturi quasi-identice.
+  // Sărim crearea dacă ultimul snapshot al acestui client e mai recent de 3 minute → max 1 snapshot/3min.
   if (updates.strategieV1 !== undefined || updates.strategieV2 !== undefined) {
+    const lastSnap = await prisma.arhivaEntry.findFirst({ where: { clientId: params.id }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } });
+    const tooRecent = lastSnap && (Date.now() - lastSnap.createdAt.getTime() < 3 * 60 * 1000);
+    if (!tooRecent) {
     await prisma.arhivaEntry.create({
       data: {
         clientId: params.id,
@@ -149,6 +155,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     });
     if (old.length > 0) {
       await prisma.arhivaEntry.deleteMany({ where: { id: { in: old.map(o => o.id) } } });
+    }
     }
   }
   await auditLog({

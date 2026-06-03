@@ -135,6 +135,21 @@ export default function AspectPage() {
       </p>
       <div className="aspect">
         <div className="aspect__main">
+          <Section title="Teme prestabilite" icon="palette">
+            <p className="aspect__hint" style={{ marginTop: 0, marginBottom: 10 }}>Un click setează tot aspectul (culoare, font, formă, densitate, fundal). Apoi poți ajusta orice mai jos.</p>
+            <div className="theme-cards">
+              {(a.THEMES || []).map((t: any) => (
+                <button key={t.id} className={'theme-card' + (s.theme === t.id ? ' is-on' : '')} onClick={() => a.setTheme(t.id)}>
+                  <span className="theme-card__sw">{t.sw.map((c: string, i: number) => <span key={i} style={{ background: c }}></span>)}</span>
+                  <span className="theme-card__name">{t.name}</span>
+                  <span className="theme-card__tag">{t.tag}</span>
+                  <span className="theme-card__desc">{t.desc}</span>
+                  {s.theme === t.id && <span className="theme-card__on"><Icon name="check" size={13} /></span>}
+                </button>
+              ))}
+            </div>
+          </Section>
+
           <Section title="Mod culoare" icon="contrast">
             <Segmented value={s.mode} onChange={v => set({ mode: v })}
               options={[{ value: 'light', label: 'Light', icon: 'sun' }, { value: 'dark', label: 'Dark', icon: 'moon' }, { value: 'system', label: 'Sistem', icon: 'monitor' }]} />
@@ -204,6 +219,17 @@ export default function AspectPage() {
                   <span>{st.label}</span>
                   {s.stages[st.key] && <button className="stage-color__reset" title="Implicit" onClick={e => { e.preventDefault(); a.resetStage(st.key); }}><Icon name="reset" size={12} /></button>}
                 </label>
+              ))}
+            </div>
+          </Section>
+
+          <Section title="Fundal" icon="palette">
+            <p className="aspect__hint" style={{ marginTop: 0, marginBottom: 8 }}>Temele de sus setează deja un fundal — aici îl poți schimba separat.</p>
+            <div className="bg-row">
+              {(a.BACKGROUNDS || []).map((b: any) => (
+                <button key={b.id} className={'bg-opt' + ((s.background || 'none') === b.id ? ' is-on' : '')} onClick={() => set({ background: b.id })}>
+                  <span className="bg-opt__prev" data-bg={b.id}></span>{b.name}
+                </button>
               ))}
             </div>
           </Section>

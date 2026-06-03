@@ -178,22 +178,17 @@ export default function SettingsPage() {
         <span className="dot inline-block w-[7px] h-[7px] rounded-full bg-[var(--accent)]" />Aspect & afișare
       </h2>
 
-      {/* Link către /aspect — culoare accent, temă, densitate, colțuri */}
-      <a href="/aspect" className="card max-w-xl rise flex items-center gap-3 p-4 mb-4 hover:border-[var(--accent)] transition-colors no-underline">
+      {/* Link unic către /aspect — teme prestabilite, culoare accent, temă, fundal, densitate, colțuri, mărime text.
+          NU duplicăm aici „Mărime & densitate": tot ce ține de aspect se reglează într-un singur loc (Aspect aplicație). */}
+      <a href="/aspect" className="card max-w-xl rise flex items-center gap-3 p-4 hover:border-[var(--accent)] transition-colors no-underline">
         <span className="w-9 h-9 rounded-[var(--r-sm)] bg-[var(--accent-soft)] text-[var(--accent)] grid place-items-center flex-shrink-0">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2a10 10 0 100 20 2 2 0 002-2 1.9 1.9 0 00-.5-1.3 2 2 0 01-.5-1.3 2 2 0 012-2H17a5 5 0 005-5c0-4.9-4.5-8.4-10-8.4z"/></svg>
         </span>
         <span className="flex-1 min-w-0">
           <span className="block font-semibold text-[14px] text-[var(--text)]">Aspect & temă</span>
-          <span className="block text-[12px] text-[var(--fg-soft)]">Culoare accent, temă light/dark, densitate, colțuri, limbă</span>
+          <span className="block text-[12px] text-[var(--fg-soft)]">Teme prestabilite, culoare accent, light/dark, fundal, densitate, colțuri, mărime text</span>
         </span>
         <span className="text-[var(--text-muted)]">›</span>
-      </a>
-
-      {/* Notă despre mărime / temă — se reglează în Aspect aplicație */}
-      <a href="/aspect" className="card p-4 max-w-xl rise block no-underline hover:border-[var(--accent)] transition-colors">
-        <div className="text-[12px] font-semibold text-[var(--text-secondary)] mb-2">Mărime text / interfață</div>
-        <div className="text-[13px] text-[var(--fg-soft)]">Reglează mărimea textului, tema, accentul și culorile de stadiu în <b>Aspect aplicație</b> ›</div>
       </a>
 
     </Layout>

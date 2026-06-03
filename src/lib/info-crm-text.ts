@@ -53,7 +53,10 @@ export function buildInfoCrmText(
   meta: { userName?: string; now?: string } = {}
 ): string {
   const lines: string[] = [];
-  lines.push('Generat: ' + (meta.now || '') + (meta.userName ? ' — ' + meta.userName : ''));
+  lines.push('Generat: ' + (meta.now || '') + (meta.userName ? ' · ' + meta.userName : ''));
+
+  // Header de secțiune lizibil: „── TITLU ─────────" (lățime fixă ~34) → ușor de scanat în Observatii CRM.
+  const sectionHeader = (t: string) => '── ' + t + ' ' + '─'.repeat(Math.max(3, 30 - t.length));
 
   for (const zone of template.zones) {
     const body: string[] = [];
@@ -61,13 +64,18 @@ export function buildInfoCrmText(
       const val = fieldValue(f, form, calc);
       if (!val) continue;
       const label = deDia(f.label.replace(/:\s*$/, ''));
-      // Observațiile cuvânt-cu-cuvânt (obs_*) și textariile le indentăm cu „→" ca în fișă; restul cu „•".
       const isObs = /^obs/i.test(f.key) || f.control === 'textarea';
-      body.push((isObs ? '  → ' : '• ') + label + ': ' + val);
+      if (isObs) {
+        // Observații (text liber) — pe rând propriu, indentate, ca să nu se înghesuie.
+        body.push('  • ' + label + ':');
+        body.push(...String(val).split('\n').map(l => '      ' + l));
+      } else {
+        body.push('  ' + label + ': ' + val);   // câmp normal: „  Etichetă: valoare"
+      }
     }
     if (body.length === 0) continue; // secțiune fără date completate → o sărim
     lines.push('');
-    lines.push(sectionTitle(zone.titlu));
+    lines.push(sectionHeader(sectionTitle(zone.titlu)));
     lines.push(...body);
   }
   return lines.join('\n').trim();

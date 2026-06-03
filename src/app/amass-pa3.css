@@ -28,6 +28,16 @@
 .help-item p { font-size: .75rem; color: var(--text-muted); line-height: 1.45; margin-top: 2px; }
 .help-tip { display: flex; gap: 9px; align-items: flex-start; margin-top: 8px; padding: 11px 13px; background: var(--warning-soft); color: var(--warning); border-radius: var(--r-sm); font-size: .75rem; line-height: 1.45; }
 .help-tip svg { flex: 0 0 16px; margin-top: 1px; }
+/* legende cod-culori — aliniate, scanabile */
+.legend-block { margin-bottom: 12px; }
+.legend-block__h { display: flex; align-items: baseline; gap: 8px; margin-bottom: 7px; }
+.legend-block__h b { font-size: .8125rem; }
+.legend-block__h span { font-size: .6875rem; color: var(--text-muted); }
+.legend-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 6px 14px; }
+.legend-cell { display: flex; align-items: center; gap: 8px; padding: 5px 9px; background: var(--surface-2); border-radius: var(--r-sm); }
+.legend-dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 12px; border: 1.5px solid transparent; }
+.legend-lbl { font-size: .75rem; font-weight: 600; white-space: nowrap; }
+.legend-meta { font-size: .6875rem; color: var(--text-muted); margin-left: auto; white-space: nowrap; }
 
 /* ---- TUR ghidat ---- */
 .tour { position: fixed; inset: 0; z-index: 95; }
@@ -98,3 +108,63 @@
   .steptog { min-height: 36px; }
   .chip, .chipset__c { min-height: 36px; }
 }
+
+/* ---- date-range presets (dashboard) ---- */
+.drange { flex-wrap: wrap; align-items: flex-end; }
+.drange__presets { display: flex; flex-wrap: wrap; gap: 5px; }
+.drange__preset { padding: 7px 13px; min-height: 38px; border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary); border-radius: var(--r-sm); font-size: .8125rem; font-weight: 600; cursor: pointer; transition: all var(--transition); }
+.drange__preset:hover { border-color: var(--text-muted); }
+.drange__preset.is-on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+/* ---- filter button label hides on narrow ---- */
+@media (max-width: 600px) { .filter-toggle__lbl, .help-btn__lbl { display: none; } }
+
+/* ---- conn-state nu se mai suprapune ---- */
+.conn-state { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* ====== AUDIT RESPONSIV GLOBAL — nimic nu iese din ecran, pe orice lățime ====== */
+*, *::before, *::after { min-width: 0; }
+img, svg, video, canvas { max-width: 100%; }
+input, select, textarea, button { max-width: 100%; }
+.topbar { flex-wrap: wrap; row-gap: 8px; }
+.fisa__actions { row-gap: 6px; }
+.settings__body { overflow-x: hidden; }
+@media (max-width: 480px) {
+  .topbar__title { width: 100%; order: -1; }
+  .segmented__btn { padding: 7px 9px; }
+  .kpi__value, .d2key__v { font-size: 1.5rem; }
+}
+
+/* ---- aspect: fundal + gamification ---- */
+.bg-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.bg-opt { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 6px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); cursor: pointer; font-size: .6875rem; font-weight: 600; color: var(--text-secondary); transition: all var(--transition); }
+.bg-opt:hover { border-color: var(--text-muted); }
+.bg-opt.is-on { border-color: var(--accent); color: var(--accent); }
+.bg-opt__prev { width: 64px; height: 40px; border-radius: var(--r-xs); border: 1px solid var(--border); background: var(--surface-2); }
+.bg-opt__prev[data-bg="warm"] { background: radial-gradient(40px 30px at 100% 0%, color-mix(in oklab, var(--accent) 30%, transparent), var(--surface-2)); }
+.bg-opt__prev[data-bg="mesh"] { background: radial-gradient(30px at 0% 0%, color-mix(in oklab, var(--accent) 35%, transparent), transparent), radial-gradient(30px at 100% 100%, color-mix(in oklab, #2563EB 30%, transparent), transparent), var(--surface-2); }
+.bg-opt__prev[data-bg="dots"] { background-image: radial-gradient(var(--text-faint) 1.5px, transparent 1.5px); background-size: 9px 9px; }
+.bg-opt__prev[data-bg="grid"] { background-image: linear-gradient(var(--border-strong) 1px, transparent 1px), linear-gradient(90deg, var(--border-strong) 1px, transparent 1px); background-size: 12px 12px; }
+.gamecard { display: flex; gap: 13px; align-items: flex-start; padding: 14px 16px; border: 1px solid color-mix(in oklab, var(--accent), var(--border) 55%); border-radius: var(--r-md); background: var(--accent-softer); margin-top: 6px; }
+.gamecard__ic { width: 40px; height: 40px; flex: 0 0 40px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; }
+
+/* ---- teme prestabilite (carduri) ---- */
+.theme-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.theme-card { position: relative; display: flex; flex-direction: column; gap: 4px; padding: 13px 14px; border: 1.5px solid var(--border); border-radius: var(--r-md); background: var(--surface); cursor: pointer; text-align: left; transition: all var(--transition); }
+.theme-card:hover { border-color: var(--text-muted); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+.theme-card.is-on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring); }
+.theme-card__sw { display: flex; gap: 4px; margin-bottom: 6px; }
+.theme-card__sw span { width: 22px; height: 22px; border-radius: 6px; border: 1px solid rgba(0,0,0,.1); }
+.theme-card__name { font-family: var(--font-display); font-weight: 700; font-size: .9375rem; }
+.theme-card__tag { font-size: .6875rem; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: .03em; }
+.theme-card__desc { font-size: .75rem; color: var(--text-muted); line-height: 1.4; margin-top: 2px; }
+.theme-card__on { position: absolute; top: 10px; right: 10px; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; }
+
+/* ---- import tutorial ---- */
+.imp-tut { display: flex; flex-direction: column; gap: 0; margin-bottom: 18px; counter-reset: step; }
+.imp-step { display: grid; grid-template-columns: 30px 1fr; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--border-faint); }
+.imp-step__n { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; font-size: .8125rem; }
+.imp-step b { font-size: .875rem; display: block; margin-bottom: 2px; }
+.imp-step p { font-size: .8125rem; color: var(--text-muted); line-height: 1.45; }
+.imp-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 10px 0 4px; }
+.imp-legend span { display: inline-flex; align-items: center; gap: 6px; font-size: .75rem; color: var(--text-secondary); }

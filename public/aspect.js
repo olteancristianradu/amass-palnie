@@ -14,15 +14,38 @@
       'Inter':        "'Inter', system-ui, sans-serif",
       'IBM Plex Sans':"'IBM Plex Sans', system-ui, sans-serif",
       'Source Sans 3':"'Source Sans 3', system-ui, sans-serif",
+      'Work Sans':    "'Work Sans', system-ui, sans-serif",
+      'Nunito Sans':  "'Nunito Sans', system-ui, sans-serif",
+      'Atkinson (dislexie)': "'Atkinson Hyperlegible', system-ui, sans-serif",
       'System':       "system-ui, -apple-system, sans-serif",
+      'System (SF/Segoe)': "system-ui, -apple-system, sans-serif",
     },
     display: {
       'Montserrat':   "'Montserrat', sans-serif",
       'Sora':         "'Sora', sans-serif",
       'Space Grotesk':"'Space Grotesk', sans-serif",
+      'Bricolage':    "'Bricolage Grotesque', sans-serif",
+      'Fraunces':     "'Fraunces', serif",
       'Inter':        "'Inter', sans-serif",
+      'System (SF/Segoe)': "system-ui, -apple-system, sans-serif",
     },
   };
+
+  /* ---- Teme prestabilite (setează TOT aspectul dintr-un click) ---- */
+  const THEMES = [
+    { id: 'business', name: 'Business', tag: 'stil Salesforce / HubSpot',
+      desc: 'Dens, corporativ, albastru — pentru lucru intens cu multe date.',
+      s: { mode: 'light', accent: '#0B66C3', fontUi: 'IBM Plex Sans', fontDisplay: 'Sora', radius: 1, density: 'compact', background: 'grid', layoutSide: 'left', preset: 'custom' },
+      sw: ['#0B66C3', '#F4F5F7', '#1B1F24'] },
+    { id: 'standard', name: 'Standard AMASS', tag: 'cum e acum',
+      desc: 'Echilibrat, roșul de brand AMASS — recomandat pentru majoritatea.',
+      s: { mode: 'light', accent: '#CC0000', fontUi: 'Inter', fontDisplay: 'Montserrat', radius: 2, density: 'normal', background: 'none', layoutSide: 'left', preset: 'amass' },
+      sw: ['#CC0000', '#FAFAF8', '#1A1D1F'] },
+    { id: 'apple', name: 'Refined', tag: 'stil Apple',
+      desc: 'Aerisit, rotunjit, minimalist — font de sistem, mult spațiu alb.',
+      s: { mode: 'light', accent: '#0071E3', fontUi: 'System (SF/Segoe)', fontDisplay: 'System (SF/Segoe)', radius: 3, density: 'comfortable', background: 'warm', layoutSide: 'left', preset: 'custom' },
+      sw: ['#0071E3', '#FFFFFF', '#1D1D1F'] },
+  ];
 
   /* ---- Trepte ---- */
   const TEXT_STEPS   = [0.875, 1.0, 1.125, 1.25, 1.5];        // Mic→Maxim (WCAG 200%)
@@ -66,6 +89,14 @@
     { id: 'plum',   name: 'Prună',      accent: '#7C3AED' },
     { id: 'slate',  name: 'Ardezie',    accent: '#475569' },
   ];
+  /* fundaluri personalizate */
+  const BACKGROUNDS = [
+    { id: 'none',   name: 'Implicit',  css: '' },
+    { id: 'warm',   name: 'Cald',      css: 'radial-gradient(1200px 600px at 100% 0%, color-mix(in oklab, var(--accent) 8%, transparent), transparent)' },
+    { id: 'mesh',   name: 'Mesh',      css: 'radial-gradient(900px 500px at 0% 0%, color-mix(in oklab, var(--accent) 10%, transparent), transparent), radial-gradient(900px 500px at 100% 100%, color-mix(in oklab, #2563EB 8%, transparent), transparent)' },
+    { id: 'dots',   name: 'Puncte',    css: 'radial-gradient(var(--border-strong) 1px, transparent 1px)', size: '18px 18px' },
+    { id: 'grid',   name: 'Caroiaj',   css: 'linear-gradient(var(--border-faint) 1px, transparent 1px), linear-gradient(90deg, var(--border-faint) 1px, transparent 1px)', size: '24px 24px' },
+  ];
 
   const DEFAULTS = {
     mode: 'light',            // light | dark | system
@@ -77,6 +108,8 @@
     textSize: 1,              // index în TEXT_STEPS
     stages: {},               // override-uri de culoare per stadiu {key: hex}
     preset: 'amass',
+    layoutSide: 'left',       // left | right — poziția meniului + barei de unelte
+    background: 'none',       // fundal personalizat
   };
 
   /* ---- Color math (WCAG) ---- */
@@ -142,6 +175,13 @@
       root.style.setProperty('--st-' + s.key, custom || (mode === 'dark' ? s.dark : s.light));
     });
 
+    // Poziție layout (meniu + unelte stânga/dreapta)
+    root.setAttribute('data-side', state.layoutSide || 'left');
+    // Fundal personalizat — token pe <html>, aplicat efectiv pe body (vezi globals.css)
+    const bg = BACKGROUNDS.find(b => b.id === state.background) || BACKGROUNDS[0];
+    root.style.setProperty('--bg-pattern', bg.css || 'none');
+    root.style.setProperty('--bg-pattern-size', bg.size || 'auto');
+
     subs.forEach(fn => fn(state));
   }
 
@@ -152,12 +192,14 @@
 
   window.Aspect = {
     FONTS, TEXT_STEPS, TEXT_LABELS, RADIUS_STEPS, RADIUS_LABELS,
-    STAGES, TERMINAL, ALL_STAGES, STAGE_MAP, PRIORITIES, PRIORITY_MAP, PRESETS, DEFAULTS,
+    STAGES, TERMINAL, ALL_STAGES, STAGE_MAP, PRIORITIES, PRIORITY_MAP, PRESETS, BACKGROUNDS, DEFAULTS,
     get: () => state,
     set: (patch) => { state = { ...state, ...patch }; save(); apply(); },
     setStage: (key, hex) => { state = { ...state, stages: { ...state.stages, [key]: hex } }; save(); apply(); },
     resetStage: (key) => { const st = { ...state.stages }; delete st[key]; state = { ...state, stages: st }; save(); apply(); },
     reset: () => { state = { ...DEFAULTS, stages: {} }; save(); apply(); },
+    THEMES,
+    setTheme: (id) => { const t = THEMES.find(x => x.id === id); if (!t) return; state = { ...state, ...t.s, theme: id }; save(); apply(); },
     apply,
     contrast, onColor, rate, resolveMode,
     stageColor: (key) => state.stages[key] || (resolveMode(state.mode) === 'dark' ? STAGE_MAP[key].dark : STAGE_MAP[key].light),

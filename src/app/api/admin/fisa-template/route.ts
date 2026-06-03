@@ -32,14 +32,17 @@ export async function PATCH(req: NextRequest) {
   if (!scope) return NextResponse.json({ ok: false, error: 'Neautentificat' }, { status: 401 });
   if (scope.role !== 'admin') return NextResponse.json({ ok: false, error: 'Doar admin' }, { status: 403 });
 
-  const { variant, titlu, zones } = await req.json();
+  const { variant, titlu, zones, allowRemoveKeys } = await req.json();
   if (variant !== 'V1' && variant !== 'V2')
     return NextResponse.json({ ok: false, error: 'variant trebuie V1 sau V2' }, { status: 400 });
 
   // Protecție anti-orfanizare: încarcă template-ul curent și respinge dacă vreo cheie existentă dispare
   // din noul payload (redenumire/ștergere de câmp existent = pierdere de date la clienți).
+  // EXCEPȚIE: cheile din `allowRemoveKeys` au fost curățate explicit (prin /api/admin/fisa-field) ÎNAINTE
+  // de acest PATCH (ștergere câmp) sau confirmate de admin la resetarea la structura implicită.
+  const allow = Array.isArray(allowRemoveKeys) ? allowRemoveKeys.filter((k: any) => typeof k === 'string') : undefined;
   const prev = await loadTemplate(variant);
-  const v = validateTemplate({ variant, titlu, zones }, prev);
+  const v = validateTemplate({ variant, titlu, zones }, prev, allow);
   if (!v.ok) return NextResponse.json({ ok: false, error: v.error }, { status: 400 });
 
   const seed = SEEDS[variant as 'V1' | 'V2'];

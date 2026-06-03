@@ -104,6 +104,13 @@ body {
   color:var(--text); background:var(--bg);
   -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; font-feature-settings:"cv05","ss01";
 }
+/* Fundal personalizat (motorul Aspect → --bg-pattern / --bg-pattern-size pe <html>).
+   Strat fix, în spatele întregului conținut, peste culoarea de bază --bg. */
+body::before {
+  content:""; position:fixed; inset:0; z-index:-1; pointer-events:none;
+  background-image:var(--bg-pattern, none); background-size:var(--bg-pattern-size, auto);
+  background-position:0 0; background-repeat:repeat;
+}
 h1, h2, h3, h4 { font-family:var(--font-display); line-height:var(--lh-tight); font-weight:700; color:var(--text); margin:0; letter-spacing:-.01em; }
 button, input, select, textarea { font:inherit; color:inherit; }
 a { color:var(--accent); text-decoration:none; }
