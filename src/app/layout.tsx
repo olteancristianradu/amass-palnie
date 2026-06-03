@@ -1,6 +1,7 @@
 import './globals.css';
 import './amass-pa.css';
 import './amass-pa2.css';
+import './amass-pa3.css';
 import type { Metadata } from 'next';
 import { Montserrat, Inter, JetBrains_Mono } from 'next/font/google';
 import Script from 'next/script';

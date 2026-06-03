@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Layout } from '@/components/Layout';
 import { SyncBadge, type SyncInfo, type AutoSyncInfo } from '@/components/ui';
@@ -36,6 +36,7 @@ interface Client {
   obsSituatie?: string | null;
   nextStepText?: string | null;
   nextStepDue?: string | null;
+  updatedAt?: string | null;
   owner?: { id: string; name: string | null; email: string } | null;
 }
 
@@ -80,10 +81,23 @@ interface FilterState {
   audio: 'all' | 'yes' | 'no';
   mpMin: string;
   mpMax: string;
-  dateFrom: string;     // yyyy-mm-dd
+  dateFrom: string;     // yyyy-mm-dd — Perioadă intrare (pe dataIntrare)
   dateTo: string;       // yyyy-mm-dd
+  stageFrom: string;    // yyyy-mm-dd — Perioadă schimbare stadiu (pe updatedAt)
+  stageTo: string;      // yyyy-mm-dd
 }
-const DEFAULT_FILTERS: FilterState = { stage: '', stadiu: '', nevoia: '', steluta: '', audio: 'all', mpMin: '', mpMax: '', dateFrom: '', dateTo: '' };
+const DEFAULT_FILTERS: FilterState = { stage: '', stadiu: '', nevoia: '', steluta: '', audio: 'all', mpMin: '', mpMax: '', dateFrom: '', dateTo: '', stageFrom: '', stageTo: '' };
+
+// Dată cu NUME DE LUNĂ (ex. „8 mai 2026"). Acceptă ISO (din DateTime) sau dd.mm.yyyy (text T1 din CRM).
+function fmtDateRO(v: string | null | undefined): string {
+  if (!v) return '—';
+  let d: Date | null = null;
+  const m = String(v).match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/); // dd.mm.yyyy (ex. T1)
+  if (m) d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  else { const t = new Date(v); if (!Number.isNaN(t.getTime())) d = t; }
+  if (!d) return String(v);
+  return d.toLocaleDateString('ro-RO', { day: 'numeric', month: 'long', year: 'numeric' });
+}
 
 // Chip colors pe Nevoia (parity cu Palnie.js ~175-183): verde / gri / roșu / galben / portocaliu.
 function nevoiaChip(v: string | null): React.CSSProperties {
@@ -131,6 +145,40 @@ function StepToggle({ label, done, onClick }: { label: string; done: boolean; on
     <button className={'steptog' + (done ? ' is-done' : '')} onClick={e => { e.stopPropagation(); onClick(); }} title={label}>
       <Icon name={done ? 'check' : 'clock'} size={12} />{label}
     </button>
+  );
+}
+
+// Mini-buton info ⓘ (dreapta-sus a tabelului) → popover cu legenda celor 2 simboluri.
+// Închide la click în afară (mousedown). Explicațiile stau sub trigger, nu permanent pe ecran.
+function TableInfo() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+  return (
+    <span className="tbl-info" ref={ref}>
+      <button className={'tbl-info__btn' + (open ? ' is-on' : '')} title="Legendă simboluri"
+        onClick={() => setOpen(o => !o)} aria-label="Legendă simboluri">
+        <Icon name="info" size={15} />
+      </button>
+      {open && (
+        <div className="tbl-info__pop">
+          <div className="tbl-info__t">Legendă simboluri</div>
+          <div className="tbl-info__row">
+            <span className="autodot__pulse" />
+            <span>Punct albastru = <b>completat automat</b> (din Data intrare). Scrii peste → devine manual și nu se mai suprascrie.</span>
+          </div>
+          <div className="tbl-info__row">
+            <span className="cnm__warn"><Icon name="alert" size={13} /></span>
+            <span>Triunghi roșu la nume = client <b>fără înregistrare în CRM</b>.</span>
+          </div>
+        </div>
+      )}
+    </span>
   );
 }
 
@@ -318,6 +366,14 @@ export default function PalniePage() {
         if (filters.dateFrom && iso < filters.dateFrom) return false;
         if (filters.dateTo && iso > filters.dateTo) return false;
       }
+      // Perioadă schimbare stadiu — proxy: updatedAt (ultima modificare). Compar pe yyyy-mm-dd local.
+      if (filters.stageFrom || filters.stageTo) {
+        const u = c.updatedAt ? new Date(c.updatedAt) : null;
+        if (!u || Number.isNaN(u.getTime())) return false;
+        const iso = `${u.getFullYear()}-${String(u.getMonth() + 1).padStart(2, '0')}-${String(u.getDate()).padStart(2, '0')}`;
+        if (filters.stageFrom && iso < filters.stageFrom) return false;
+        if (filters.stageTo && iso > filters.stageTo) return false;
+      }
       // Search liber (păstrat)
       if (filter) {
         const q = filter.toLowerCase();
@@ -343,7 +399,8 @@ export default function PalniePage() {
     (filters.stage ? 1 : 0) + (filters.stadiu ? 1 : 0) + (filters.nevoia ? 1 : 0) +
     (filters.steluta !== '' ? 1 : 0) + (filters.audio !== 'all' ? 1 : 0) +
     (filters.mpMin !== '' || filters.mpMax !== '' ? 1 : 0) +
-    (filters.dateFrom || filters.dateTo ? 1 : 0)
+    (filters.dateFrom || filters.dateTo ? 1 : 0) +
+    (filters.stageFrom || filters.stageTo ? 1 : 0)
   );
   const resetFilters = () => setFilters(DEFAULT_FILTERS);
 
@@ -355,7 +412,8 @@ export default function PalniePage() {
     filters.steluta !== '' ? { k: 'steluta', label: 'Prio: ' + (STELUTA_OPTIONS[Number(filters.steluta)] || filters.steluta), clear: () => setF('steluta', '') } : null,
     filters.audio !== 'all' ? { k: 'audio', label: filters.audio === 'yes' ? 'Cu audio' : 'Fără audio', clear: () => setF('audio', 'all') } : null,
     (filters.mpMin !== '' || filters.mpMax !== '') ? { k: 'mp', label: `mp ${filters.mpMin || '0'}–${filters.mpMax || '∞'}`, clear: () => setFilters(p => ({ ...p, mpMin: '', mpMax: '' })) } : null,
-    (filters.dateFrom || filters.dateTo) ? { k: 'date', label: `Dată ${filters.dateFrom || '…'}→${filters.dateTo || '…'}`, clear: () => setFilters(p => ({ ...p, dateFrom: '', dateTo: '' })) } : null,
+    (filters.dateFrom || filters.dateTo) ? { k: 'date', label: `Intrare ${filters.dateFrom || '…'}→${filters.dateTo || '…'}`, clear: () => setFilters(p => ({ ...p, dateFrom: '', dateTo: '' })) } : null,
+    (filters.stageFrom || filters.stageTo) ? { k: 'stage-date', label: `Stadiu ${filters.stageFrom || '…'}→${filters.stageTo || '…'}`, clear: () => setFilters(p => ({ ...p, stageFrom: '', stageTo: '' })) } : null,
   ].filter(Boolean) as Array<{ k: string; label: string; dot?: string | null; clear: () => void }>;
 
   const pillClass = (s: string | null) => {
@@ -445,15 +503,26 @@ export default function PalniePage() {
                 value={filters.mpMax} onChange={e => setF('mpMax', e.target.value)} />
             </div>
           </div>
-          {/* Dată intrare de la / până la */}
+          {/* Perioadă intrare de la / până la (pe dataIntrare) */}
           <div className="fgroup">
-            <span className="label">{t('Dată intrare')}</span>
+            <span className="label">{t('Perioadă intrare')}</span>
             <div className="flex items-center gap-1">
               <input type="date" className="field w-full" title={t('de la')}
                 value={filters.dateFrom} onChange={e => setF('dateFrom', e.target.value)} />
               <span className="muted">–</span>
               <input type="date" className="field w-full" title={t('până la')}
                 value={filters.dateTo} onChange={e => setF('dateTo', e.target.value)} />
+            </div>
+          </div>
+          {/* Perioadă schimbare stadiu de la / până la (pe updatedAt — ultima schimbare) */}
+          <div className="fgroup">
+            <span className="label">{t('Perioadă schimbare stadiu')}</span>
+            <div className="flex items-center gap-1">
+              <input type="date" className="field w-full" title={t('de la')}
+                value={filters.stageFrom} onChange={e => setF('stageFrom', e.target.value)} />
+              <span className="muted">–</span>
+              <input type="date" className="field w-full" title={t('până la')}
+                value={filters.stageTo} onChange={e => setF('stageTo', e.target.value)} />
             </div>
           </div>
           {/* SINCRONIZARE CRM (auto-sync rulează oricum în fundal) */}
@@ -482,6 +551,7 @@ export default function PalniePage() {
         </div>
       ) : view === 'tabel' ? (
         <div className="table-wrap card rise">
+          <TableInfo />
           {(() => {
             const cnt = (f: (c: Client) => any) => filtered.filter(c => { const v = f(c); return v != null && String(v).trim() !== ''; }).length;
             const tot = { supr: cnt(c => c.suprafata), intrare: cnt(c => c.dataIntrare), t1: cnt(c => c.t1), nevoia: cnt(c => c.nevoia), schita: cnt(c => c.schitaStatus), preof: cnt(c => c.preOfertat), ofertat: cnt(c => c.ofertat), status: cnt(c => c.stadiu) };
@@ -533,15 +603,19 @@ export default function PalniePage() {
                                 onClick={() => setSteluta(c.id, c.idLucrare, prioToSteluta(stelutaToPrio((c.stelutaCat + 1) % 5)))} />
                             </span>
                             {!c.hasAudio && <Icon name="alert" size={13} style={{ color: 'var(--warning)', flex: '0 0 13px' }} />}
+                            {/* ⚠ client fără înregistrare în CRM. Modelul webapp NU are câmp inCRM → tratăm ca TRUE (deci nu apare acum); logica e gata. */}
+                            {(c as any).inCRM === false && (
+                              <span className="cnm__warn" title="Fără înregistrare în CRM — de sincronizat"><Icon name="alert" size={13} /></span>
+                            )}
                             <a href={`https://gestcom.ro/amass/index.php?m=lucrari&a=view&id_lucrare=${c.idLucrare}`} target="_blank" rel="noopener" onClick={stop} className="cnm__name">{c.nume || '(nume)'}</a>
                           </div>
                           <div className="cnm__sub mono">#{c.idLucrare} · ({c.categorie}{c.isDT ? 'DT' : ''}){c.localitate ? ' · ' + c.localitate : ''}{isManager && ownerFilter === 'all' && c.owner ? ' · ' + (c.owner.name || c.owner.email) : ''}</div>
                         </td>
                         <td className="num mono">{c.suprafata != null ? c.suprafata + ' mp' : ''}</td>
-                        <td className="mono cell-date">{c.dataIntrare ? new Date(c.dataIntrare).toLocaleDateString('ro-RO') : '—'}</td>
+                        <td className="mono cell-date">{fmtDateRO(c.dataIntrare)}</td>
                         <td>
                           <div className="t1cell">
-                            <span className="mono" style={{ fontSize: '.75rem' }}>{c.t1 || '—'}</span>
+                            <span className="mono" style={{ fontSize: '.75rem' }}>{c.t1 ? fmtDateRO(c.t1) : '—'}</span>
                             {c.t1 && <span className="t1cell__badge t1cell__badge--auto" title="Termen 1 (din CRM)">T1</span>}
                           </div>
                         </td>

@@ -395,5 +395,14 @@ select.field, select.input-amass, .select { cursor:pointer; }
 .lp-card { background:var(--surface) !important; }
 .lp-row { display:grid; grid-template-columns:1fr auto auto; gap:10px; align-items:center; padding:8px 10px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-sm); font-size:.8125rem; }
 .card--pad { padding:calc(1rem * var(--density-pad)); }
+/* butoane colorate fișă + indicator auto-save (handoff v3) */
+.btn-info { background:var(--info); color:#fff; } .btn-info:hover { background:color-mix(in oklab, var(--info), #000 14%); }
+.btn-amber { background:var(--warning); color:#fff; } .btn-amber:hover { background:color-mix(in oklab, var(--warning), #000 14%); }
+.btn-pdf { background:#D1242F; color:#fff; } .btn-pdf:hover { background:#A81D26; }
+.btn-word { background:#2B579A; color:#fff; } .btn-word:hover { background:#21447A; }
+.autosave { display:inline-flex; align-items:center; gap:5px; font-size:.75rem; font-weight:600; padding:6px 11px; border-radius:var(--r-sm); color:var(--text-muted); background:var(--surface-2); border:1px solid var(--border); }
+.autosave--saving { color:var(--info); background:var(--info-soft); border-color:transparent; }
+.autosave--saved { color:var(--success); background:var(--success-soft); border-color:transparent; }
+.spin { animation:spin 800ms linear infinite; } @keyframes spin { to { transform:rotate(360deg); } }
 @media (max-width:1100px){ .aspect { grid-template-columns:1fr; } .aspect__preview { position:static; } }
 @media (max-width:860px){ .settings { grid-template-columns:1fr; } .settings__nav { flex-direction:row; overflow-x:auto; border-right:none; border-bottom:1px solid var(--border); border-radius:var(--r-md) var(--r-md) 0 0; } .set-navitem small { display:none; } }

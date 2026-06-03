@@ -48,6 +48,10 @@ const IP: Record<string, string> = {
   dots: 'M12 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM19 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM5 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z',
   logout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9',
   funnel: 'M3 4h18l-7 8v6l-4 2v-8L3 4z', sheet: 'M4 3h16v18H4zM8 8h8M8 12h8M8 16h5', archive: 'M3 4h18v4H3zM5 8v11a1 1 0 001 1h12a1 1 0 001-1V8M9 12h6', list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01', file: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6',
+  help: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM9.2 9a3 3 0 0 1 5.7 1c0 2-3 2.5-3 4M12 17h.01',
+  play: 'M6 4l14 8-14 8z',
+  lightbulb: 'M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z',
+  info: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 16v-4M12 8h.01',
 };
 
 export function Icon({ name, size = 18, fill = false, style, className, strokeWidth = 1.9 }: {

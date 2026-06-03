@@ -1,0 +1,100 @@
+/* ============================================================================
+   AMASS Pâlnie — pa3.css : AJUTOR (buton, drawer, glosar), TUR ghidat,
+   + rafinări de responsivitate pentru orice device.
+   ========================================================================== */
+
+/* ---- buton Ajutor în topbar ---- */
+.help-btn { color: var(--accent); border: 1px solid color-mix(in oklab, var(--accent), var(--surface) 65%); background: var(--accent-softer); }
+.help-btn:hover { background: var(--accent-soft); color: var(--accent); }
+
+/* ---- drawer Ajutor ---- */
+.help-backdrop { position: fixed; inset: 0; background: var(--overlay); z-index: 90; animation: fade 160ms ease; }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+.help-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 400px; max-width: 92vw; background: var(--surface); border-left: 1px solid var(--border); box-shadow: var(--shadow-lg); z-index: 91; display: flex; flex-direction: column; animation: slidein 220ms cubic-bezier(.2,.8,.2,1); }
+@keyframes slidein { from { transform: translateX(100%); } to { transform: none; } }
+.help-drawer__head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; border-bottom: 1px solid var(--border); }
+.help-drawer__head h2 { font-size: 1.0625rem; }
+.help-drawer__body { padding: 16px 18px 28px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.help-tourcta { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: var(--r-md); border: 1px solid color-mix(in oklab, var(--accent), var(--surface) 60%); background: var(--accent-soft); color: var(--accent); cursor: pointer; text-align: left; transition: all var(--transition); }
+.help-tourcta:hover { background: color-mix(in oklab, var(--accent), var(--surface) 80%); }
+.help-tourcta small { color: color-mix(in oklab, var(--accent), var(--text) 40%); font-weight: 500; }
+.help-tourcta__ic { width: 38px; height: 38px; border-radius: 50%; background: var(--accent); color: var(--on-accent); display: grid; place-items: center; flex: 0 0 38px; }
+.help-search { display: flex; align-items: center; gap: 8px; padding: 0 11px; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: var(--r-sm); color: var(--text-muted); }
+.help-search input { border: none; background: none; outline: none; padding: 9px 0; width: 100%; font-size: .8125rem; color: var(--text); }
+.help-sec__t { font-size: .6875rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); margin: 8px 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border-faint); }
+.help-item { display: flex; gap: 11px; padding: 8px 0; align-items: flex-start; }
+.help-item__ic { width: 30px; height: 30px; flex: 0 0 30px; border-radius: var(--r-sm); background: var(--surface-2); color: var(--text-secondary); display: grid; place-items: center; margin-top: 1px; }
+.help-item b { font-size: .8125rem; display: block; }
+.help-item p { font-size: .75rem; color: var(--text-muted); line-height: 1.45; margin-top: 2px; }
+.help-tip { display: flex; gap: 9px; align-items: flex-start; margin-top: 8px; padding: 11px 13px; background: var(--warning-soft); color: var(--warning); border-radius: var(--r-sm); font-size: .75rem; line-height: 1.45; }
+.help-tip svg { flex: 0 0 16px; margin-top: 1px; }
+
+/* ---- TUR ghidat ---- */
+.tour { position: fixed; inset: 0; z-index: 95; }
+.tour__dim { position: absolute; inset: 0; background: rgba(10,14,18,.55); }
+.tour__spot { position: absolute; border-radius: var(--r-sm); box-shadow: 0 0 0 9999px rgba(10,14,18,.58); outline: 2px solid var(--accent); outline-offset: 2px; transition: all 240ms cubic-bezier(.2,.8,.2,1); pointer-events: none; }
+.tour__tip { position: absolute; width: 320px; max-width: calc(100vw - 24px); background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--r-md); box-shadow: var(--shadow-lg); padding: 16px; z-index: 96; animation: fade 200ms ease; }
+.tour__step { font-size: .6875rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); }
+.tour__title { font-size: 1.0625rem; margin: 6px 0 6px; }
+.tour__body { font-size: .8125rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 14px; }
+.tour__list { list-style: none; padding: 0; margin: 0 0 14px; display: flex; flex-direction: column; gap: 7px; }
+.tour__list li { position: relative; padding-left: 18px; font-size: .8125rem; color: var(--text-secondary); line-height: 1.4; }
+.tour__list li::before { content: ""; position: absolute; left: 2px; top: 7px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.tour__nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+/* ============================================================================
+   RESPONSIVITATE — orice device
+   ========================================================================== */
+@media (max-width: 1180px) {
+  .help-btn__lbl { display: inline; }
+}
+@media (max-width: 760px) {
+  /* topbar devine 2 rânduri, totul accesibil cu degetul */
+  .topbar { flex-wrap: wrap; height: auto; padding: 10px 14px; gap: 8px; row-gap: 10px; }
+  .topbar__title { font-size: 1.0625rem; flex: 1; }
+  .topbar__sp { display: none; }
+  .topbar__switch { order: 5; width: 100%; }
+  .topbar__switch .segmented { width: 100%; }
+  .topbar__switch .segmented__btn { flex: 1; justify-content: center; }
+  .topbar__search { order: 6; width: 100%; }
+  .topbar__search input { width: 100%; }
+  .help-btn__lbl { display: none; }
+  .help-btn { padding: 0; width: 36px; min-height: 36px; justify-content: center; }
+  .topbar__add-lbl { display: none; }
+  .topbar__add { padding: 0; width: 36px; min-height: 36px; }
+  /* fișă: acțiuni pe rânduri, scroll dacă e nevoie */
+  .fisa { padding: 12px 14px 28px; }
+  .fisa__actions { width: 100%; overflow-x: auto; padding-bottom: 4px; }
+  .fisa__actions .btn { flex: 0 0 auto; }
+  .fisa__contact { margin-left: 0; }
+  .fisa__title h1 { font-size: 1.25rem; white-space: normal; }
+  .help-drawer { width: 100%; max-width: 100%; }
+  /* dashboard mai aerisit */
+  .dash2__bar { padding: 13px 16px; }
+  .dash2__bar h2 { font-size: 1.25rem; }
+}
+@media (max-width: 560px) {
+  /* carduri-rând: tot conținutul pe verticală, butoane mari */
+  .fr { padding: 12px 14px 12px 16px; }
+  .fr__ctl { gap: 8px; }
+  .fr__steps { width: 100%; }
+  .fr__steps .steptog { flex: 1; justify-content: center; }
+  .fr__nevoie, .fr .status-sel { flex: 1; min-width: 0; }
+  .fr__fisa { width: 100%; justify-content: center; }
+  /* tabel: lasă-l să scrolleze orizontal; coloana nume rămâne lipită */
+  .tbl--fisa { min-width: 900px; }
+  /* fișă: 2-col → 1 col deja la 980; aici padding mai mic */
+  .frow-2 { grid-template-columns: 1fr; }
+  .d2fn { grid-template-columns: 104px 26px 1fr 38px; gap: 7px; }
+  .d2fn__lbl { font-size: .75rem; }
+  .d2key__v { font-size: 1.7rem; }
+  .tour__tip { width: calc(100vw - 24px); }
+  /* meniul utilizator pe lățime mică */
+  .usermenu { left: 8px; right: 8px; }
+}
+/* hit-targets minime pe touch */
+@media (pointer: coarse) {
+  .cell-select, .date-input { min-height: 40px; }
+  .steptog { min-height: 36px; }
+  .chip, .chipset__c { min-height: 36px; }
+}

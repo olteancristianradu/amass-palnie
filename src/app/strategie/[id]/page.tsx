@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { Layout } from '@/components/Layout';
 import { Icon } from '@/components/Icon';
 import { calculate, type StrategieInput } from '@/lib/strategie-calc';
@@ -37,8 +37,15 @@ export default function StrategiePage() {
   const [client, setClient] = useState<Client | null>(null);
   const [form, setForm] = useState<Record<string, any>>({});
   const [template, setTemplate] = useState<FisaTemplateData | null>(null);
-  const [saving, setSaving] = useState(false);
+  // Indicator salvare automată: idle | saving | saved (afișat în .fisa__actions).
+  // Înlocuiește vechiul state `saving` + butonul „✔ Salvează".
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [msg, setMsg] = useState('');
+  // Refs pentru salvarea automată cu debounce: nu declanșăm la prima încărcare a form-ului,
+  // doar după ce userul a editat efectiv ceva.
+  const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const formDirty = useRef(false);
   const [emailOpen, setEmailOpen] = useState(false);
   const [reminderOpen, setReminderOpen] = useState(false);
   const [infoCrmOpen, setInfoCrmOpen] = useState(false);
@@ -123,7 +130,27 @@ export default function StrategiePage() {
     bransament: form.bransament
   } as StrategieInput), [form, isV1]);
 
-  function set(key: string, val: any) { setForm(prev => ({ ...prev, [key]: val })); }
+  function set(key: string, val: any) {
+    // Orice editare a userului marchează form-ul ca „dirty" → permite salvarea automată.
+    formDirty.current = true;
+    setForm(prev => ({ ...prev, [key]: val }));
+  }
+
+  // SALVARE AUTOMATĂ: la modificarea `form` (după ce userul a editat), debounce ~1200ms,
+  // apoi apelăm save() existentă. NU declanșăm la prima încărcare (formDirty rămâne false).
+  useEffect(() => {
+    if (!formDirty.current) return;
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    autosaveTimer.current = setTimeout(() => { void save(); }, 1200);
+    return () => { if (autosaveTimer.current) clearTimeout(autosaveTimer.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form]);
+
+  // Curăță timerele la unmount.
+  useEffect(() => () => {
+    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+    if (savedTimer.current) clearTimeout(savedTimer.current);
+  }, []);
 
   // Randare dinamică a unui câmp din template, în funcție de control.
   // Câmpurile stau în corpul zonei (.fz__body), pe rânduri .frow (label stânga / control dreapta).
@@ -156,7 +183,10 @@ export default function StrategiePage() {
 
   async function save() {
     if (!client) return;
-    setSaving(true); setMsg('');
+    setMsg('');
+    // Indicator salvare automată: „⟳ Se salvează…" cât rulează PATCH-ul.
+    if (savedTimer.current) { clearTimeout(savedTimer.current); savedTimer.current = null; }
+    setSaveState('saving');
     const key = client.categorie === 1 ? 'strategieV1' : 'strategieV2';
     const r = await fetch(`/api/clienti/${client.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -168,7 +198,13 @@ export default function StrategiePage() {
       })
     });
     const j = await r.json();
-    setSaving(false);
+    // „✓ Salvat" ~2s, apoi revine la starea idle.
+    if (j.ok) {
+      setSaveState('saved');
+      savedTimer.current = setTimeout(() => setSaveState('idle'), 2000);
+    } else {
+      setSaveState('idle');
+    }
     setMsg(j.ok ? '✅ Salvat (+ snapshot arhivă)' : '❌ ' + j.error);
   }
 
@@ -258,14 +294,19 @@ export default function StrategiePage() {
             </select>
             <CompletenessBadge form={form} />
           </div>
-          {/* Bară de acțiuni — culori + emoji ca în spreadsheet. */}
+          {/* Bară de acțiuni — salvare automată + butoane colorate ca în design. */}
           <div className="fisa__actions">
-            <button onClick={save} disabled={saving} className="btn btn-primary btn-sm">{saving ? '…' : '✔ Salvează'}</button>
+            {/* Indicator salvare automată (înlocuiește butonul „✔ Salvează"). */}
+            <span className={'autosave autosave--' + saveState} title="Modificările se salvează automat">
+              {saveState === 'saving'
+                ? <><Icon name="refresh" size={13} className="spin" />⟳ Se salvează…</>
+                : <><Icon name="check" size={13} />{saveState === 'saved' ? '✓ Salvat' : 'Salvare automată'}</>}
+            </span>
             <button onClick={openInfoCrm} className="btn btn-sm text-white" style={{ background: '#1e7a3c' }}>📋 INFO CRM</button>
-            <button onClick={() => setReminderOpen(true)} className="btn btn-sm text-white" style={{ background: '#d98324' }}>⏰ Reminder</button>
+            <button onClick={() => setReminderOpen(true)} className="btn btn-amber btn-sm">⏰ Reminder</button>
             <button onClick={() => setEmailOpen(true)} className="btn btn-sm text-white" style={{ background: '#3f7d4e' }}>✉ Email redactare</button>
-            <button onClick={downloadPDF} className="btn btn-sm text-white" style={{ background: '#b3261e' }}>📄 PDF</button>
-            <button onClick={downloadWord} className="btn btn-sm text-white" style={{ background: '#1f4e8c' }}>📝 Word</button>
+            <button onClick={downloadPDF} className="btn btn-pdf btn-sm">📄 PDF</button>
+            <button onClick={downloadWord} className="btn btn-word btn-sm">📝 Word</button>
             <a href={`https://gestcom.ro/amass/index.php?m=lucrari&a=view&id_lucrare=${client.idLucrare}`}
                target="_blank" rel="noopener" className="btn btn-secondary btn-sm">CRM ↗</a>
           </div>
