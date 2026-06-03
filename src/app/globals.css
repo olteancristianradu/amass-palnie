@@ -50,6 +50,12 @@
   --star-0:var(--heat-0); --star-1:var(--heat-2); --star-2:var(--heat-3); --star-3:var(--heat-4); --star-4:var(--heat-5); --star-stroke:#9A8F82;
   --sync-fresh:var(--success); --sync-stale:var(--warning); --sync-old:var(--danger);
   --radius:var(--r-md); --radius-sm:var(--r-sm); --shadow:var(--shadow-md);
+
+  /* ---- DESIGN v3 (handoff Pâlnie): mărime text (rem/zoom), stadii editabile, rotting ---- */
+  --text-scale:1; --density-pad:1;
+  --surface-sunk:#F0F1EF; --accent-line:color-mix(in oklab, var(--accent), var(--surface) 55%);
+  --rot-fresh:#B6BDC2; --rot-warn:#D9870B; --rot-late:#DC2626;
+  --st-intrare:#64748B; --st-t1:#0EA5E9; --st-schita:#6366F1; --st-preofertat:#8B5CF6; --st-ofertat:#E8870E; --st-contractat:#15A34A; --st-amanat:#A16207; --st-finalizat:#0D9488; --st-anulat:#94A3B8;
 }
 
 [data-theme="dark"] {
@@ -65,6 +71,9 @@
   --shadow-lg:0 4px 12px rgba(0,0,0,.5), 0 16px 32px rgba(0,0,0,.6);
   --shadow-drag:0 8px 16px rgba(0,0,0,.6), 0 2px 6px rgba(0,0,0,.5);
   --ink:#0B0D0F; --on-ink:#E8EAED; --on-ink-soft:#9AA0A8;
+  --surface-sunk:#13171A; --accent-line:color-mix(in oklab, var(--accent), var(--surface) 45%);
+  --rot-fresh:#5A636A; --rot-warn:#E0A93C; --rot-late:#F26D6D;
+  --st-intrare:#7C8AA0; --st-t1:#38BDF8; --st-schita:#818CF8; --st-preofertat:#A78BFA; --st-ofertat:#F59E0B; --st-contractat:#22C55E; --st-amanat:#CA8A04; --st-finalizat:#2DD4BF; --st-anulat:#64748B;
 }
 
 [data-accent="pine"]   { --accent:#2F6B5E; --accent-hover:#245447; --accent-active:#38806F; --accent-ring:rgba(47,107,94,.22); --accent-soft:#E6F0ED; }
@@ -75,9 +84,10 @@
 [data-accent="violet"] { --accent:#6D28D9; --accent-hover:#5B21B6; --accent-soft:#EFE7FB; --accent-ring:rgba(109,40,217,.22); }
 [data-accent="gold"]   { --accent:#B7791F; --accent-hover:#92610F; --accent-soft:#FBF1DD; --accent-ring:rgba(183,121,31,.22); }
 
-[data-density="compact"]     { --density:.82; }
-[data-density="comfortable"] { --density:1; }
-[data-density="relaxed"]     { --density:1.18; }
+[data-density="compact"]     { --density:.82; --density-pad:.72; }
+[data-density="normal"]      { --density:1; --density-pad:1; }
+[data-density="comfortable"] { --density:1.18; --density-pad:1.28; }
+[data-density="relaxed"]     { --density:1.18; --density-pad:1.28; }
 [data-radius="sharp"]   { --r-xs:0; --r-sm:1px; --r-md:2px; --r-lg:3px; }
 [data-radius="default"], [data-radius="normal"] { --r-xs:2px; --r-sm:4px; --r-md:6px; --r-lg:10px; }
 [data-radius="soft"], [data-radius="round"] { --r-xs:4px; --r-sm:8px; --r-md:12px; --r-lg:16px; }
@@ -85,6 +95,8 @@
 /* ============================================================================ RESET / BAZĂ */
 * { box-sizing:border-box; }
 html, body { margin:0; padding:0; }
+/* Mărime text / interfață globală — controlată de motorul Aspect prin --text-scale (0.875→1.5). */
+html { zoom:var(--text-scale, 1); }
 body {
   font-family:var(--font-ui); font-size:var(--fs-body); line-height:var(--lh-body);
   color:var(--text); background:var(--bg);
@@ -310,3 +322,78 @@ select.field, select.input-amass, .select { cursor:pointer; }
   .sidebar { position:fixed; z-index:50; transform:translateX(-100%); box-shadow:var(--shadow-lg); }
   .sidebar.is-open { transform:none; }
 }
+
+/* ============================================================================
+   DESIGN v3 (handoff Pâlnie) — clase pentru panoul „Aspect", brand și indicatori.
+   (Layout-urile per-view: kanban .kcol, tabel .tbl--fisa, carduri .fr, dashboard .d2*, fișă .fz
+    — fază următoare. Aici doar ce e nevoie acum, fără să intre în conflict cu shell-ul Tailwind.)
+   ========================================================================== */
+/* brand sidebar */
+.brand-lock { display:flex; align-items:center; gap:11px; text-decoration:none; min-width:0; }
+.amass-mark { flex:0 0 auto; display:block; }
+.brand-text { display:flex; flex-direction:column; line-height:1; min-width:0; }
+.brand-word { font-family:var(--font-display); font-weight:800; font-size:1.2rem; color:var(--brand-red,#CC0000); letter-spacing:.03em; }
+.brand-word sup { font-size:.48em; font-weight:700; top:-.7em; }
+.brand-sub { font-size:9px; letter-spacing:.16em; text-transform:uppercase; color:var(--text-muted); font-weight:700; margin-top:4px; white-space:nowrap; }
+
+/* segmented */
+.segmented { display:inline-flex; background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-sm); padding:3px; gap:2px; }
+.segmented__btn { display:inline-flex; align-items:center; gap:6px; padding:7px 13px; border:none; background:none; border-radius:calc(var(--r-sm) - 2px); color:var(--text-secondary); font-size:.8125rem; font-weight:600; cursor:pointer; transition:all var(--transition); white-space:nowrap; }
+.segmented__btn:hover { color:var(--text); }
+.segmented__btn.is-on { background:var(--surface); color:var(--accent); box-shadow:var(--shadow-sm); }
+.segmented--sm .segmented__btn { padding:5px 10px; font-size:.75rem; }
+
+/* indicatori: stage-pill + rotting (canal vârstă) */
+.stage-pill { display:inline-flex; align-items:center; gap:5px; font-size:.6875rem; font-weight:600; letter-spacing:.02em; padding:3px 9px 3px 7px; border-radius:999px; border:1px solid; white-space:nowrap; }
+.stage-pill__dot { width:6px; height:6px; border-radius:50%; flex:0 0 6px; }
+.stage-pill--sm { font-size:.625rem; padding:2px 7px 2px 6px; }
+.rot { display:inline-flex; align-items:center; gap:3px; font-size:.75rem; font-weight:600; }
+.rot--fresh { color:var(--text-muted); } .rot--warn { color:var(--rot-warn); } .rot--late { color:var(--rot-late); }
+.prio-lbl { font-size:.75rem; font-weight:600; color:var(--text-secondary); }
+
+/* settings + panou Aspect */
+.settings { display:grid; grid-template-columns:248px 1fr; align-items:start; }
+.settings__nav { border-right:1px solid var(--border); padding:var(--sp-4) var(--sp-3); display:flex; flex-direction:column; gap:3px; background:var(--surface); border-radius:var(--r-md) 0 0 var(--r-md); }
+.set-navitem { display:flex; align-items:center; gap:11px; padding:10px 12px; border:none; background:none; border-radius:var(--r-sm); cursor:pointer; color:var(--text-secondary); text-align:left; transition:all var(--transition); }
+.set-navitem small { font-size:.6875rem; color:var(--text-faint); font-weight:400; }
+.set-navitem b { font-size:.8125rem; font-weight:600; line-height:1.25; }
+.set-navitem:hover { background:var(--surface-2); }
+.set-navitem.is-on { background:var(--accent-soft); color:var(--accent); }
+.set-navitem.is-on small { color:var(--accent); opacity:.75; }
+.settings__body { padding:var(--sp-6); }
+.aspect { display:grid; grid-template-columns:1fr 320px; gap:var(--sp-6); align-items:start; }
+.aspect__main { display:flex; flex-direction:column; gap:var(--sp-5); max-width:620px; }
+.aset--hl { padding:var(--sp-4); margin:calc(-1 * var(--sp-4)); border-radius:var(--r-md); background:var(--accent-softer); }
+.aset__title { display:flex; align-items:center; gap:8px; font-size:.9375rem; margin-bottom:12px; }
+.aset__title svg { color:var(--accent); }
+.aspect__hint { font-size:.75rem; color:var(--text-muted); margin-top:8px; line-height:1.5; }
+.preset-row { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+.preset { display:inline-flex; align-items:center; gap:7px; padding:6px 11px; border:1px solid var(--border); background:var(--surface); border-radius:var(--r-sm); font-size:.8125rem; font-weight:500; cursor:pointer; transition:all var(--transition); }
+.preset:hover { border-color:var(--text-muted); }
+.preset.is-on { border-color:var(--accent); background:var(--accent-soft); color:var(--accent); font-weight:600; }
+.preset__sw { width:14px; height:14px; border-radius:4px; }
+.accent-pick { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.accent-pick__color { position:relative; width:40px; height:40px; cursor:pointer; }
+.accent-pick__color input { position:absolute; inset:0; opacity:0; cursor:pointer; }
+.accent-pick__chip { display:block; width:40px; height:40px; border-radius:var(--r-sm); border:1px solid var(--border-strong); }
+.wcag { display:inline-flex; align-items:center; gap:5px; font-size:.75rem; font-weight:600; padding:5px 10px; border-radius:999px; }
+.wcag--ok { color:var(--success); background:var(--success-soft); }
+.wcag--warn { color:var(--warning); background:var(--warning-soft); }
+.wcag--bad { color:var(--danger); background:var(--danger-soft); }
+.step-range { width:100%; accent-color:var(--accent); height:4px; }
+.step-ticks { display:flex; justify-content:space-between; gap:4px; margin-top:4px; }
+.step-tick { flex:1; border:none; background:none; font-size:.6875rem; color:var(--text-muted); cursor:pointer; padding:4px 2px; border-radius:var(--r-xs); white-space:nowrap; }
+.step-tick:hover { background:var(--surface-2); }
+.step-tick.is-on { color:var(--accent); font-weight:700; }
+.stage-colors { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:8px; }
+.stage-color { position:relative; display:flex; align-items:center; gap:8px; padding:7px 9px; border:1px solid var(--border); border-radius:var(--r-sm); font-size:.8125rem; cursor:pointer; }
+.stage-color input { position:absolute; width:1px; height:1px; opacity:0; }
+.stage-color__chip { width:18px; height:18px; border-radius:5px; border:1px solid rgba(0,0,0,.12); flex:0 0 18px; }
+.stage-color__reset { margin-left:auto; display:inline-flex; padding:3px; border:none; background:none; color:var(--text-faint); cursor:pointer; border-radius:var(--r-xs); }
+.stage-color__reset:hover { color:var(--accent); background:var(--surface-2); }
+.aspect__preview { position:sticky; top:var(--sp-6); background:var(--surface-2); border:1px solid var(--border); border-radius:var(--r-md); padding:var(--sp-4); }
+.lp-card { background:var(--surface) !important; }
+.lp-row { display:grid; grid-template-columns:1fr auto auto; gap:10px; align-items:center; padding:8px 10px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-sm); font-size:.8125rem; }
+.card--pad { padding:calc(1rem * var(--density-pad)); }
+@media (max-width:1100px){ .aspect { grid-template-columns:1fr; } .aspect__preview { position:static; } }
+@media (max-width:860px){ .settings { grid-template-columns:1fr; } .settings__nav { flex-direction:row; overflow-x:auto; border-right:none; border-bottom:1px solid var(--border); border-radius:var(--r-md) var(--r-md) 0 0; } .set-navitem small { display:none; } }

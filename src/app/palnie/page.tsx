@@ -2,10 +2,15 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Layout } from '@/components/Layout';
-import { PriorityStars, SyncBadge, type SyncInfo, type AutoSyncInfo } from '@/components/ui';
+import { SyncBadge, type SyncInfo, type AutoSyncInfo } from '@/components/ui';
+import { Icon } from '@/components/Icon';
+import { PriorityStar, StagePill, RotText, Segmented } from '@/components/indicators';
 import { KanbanBoard } from '@/components/KanbanBoard';
 import { useT } from '@/lib/i18n';
-import { deriveStage } from '@/lib/stage-rules';
+import {
+  deriveStage, daysSince, stelutaToPrio, prioToSteluta,
+  ALL_STAGES, PRIORITIES, PRIORITY_MAP, STAGE_MAP,
+} from '@/lib/aspect-meta';
 
 interface Client {
   id: string;
@@ -91,6 +96,44 @@ function nevoiaChip(v: string | null): React.CSSProperties {
   return {};
 }
 
+// Grup de filtre re-stilizat ca în design: etichetă + chips (.fgroup / .chip).
+function FilterGroup({ label, value, options, onChange, dotFn }: {
+  label: string; value: string; options: Array<[string, string]>;
+  onChange: (v: string) => void; dotFn?: (k: string) => string | null;
+}) {
+  return (
+    <div className="fgroup">
+      <span className="label">{label}</span>
+      <div className="fgroup__chips">
+        {options.map(([k, l]) => (
+          <button key={k} className={'chip' + (value === k ? ' is-on' : '')} onClick={() => onChange(k)}>
+            {dotFn && dotFn(k) && <span className="chip__dot" style={{ background: dotFn(k) as string }} />}{l}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Chip activ (în filterbar) cu buton de eliminare.
+function Chip({ children, dot, onRemove }: { children: React.ReactNode; dot?: string | null; onRemove: () => void }) {
+  return (
+    <span className="chip is-on">
+      {dot && <span className="chip__dot" style={{ background: dot }} />}{children}
+      <button className="chip__x" onClick={onRemove} title="Elimină filtrul"><Icon name="x" size={12} /></button>
+    </span>
+  );
+}
+
+// Buton de etapă (toggle bifă) pentru cardurile-rând (.steptog).
+function StepToggle({ label, done, onClick }: { label: string; done: boolean; onClick: () => void }) {
+  return (
+    <button className={'steptog' + (done ? ' is-done' : '')} onClick={e => { e.stopPropagation(); onClick(); }} title={label}>
+      <Icon name={done ? 'check' : 'clock'} size={12} />{label}
+    </button>
+  );
+}
+
 export default function PalniePage() {
   const router = useRouter();
   const { t } = useT();
@@ -139,12 +182,19 @@ export default function PalniePage() {
 
   async function load(silent = false) {
     if (!silent) setLoading(true);
-    const r = await fetch('/api/clienti?limit=5000&owner=' + ownerFilter);
-    // Sesiune expirată/invalidă → NU lăsa pagina goală; trimite la login.
-    if (r.status === 401) { window.location.href = '/login'; return; }
-    const j = await r.json();
-    if (j.ok) { setClienti(j.clienti); setIsManager(j.isManager); }
-    if (!silent) setLoading(false);
+    try {
+      const r = await fetch('/api/clienti?limit=5000&owner=' + ownerFilter);
+      // Sesiune expirată/invalidă → NU lăsa pagina goală; trimite la login.
+      if (r.status === 401) { window.location.href = '/login'; return; }
+      const j = await r.json().catch(() => ({} as any));
+      if (r.ok && j.ok) { setClienti(j.clienti); setIsManager(j.isManager); }
+      else if (!silent) setMsg('❌ ' + (j.error || `Eroare server (${r.status})`));
+    } catch (e: any) {
+      if (!silent) setMsg('❌ ' + (e?.message || 'Nu s-a putut încărca pâlnia'));
+    } finally {
+      // finally garantează că spinnerul „Se încarcă pâlnia…" nu rămâne agățat la o eroare/HTML neașteptat.
+      if (!silent) setLoading(false);
+    }
   }
   useEffect(() => { load(); }, [ownerFilter]);
 
@@ -192,6 +242,7 @@ export default function PalniePage() {
 
   async function updateInline(id: string, field: string, value: string) {
     const prev = clienti.find(c => c.id === id) as any;
+    const prevVal = prev ? (prev[field] ?? null) : null;
     const newVal = value || null;
     setClienti(p => p.map(c => c.id === id ? { ...c, [field]: newVal } : c));
     const r = await fetch(`/api/clienti/${id}`, {
@@ -201,7 +252,9 @@ export default function PalniePage() {
     if (!r.ok) {
       const j = await r.json().catch(() => ({} as any));
       setMsg('❌ ' + (j.validationErrors?.join(' ') || j.error || 'Nu s-a putut salva'));
-      setClienti(p => p.map(c => c.id === id ? { ...c, [field]: prev ? (prev[field] ?? null) : null } : c));
+      // Rollback DOAR dacă valoarea afișată e încă cea pe care AM setat-o noi. Dacă între timp a apărut o
+      // a doua editare (alt val) pe același câmp, NU o suprascriem cu valoarea veche (anti-pierdere afișaj).
+      setClienti(p => p.map(c => (c.id === id && (c as any)[field] === newVal) ? { ...c, [field]: prevVal } : c));
     }
   }
 
@@ -224,7 +277,7 @@ export default function PalniePage() {
     else {
       const j = await r.json().catch(() => ({} as any));
       setMsg('❌ ' + (j.validationErrors?.join(' ') || j.error || 'Nu s-a putut salva'));
-      setClienti(p => p.map(c => c.id === id ? { ...c, stadiu: prev ? (prev.stadiu ?? null) : null } : c));
+      setClienti(p => p.map(c => (c.id === id && (c as any).stadiu === stadiu) ? { ...c, stadiu: prev ? (prev.stadiu ?? null) : null } : c));
     }
   }
 
@@ -294,228 +347,235 @@ export default function PalniePage() {
   );
   const resetFilters = () => setFilters(DEFAULT_FILTERS);
 
+  // Chips active (rezumat în filterbar) — fiecare cu un „clear" propriu.
+  const activeChips: Array<{ k: string; label: string; dot?: string | null; clear: () => void }> = [
+    filters.stage ? { k: 'stage', label: STAGE_MAP[filters.stage]?.label || filters.stage, dot: 'var(--st-' + filters.stage + ')', clear: () => setF('stage', '') } : null,
+    filters.stadiu ? { k: 'stadiu', label: filters.stadiu, clear: () => setF('stadiu', '') } : null,
+    filters.nevoia ? { k: 'nevoia', label: filters.nevoia, clear: () => setF('nevoia', '') } : null,
+    filters.steluta !== '' ? { k: 'steluta', label: 'Prio: ' + (STELUTA_OPTIONS[Number(filters.steluta)] || filters.steluta), clear: () => setF('steluta', '') } : null,
+    filters.audio !== 'all' ? { k: 'audio', label: filters.audio === 'yes' ? 'Cu audio' : 'Fără audio', clear: () => setF('audio', 'all') } : null,
+    (filters.mpMin !== '' || filters.mpMax !== '') ? { k: 'mp', label: `mp ${filters.mpMin || '0'}–${filters.mpMax || '∞'}`, clear: () => setFilters(p => ({ ...p, mpMin: '', mpMax: '' })) } : null,
+    (filters.dateFrom || filters.dateTo) ? { k: 'date', label: `Dată ${filters.dateFrom || '…'}→${filters.dateTo || '…'}`, clear: () => setFilters(p => ({ ...p, dateFrom: '', dateTo: '' })) } : null,
+  ].filter(Boolean) as Array<{ k: string; label: string; dot?: string | null; clear: () => void }>;
+
   const pillClass = (s: string | null) => {
     const m: Record<string, string> = { Anulat: 'pill-anulat', Contractat: 'pill-contractat', Amanat: 'pill-amanat', Finalizat: 'pill-finalizat' };
     return m[s ?? ''] || 'pill-lucru';
   };
   const stop = (e: React.MouseEvent) => e.stopPropagation();
 
-  return (
-    <Layout>
-      {/* Toolbar STICKY (rămâne vizibil la scroll); comutatorul de vizualizare e fixat lângă titlu → nu mai dispare */}
-      <div className="static md:sticky md:top-0 z-20 bg-[var(--bg)] -mx-4 px-4 md:-mx-6 md:px-6 pt-1.5 pb-2 mb-3 border-b border-[var(--border)] rise">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-3 min-w-0">
-            <h1 className="text-[19px] whitespace-nowrap flex items-baseline gap-2">{t('Pâlnie clienți')}<span className="text-[12px] font-normal text-[var(--fg-faint)] tabular" title="afișați / total">{filtered.length}/{clienti.length}</span></h1>
-            {/* COMUTATOR VIZUALIZARE — lângă titlu, flex-shrink-0, mereu vizibil */}
-            <div className="inline-flex rounded-[var(--r-sm)] border border-[var(--border-strong)] overflow-hidden text-[12px] font-semibold flex-shrink-0 shadow-sm">
-              <button onClick={() => switchView('cards')} title="Carduri aerisite"
-                className={'px-3 py-1.5 ' + (view === 'cards' ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-2)]')}>{t('Carduri')}</button>
-              <button onClick={() => switchView('tabel')} title="Tabel dens, ca în spreadsheet"
-                className={'px-3 py-1.5 border-l border-[var(--border-strong)] ' + (view === 'tabel' ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-2)]')}>{t('Tabel')}</button>
-              <button onClick={() => switchView('kanban')} title="Pipeline Kanban (drag & drop)"
-                className={'px-3 py-1.5 border-l border-[var(--border-strong)] ' + (view === 'kanban' ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'bg-[var(--surface)] text-[var(--text-secondary)] hover:bg-[var(--surface-2)]')}>{t('Kanban')}</button>
-            </div>
-          </div>
-          <div className="flex gap-2 items-center flex-wrap justify-end">
-            <SyncBadge last={lastSync} syncing={!!sync} auto={autoSync} />
-            <input className="field w-44" placeholder={t('Caută client, oraș, #id…')} value={filter} onChange={e => setFilter(e.target.value)} />
-            {/* (Agent + Sortare au fost mutate în panoul Filtre → rând de sus minimal, mai mult loc clienți) */}
-            {/* FILTRE — buton compact colapsabil cu badge nr. filtre active */}
-            <button onClick={() => setFiltersOpen(o => !o)}
-              className={'btn ' + (activeFilterCount > 0 ? 'btn-primary' : 'btn-secondary')}
-              aria-expanded={filtersOpen} title="Filtre ample (etapă, nevoie, suprafață, dată…)">
-              ⌕ {t('Filtre')}
-              {activeFilterCount > 0 && <span className="ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[var(--on-accent)] text-[var(--accent)] text-[10px] font-bold leading-none">{activeFilterCount}</span>}
-              <span className="ml-1 text-[10px]">{filtersOpen ? '▲' : '▼'}</span>
-            </button>
-            {/* Sync NU mai e în rândul de sus (ocupa spațiu). Auto-sync rulează în fundal;
-                sincronizarea manuală e în panoul „Filtre" (jos). */}
-          </div>
-        </div>
+  // Topbar (switcher + search) — pasat Layout-ului prin prop `topbar`, ca în design.
+  const topbar = (
+    <>
+      <div className="topbar__switch">
+        <Segmented value={view} size="sm"
+          onChange={(v) => switchView(v as 'cards' | 'tabel' | 'kanban')}
+          options={[
+            { value: 'cards', label: t('Carduri'), icon: 'cards' },
+            { value: 'tabel', label: t('Tabel'), icon: 'table' },
+            { value: 'kanban', label: t('Kanban'), icon: 'kanban' },
+          ]} />
+      </div>
+      <div className="topbar__sp" />
+      <SyncBadge last={lastSync} syncing={!!sync} auto={autoSync} />
+      <div className="topbar__search">
+        <Icon name="search" size={15} />
+        <input placeholder={t('Caută client, oraș, #id…')} value={filter} onChange={e => setFilter(e.target.value)} />
+      </div>
+    </>
+  );
 
-        {/* PANOU FILTRE — colapsabil, compact; aplicat pe `filtered` → afectează cards/tabel/kanban */}
-        {filtersOpen && (
-          <div className="mt-2.5 p-3 rounded-[var(--r-sm)] border border-[var(--border-strong)] bg-[var(--surface)] shadow-sm rise">
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-x-3 gap-y-2.5">
-              {/* Sortare (mutată aici din rândul de sus) */}
-              <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--text-secondary)]">
-                {t('Sortare')}
-                <select className="field !text-[12px] !py-1.5" value={sortKey} onChange={e => setSortKey(e.target.value as SortKey)}>
-                  {SORT_OPTIONS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
-                </select>
-              </label>
-              {/* Agent (echipă) — doar manager (mutat aici din rândul de sus) */}
-              {isManager && (
-                <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--text-secondary)]">
-                  {t('Agent (echipă)')}
-                  <select className="field !text-[12px] !py-1.5" value={ownerFilter} onChange={e => setOwnerFilter(e.target.value)}>
-                    <option value="all">{t('👥 Echipa mea')}</option>
-                    {agentList.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                  </select>
-                </label>
-              )}
-              {/* Etapă (deriveStage) */}
-              <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--text-secondary)]">
-                {t('Etapă')}
-                <select className="field !text-[12px] !py-1.5" value={filters.stage} onChange={e => setF('stage', e.target.value)}>
-                  <option value="">{t('Toate etapele')}</option>
-                  {STAGE_OPTIONS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-                </select>
-              </label>
-              {/* Stadiu */}
-              <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--text-secondary)]">
-                {t('Stadiu')}
-                <select className="field !text-[12px] !py-1.5" value={filters.stadiu} onChange={e => setF('stadiu', e.target.value)}>
-                  <option value="">{t('Toate stadiile')}</option>
-                  {STADII.filter(s => s).map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </label>
-              {/* Nevoia */}
-              <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--text-secondary)]">
-                {t('Nevoia')}
-                <select className="field !text-[12px] !py-1.5" value={filters.nevoia} onChange={e => setF('nevoia', e.target.value)}>
-                  <option value="">{t('Orice nevoie')}</option>
-                  {NEVOI.filter(n => n).map(n => <option key={n} value={n}>{n}</option>)}
-                </select>
-              </label>
-              {/* Steluță (prioritate culoare) */}
-              <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--text-secondary)]">
-                {t('Prioritate (steluță)')}
-                <select className="field !text-[12px] !py-1.5" value={filters.steluta} onChange={e => setF('steluta', e.target.value)}>
-                  <option value="">{t('Orice prioritate')}</option>
-                  {STELUTA_OPTIONS.map((s, i) => <option key={i} value={String(i)}>{s}</option>)}
-                </select>
-              </label>
-              {/* Audio */}
-              <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--text-secondary)]">
-                {t('Audio')}
-                <select className="field !text-[12px] !py-1.5" value={filters.audio} onChange={e => setF('audio', e.target.value as FilterState['audio'])}>
-                  <option value="all">{t('Toate')}</option>
-                  <option value="yes">{t('Cu audio')}</option>
-                  <option value="no">{t('Fără audio')}</option>
-                </select>
-              </label>
-              {/* Suprafață min/max */}
-              <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--text-secondary)]">
-                {t('Suprafață (mp)')}
-                <div className="flex items-center gap-1">
-                  <input type="number" min={0} inputMode="numeric" placeholder={t('min')} className="field !text-[12px] !py-1.5 w-full"
-                    value={filters.mpMin} onChange={e => setF('mpMin', e.target.value)} />
-                  <span className="text-[var(--fg-faint)]">–</span>
-                  <input type="number" min={0} inputMode="numeric" placeholder={t('max')} className="field !text-[12px] !py-1.5 w-full"
-                    value={filters.mpMax} onChange={e => setF('mpMax', e.target.value)} />
-                </div>
-              </label>
-              {/* Dată intrare de la / până la */}
-              <label className="flex flex-col gap-1 text-[11px] font-semibold text-[var(--text-secondary)] sm:col-span-2 xl:col-span-2">
-                {t('Dată intrare')}
-                <div className="flex items-center gap-1">
-                  <input type="date" className="field !text-[12px] !py-1.5 w-full" title={t('de la')}
-                    value={filters.dateFrom} onChange={e => setF('dateFrom', e.target.value)} />
-                  <span className="text-[var(--fg-faint)]">–</span>
-                  <input type="date" className="field !text-[12px] !py-1.5 w-full" title={t('până la')}
-                    value={filters.dateTo} onChange={e => setF('dateTo', e.target.value)} />
-                </div>
-              </label>
-            </div>
-            {/* SINCRONIZARE CRM — mutată aici din rândul de sus (auto-sync rulează oricum în fundal) */}
-            <div className="mt-3 pt-2.5 border-t border-[var(--border)] flex items-center gap-2 flex-wrap">
-              <span className="text-[11px] font-semibold text-[var(--text-secondary)]">{t('Sincronizare CRM')}:</span>
-              <button onClick={() => runSync('/api/crm/sync-clienti', 'Sync clienți')} disabled={!!sync} className="btn btn-secondary !py-1 !text-[12px]" title="Importă clienți noi din CRM">{sync ? '⏳' : '↻'} {t('Clienți')}</button>
-              <button onClick={() => runSync('/api/crm/sync-detalii', 'Sync detalii')} disabled={!!sync} className="btn btn-secondary !py-1 !text-[12px]" title="Reîmprospătează detalii (steluțe, audio, suprafață, observații→strategie)">↻ {t('Detalii')}</button>
-              <button onClick={() => runSync('/api/crm/sync-remindere', 'Sync remindere')} disabled={!!sync} className="btn btn-secondary !py-1 !text-[12px]" title="Reîmprospătează ultimul reminder">↻ {t('Remindere')}</button>
-              <span className="text-[10px] text-[var(--fg-faint)]">{t('(auto la 90s/10min în fundal)')}</span>
-            </div>
-            <div className="flex items-center justify-between mt-2.5 pt-2.5 border-t border-[var(--border)]">
-              <span className="text-[11px] text-[var(--fg-faint)]">
-                {activeFilterCount > 0 ? `${activeFilterCount} ${t('filtre active')}` : t('Niciun filtru activ')}
-              </span>
-              <div className="flex gap-2">
-                <button onClick={resetFilters} disabled={activeFilterCount === 0} className="btn btn-secondary !py-1 !text-[12px]">↺ {t('Resetează filtrele')}</button>
-                <button onClick={() => setFiltersOpen(false)} className="btn btn-secondary !py-1 !text-[12px]">{t('Închide')}</button>
-              </div>
-            </div>
-          </div>
-        )}
+  return (
+    <Layout topbar={topbar} contentMod={view === 'kanban' ? 'content--kanban' : undefined}>
+      {/* FILTERBAR — buton Filtre + chips active + contor (re-stilizat ca în design) */}
+      <div className="filterbar">
+        <button className={'btn btn-secondary btn-sm filter-toggle' + (filtersOpen ? ' is-on' : '')}
+          onClick={() => setFiltersOpen(o => !o)} aria-expanded={filtersOpen}
+          title="Filtre ample (etapă, nevoie, suprafață, dată…)">
+          <Icon name="filter" size={14} />{t('Filtre')}
+          {activeFilterCount > 0 && <span className="filter-badge">{activeFilterCount}</span>}
+        </button>
+        <div className="chips-row">
+          {activeChips.map(c => <Chip key={c.k} dot={c.dot} onRemove={c.clear}>{c.label}</Chip>)}
+          {activeFilterCount > 0 && <button className="btn btn-ghost btn-sm" onClick={resetFilters}>{t('Curăță')}</button>}
+        </div>
+        <span className="filterbar__count muted tabular">{filtered.length} {t('din')} {clienti.length}</span>
       </div>
 
-      {msg && <div className={'toast mb-4 whitespace-pre-wrap ' + (msg.startsWith('✅') ? 'toast-ok' : msg.startsWith('❌') ? 'toast-err' : 'toast-info')}>{msg}</div>}
+      {/* PANOU FILTRE — colapsabil; chips (.fgroup) + inputuri numerice/dată + sincronizare */}
+      {filtersOpen && (
+        <div className="filter-panel">
+          <FilterGroup label={t('Sortare')} value={sortKey}
+            onChange={(k) => setSortKey(k as SortKey)}
+            options={SORT_OPTIONS.map(o => [o.key, o.label])} />
+          <FilterGroup label={t('Etapă')} value={filters.stage || 'toate'}
+            onChange={(k) => setF('stage', k === 'toate' ? '' : k)}
+            options={[['toate', t('Toate')], ...STAGE_OPTIONS.map(s => [s.key, s.label] as [string, string])]}
+            dotFn={(k) => k !== 'toate' ? 'var(--st-' + k + ')' : null} />
+          <FilterGroup label={t('Prioritate')} value={filters.steluta === '' ? 'toate' : filters.steluta}
+            onChange={(k) => setF('steluta', k === 'toate' ? '' : k)}
+            options={[['toate', t('Toate')], ...STELUTA_OPTIONS.map((s, i) => [String(i), s] as [string, string])]}
+            dotFn={(k) => {
+              if (k === 'toate') return null;
+              const p = PRIORITY_MAP[stelutaToPrio(Number(k))];
+              return p ? p.color : null;
+            }} />
+          <FilterGroup label={t('Stadiu')} value={filters.stadiu || 'toate'}
+            onChange={(k) => setF('stadiu', k === 'toate' ? '' : k)}
+            options={[['toate', t('Toate')], ...STADII.filter(s => s).map(s => [s, s] as [string, string])]} />
+          <FilterGroup label={t('Nevoia')} value={filters.nevoia || 'toate'}
+            onChange={(k) => setF('nevoia', k === 'toate' ? '' : k)}
+            options={[['toate', t('Orice nevoie')], ...NEVOI.filter(n => n).map(n => [n, n] as [string, string])]} />
+          <FilterGroup label={t('Audio')} value={filters.audio}
+            onChange={(k) => setF('audio', k as FilterState['audio'])}
+            options={[['all', t('Toate')], ['yes', t('Cu audio')], ['no', t('Fără audio')]]} />
+          {isManager && (
+            <FilterGroup label={t('Agent (echipă)')} value={ownerFilter}
+              onChange={setOwnerFilter}
+              options={[['all', t('👥 Echipa mea')], ...agentList.map(a => [a.id, a.name] as [string, string])]} />
+          )}
+          {/* Suprafață min/max */}
+          <div className="fgroup">
+            <span className="label">{t('Suprafață (mp)')}</span>
+            <div className="flex items-center gap-1">
+              <input type="number" min={0} inputMode="numeric" placeholder={t('min')} className="field w-full"
+                value={filters.mpMin} onChange={e => setF('mpMin', e.target.value)} />
+              <span className="muted">–</span>
+              <input type="number" min={0} inputMode="numeric" placeholder={t('max')} className="field w-full"
+                value={filters.mpMax} onChange={e => setF('mpMax', e.target.value)} />
+            </div>
+          </div>
+          {/* Dată intrare de la / până la */}
+          <div className="fgroup">
+            <span className="label">{t('Dată intrare')}</span>
+            <div className="flex items-center gap-1">
+              <input type="date" className="field w-full" title={t('de la')}
+                value={filters.dateFrom} onChange={e => setF('dateFrom', e.target.value)} />
+              <span className="muted">–</span>
+              <input type="date" className="field w-full" title={t('până la')}
+                value={filters.dateTo} onChange={e => setF('dateTo', e.target.value)} />
+            </div>
+          </div>
+          {/* SINCRONIZARE CRM (auto-sync rulează oricum în fundal) */}
+          <div className="fgroup" style={{ gridColumn: '1 / -1' }}>
+            <span className="label">{t('Sincronizare CRM')}</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button onClick={() => runSync('/api/crm/sync-clienti', 'Sync clienți')} disabled={!!sync} className="btn btn-secondary btn-sm" title="Importă clienți noi din CRM"><Icon name="refresh" size={13} />{t('Clienți')}</button>
+              <button onClick={() => runSync('/api/crm/sync-detalii', 'Sync detalii')} disabled={!!sync} className="btn btn-secondary btn-sm" title="Reîmprospătează detalii (steluțe, audio, suprafață, observații→strategie)"><Icon name="refresh" size={13} />{t('Detalii')}</button>
+              <button onClick={() => runSync('/api/crm/sync-remindere', 'Sync remindere')} disabled={!!sync} className="btn btn-secondary btn-sm" title="Reîmprospătează ultimul reminder"><Icon name="refresh" size={13} />{t('Remindere')}</button>
+              <span className="muted" style={{ fontSize: '.6875rem' }}>{t('(auto la 90s/10min în fundal)')}</span>
+              <span className="topbar__sp" />
+              <button onClick={resetFilters} disabled={activeFilterCount === 0} className="btn btn-secondary btn-sm"><Icon name="reset" size={13} />{t('Resetează filtrele')}</button>
+              <button onClick={() => setFiltersOpen(false)} className="btn btn-ghost btn-sm">{t('Închide')}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {msg && <div className={'toast mb-4 whitespace-pre-wrap ' + (msg.startsWith('✅') ? 'toast--success' : msg.startsWith('❌') ? 'toast--error' : 'toast--info')}>{msg}</div>}
 
       {loading ? (
-        <div className="card p-10 text-center text-[var(--fg-soft)]">Se încarcă pâlnia…</div>
+        <div className="empty-state">Se încarcă pâlnia…</div>
       ) : filtered.length === 0 ? (
-        <div className="card p-12 text-center text-[var(--fg-soft)]">
+        <div className="empty-state">
           {clienti.length === 0 ? 'Niciun client încă. Apasă „Sync clienți" pentru import din CRM.' : 'Niciun rezultat pentru filtrul curent.'}
         </div>
       ) : view === 'tabel' ? (
-        <div className="card overflow-x-auto scroll-area rise">
+        <div className="table-wrap card rise">
           {(() => {
             const cnt = (f: (c: Client) => any) => filtered.filter(c => { const v = f(c); return v != null && String(v).trim() !== ''; }).length;
             const tot = { supr: cnt(c => c.suprafata), intrare: cnt(c => c.dataIntrare), t1: cnt(c => c.t1), nevoia: cnt(c => c.nevoia), schita: cnt(c => c.schitaStatus), preof: cnt(c => c.preOfertat), ofertat: cnt(c => c.ofertat), status: cnt(c => c.stadiu) };
-            const GREEN = { background: 'var(--pine-soft)' } as React.CSSProperties;
             // dd.mm.yyyy <-> yyyy-mm-dd pentru <input type="date"> (calendar nativ, editabil, orice dată)
             const toISO = (v: string | null) => { const m = (v || '').match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/); return m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : ''; };
             const fromISO = (iso: string) => { const p = iso.split('-'); return p.length === 3 ? `${p[2]}.${p[1]}.${p[0]}` : ''; };
             const dcell = (c: Client, k: string, v: string | null) => (
-              <td onClick={stop} className="text-center !py-1 !px-1.5">
-                <input type="date" value={toISO(v)} title="Alege data (calendar) — click pe celulă"
-                  onChange={e => updateInline(c.id, k, e.target.value ? fromISO(e.target.value) : '')}
-                  className="bg-transparent border border-transparent hover:border-[var(--border-strong)] focus:border-[var(--accent)] rounded-[var(--r-sm)] text-[12px] font-mono text-[var(--pine)] px-1.5 py-1 cursor-pointer outline-none w-[124px]" />
+              <td onClick={stop} className="text-center">
+                <input type="date" value={toISO(v)} title="Alege data (calendar) — click pe celulă" className="date-input"
+                  onChange={e => updateInline(c.id, k, e.target.value ? fromISO(e.target.value) : '')} />
               </td>);
             return (
-            <table className="tbl tbl-grid min-w-[1180px] [&_thead_th]:!text-[var(--text-secondary)] [&_thead_th]:!border-b-[var(--border-strong)] [&_thead_th]:!tracking-[.05em]">
-              <thead><tr>
-                <th>Client</th><th className="num">Suprafață</th><th className="text-center">Data Intrare</th><th className="text-center">T1</th>
-                <th style={GREEN}>Nevoia</th><th className="text-center">Schiță</th><th className="text-center">Pre-Ofertat</th><th className="text-center">Ofertat</th><th>Status</th><th>◷ Reminder</th><th>Observații Manager</th>
-              </tr></thead>
-              <tbody>
-                <tr style={{ background: 'var(--surface-2)' }} className="font-semibold">
-                  <td className="strong italic text-[var(--fg-soft)]">Total / etapă</td>
-                  <td className="num">{tot.supr}</td><td className="num">{tot.intrare}</td><td className="num">{tot.t1}</td>
-                  <td className="num" style={GREEN}>{tot.nevoia}</td><td className="num">{tot.schita}</td><td className="num">{tot.preof}</td><td className="num">{tot.ofertat}</td><td className="num">{tot.status}</td><td></td><td></td>
-                </tr>
-                {filtered.map(c => (
-                  <tr key={c.id} onClick={() => router.push('/strategie/' + c.id)} className="cursor-pointer">
-                    <td className="strong">
-                      <div className="flex items-center gap-1.5">
-                        <span onClick={stop}><PriorityStars value={c.stelutaCat} size={13} onSet={cat => setSteluta(c.id, c.idLucrare, cat)} /></span>
-                        {!c.hasAudio && <span className="text-[var(--warn)] flex-shrink-0" title="Fără audio">⚠</span>}
-                        <a href={`https://gestcom.ro/amass/index.php?m=lucrari&a=view&id_lucrare=${c.idLucrare}`} target="_blank" rel="noopener" onClick={stop} className="crm-link">{c.nume || '(nume)'}</a>
-                      </div>
-                      <div className="text-[11px] text-[var(--fg-faint)] font-mono mt-0.5">#{c.idLucrare} · ({c.categorie}{c.isDT ? 'DT' : ''}){c.localitate ? ' · ' + c.localitate : ''}{isManager && ownerFilter === 'all' && c.owner ? ' · ' + (c.owner.name || c.owner.email) : ''}</div>
-                    </td>
-                    <td className="num">{c.suprafata != null ? c.suprafata + ' mp' : ''}</td>
-                    <td className="text-[12px] font-mono text-center whitespace-nowrap">{c.dataIntrare ? new Date(c.dataIntrare).toLocaleDateString('ro-RO') : ''}</td>
-                    <td className="text-[12px] font-mono text-center whitespace-nowrap">{c.t1 || ''}</td>
-                    <td onClick={stop} className="!p-0" style={GREEN}>
-                      <select className="field !border-0 !py-1.5 !px-2 !text-[12px] w-[136px] font-semibold rounded-[var(--r-sm)]"
-                        style={c.nevoia ? nevoiaChip(c.nevoia) : { background: 'transparent' }}
-                        value={c.nevoia ?? ''} onChange={e => updateInline(c.id, 'nevoia', e.target.value)}>
-                        {NEVOI.map(n => <option key={n} value={n}>{n || '—'}</option>)}
-                      </select>
-                    </td>
-                    {dcell(c, 'schitaStatus', c.schitaStatus)}
-                    {dcell(c, 'preOfertat', c.preOfertat)}
-                    {dcell(c, 'ofertat', c.ofertat)}
-                    <td onClick={stop} className="!p-0">
-                      <select className={'pill border-0 cursor-pointer ' + pillClass(c.stadiu)} value={c.stadiu ?? ''} onChange={e => setStadiu(c.id, e.target.value)}>
-                        {STADII.map(s => <option key={s} value={s}>{s || 'în lucru'}</option>)}
-                      </select>
-                    </td>
-                    <td className="text-[11px] text-[var(--fg-soft)] max-w-[260px] whitespace-pre-wrap leading-snug" title={c.reminderText || ''}>{(c.reminderText || '').slice(0, 160)}</td>
-                    <td onClick={stop} className="!p-1 align-top">
-                      <textarea
-                        defaultValue={c.notaManager ?? ''}
-                        placeholder="Notă manager…"
-                        title="Notă privată a managerului (separată de observații CRM)"
-                        onBlur={e => { if ((e.target.value || '') !== (c.notaManager ?? '')) updateInline(c.id, 'notaManager', e.target.value); }}
-                        className="bg-transparent border border-transparent hover:border-[var(--border-strong)] focus:border-[var(--accent)] rounded-[var(--r-sm)] text-[11px] text-[var(--fg-soft)] leading-snug px-1.5 py-1 outline-none w-[220px] resize-y min-h-[28px]" />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+              <div className="tbl-scroll scroll-thin">
+                <table className="tbl tbl--fisa">
+                  <thead>
+                    <tr>
+                      <th className="tbl__sticky tbl__name">Client</th>
+                      <th className="num">Suprafață</th>
+                      <th>Data Intrare</th>
+                      <th>T1</th>
+                      <th className="col-nevoie">Nevoia</th>
+                      <th>Schiță</th>
+                      <th>Pre-Ofertat</th>
+                      <th>Ofertat</th>
+                      <th>Status</th>
+                      <th>Reminder</th>
+                      <th>Observații Manager</th>
+                    </tr>
+                    <tr className="tbl__total">
+                      <td className="tbl__sticky">Total / etapă</td>
+                      <td className="num mono">{tot.supr}</td>
+                      <td className="num mono">{tot.intrare}</td>
+                      <td className="num mono">{tot.t1}</td>
+                      <td className="num mono col-nevoie">{tot.nevoia}</td>
+                      <td className="num mono">{tot.schita}</td>
+                      <td className="num mono">{tot.preof}</td>
+                      <td className="num mono">{tot.ofertat}</td>
+                      <td className="num mono">{tot.status}</td>
+                      <td></td><td></td>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map(c => (
+                      <tr key={c.id} onClick={() => router.push('/strategie/' + c.id)} className="cursor-pointer">
+                        <td className="tbl__sticky tbl__name">
+                          <div className="cnm">
+                            <span onClick={stop}>
+                              <PriorityStar value={stelutaToPrio(c.stelutaCat)} size={15}
+                                onClick={() => setSteluta(c.id, c.idLucrare, prioToSteluta(stelutaToPrio((c.stelutaCat + 1) % 5)))} />
+                            </span>
+                            {!c.hasAudio && <Icon name="alert" size={13} style={{ color: 'var(--warning)', flex: '0 0 13px' }} />}
+                            <a href={`https://gestcom.ro/amass/index.php?m=lucrari&a=view&id_lucrare=${c.idLucrare}`} target="_blank" rel="noopener" onClick={stop} className="cnm__name">{c.nume || '(nume)'}</a>
+                          </div>
+                          <div className="cnm__sub mono">#{c.idLucrare} · ({c.categorie}{c.isDT ? 'DT' : ''}){c.localitate ? ' · ' + c.localitate : ''}{isManager && ownerFilter === 'all' && c.owner ? ' · ' + (c.owner.name || c.owner.email) : ''}</div>
+                        </td>
+                        <td className="num mono">{c.suprafata != null ? c.suprafata + ' mp' : ''}</td>
+                        <td className="mono cell-date">{c.dataIntrare ? new Date(c.dataIntrare).toLocaleDateString('ro-RO') : '—'}</td>
+                        <td>
+                          <div className="t1cell">
+                            <span className="mono" style={{ fontSize: '.75rem' }}>{c.t1 || '—'}</span>
+                            {c.t1 && <span className="t1cell__badge t1cell__badge--auto" title="Termen 1 (din CRM)">T1</span>}
+                          </div>
+                        </td>
+                        <td onClick={stop} className="col-nevoie">
+                          <select className="cell-select" style={c.nevoia ? { ...nevoiaChip(c.nevoia), fontWeight: 600 } : undefined}
+                            value={c.nevoia ?? ''} onChange={e => updateInline(c.id, 'nevoia', e.target.value)}>
+                            {NEVOI.map(n => <option key={n} value={n}>{n || '—'}</option>)}
+                          </select>
+                        </td>
+                        {dcell(c, 'schitaStatus', c.schitaStatus)}
+                        {dcell(c, 'preOfertat', c.preOfertat)}
+                        {dcell(c, 'ofertat', c.ofertat)}
+                        <td onClick={stop}>
+                          <select className={'cell-select status-sel ' + pillClass(c.stadiu)} value={c.stadiu ?? ''} onChange={e => setStadiu(c.id, e.target.value)}>
+                            {STADII.map(s => <option key={s} value={s}>{s || 'în lucru'}</option>)}
+                          </select>
+                        </td>
+                        <td className="cell-rem">
+                          {c.reminderText
+                            ? <span className="rem-cell" title={c.reminderText}><Icon name="clock" size={11} />{c.reminderText.slice(0, 120)}</span>
+                            : <span className="muted">— fără</span>}
+                        </td>
+                        <td onClick={stop} className="cell-obs">
+                          <textarea className="cell-obs__ta" rows={2}
+                            defaultValue={c.notaManager ?? ''}
+                            placeholder="Notă manager…"
+                            title="Notă privată a managerului (separată de observații CRM)"
+                            onBlur={e => { if ((e.target.value || '') !== (c.notaManager ?? '')) updateInline(c.id, 'notaManager', e.target.value); }} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             );
           })()}
         </div>
@@ -523,90 +583,69 @@ export default function PalniePage() {
         <KanbanBoard clienti={filtered} isManager={isManager} ownerFilter={ownerFilter}
           onPatch={patchLocal} setMsg={setMsg} reload={() => load()} />
       ) : (
-        <div className="flex flex-col gap-2.5">
-          {filtered.map((c, i) => {
+        <div className="funnel-list rise">
+          {filtered.map(c => {
+            const stage = deriveStage(c);
+            const days = daysSince(c.dataIntrare);
+            const prio = PRIORITY_MAP[stelutaToPrio(c.stelutaCat)];
             const stages = [
               { k: 'schitaStatus', l: 'Schiță', v: c.schitaStatus },
               { k: 'preOfertat', l: 'Pre-of.', v: c.preOfertat },
               { k: 'ofertat', l: 'Ofertat', v: c.ofertat }
             ];
-            const stagesDone = stages.filter(s => s.v && s.v.trim()).length;
-            const cold = stagesDone === 0 && !c.stadiu;
             return (
-              <div key={c.id}
-                   className={'client-card rise ' + (i < 4 ? 'rise-' + (i + 1) + ' ' : '') + (cold ? 'cold' : '')}
-                   onClick={() => router.push('/strategie/' + c.id)}
-                   title="Click oriunde → fișa de strategie">
-                <div className="flex items-center gap-4 flex-wrap md:flex-nowrap">
-                  {/* Identitate client */}
-                  <div className="min-w-[200px] flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {!c.hasAudio && <span className="text-[var(--warn)]" title="Fără audio">⚠</span>}
-                      <a href={`https://gestcom.ro/amass/index.php?m=lucrari&a=view&id_lucrare=${c.idLucrare}`}
-                         target="_blank" rel="noopener" onClick={stop}
-                         className="crm-link font-display font-semibold text-[16px] text-[var(--fg)] transition-colors">
-                        {c.nume || '(nume lipsă)'}
-                      </a>
-                      {c.localitate && <span className="text-[var(--fg-soft)] text-[13px]">· {c.localitate}</span>}
-                      {isManager && ownerFilter === 'all' && c.owner && (
-                        <span className="pill pill-lucru !py-0 !px-1.5 !text-[9px]">{c.owner.name || c.owner.email}</span>
-                      )}
-                    </div>
-                    <div className="text-[11px] text-[var(--fg-faint)] font-mono mt-0.5">
-                      ({c.categorie}{c.isDT ? 'DT' : ''}) #{c.idLucrare}
-                      {c.suprafata != null && <span className="text-[var(--fg-soft)]"> · {c.suprafata} mp</span>}
-                      {c.dataIntrare && <span> · {new Date(c.dataIntrare).toLocaleDateString('ro-RO')}</span>}
-                      {c.t1 && <span> · T1 {c.t1}</span>}
-                    </div>
+              <article key={c.id} className="fr" style={{ '--rot': prio.color } as React.CSSProperties}
+                onClick={() => router.push('/strategie/' + c.id)}
+                title="Click oriunde → fișa de strategie">
+                <span className="fr__band" />
+                <div className="fr__id">
+                  <div className="fr__head">
+                    {!c.hasAudio && <Icon name="alert" size={14} style={{ color: 'var(--warning)' }} />}
+                    <a href={`https://gestcom.ro/amass/index.php?m=lucrari&a=view&id_lucrare=${c.idLucrare}`}
+                      target="_blank" rel="noopener" onClick={stop} className="fr__name crm-link">
+                      {c.nume || '(nume lipsă)'}
+                    </a>
+                    {c.localitate && <span className="fr__city">· {c.localitate}</span>}
+                    <StagePill stage={stage} size="sm" />
+                    {isManager && ownerFilter === 'all' && c.owner && (
+                      <span className="pill pill-lucru" style={{ padding: '0 6px', fontSize: '9px' }}>{c.owner.name || c.owner.email}</span>
+                    )}
                   </div>
-
-                  {/* Progres pâlnie (3 etape ca puncte) */}
-                  <div className="flex items-center gap-2.5" onClick={stop}>
-                    {stages.map(s => {
-                      const on = !!(s.v && s.v.trim());
-                      return (
-                        <button key={s.k} type="button" className="stage-toggle inline-flex items-center gap-1"
-                                title={on ? `${s.l}: ${s.v} — click pentru anulare` : `Marchează „${s.l}" (data azi)`}
-                                onClick={() => updateInline(c.id, s.k, on ? '' : todayRO())}>
-                          <span className={'stage-dot ' + (on ? 'on' : 'off')} />
-                          <span className={'text-[11px] ' + (on ? 'text-[var(--pine)] font-semibold' : 'text-[var(--fg-faint)]')}>{s.l}</span>
-                        </button>
-                      );
-                    })}
+                  <div className="fr__sub mono">
+                    ({c.categorie}{c.isDT ? 'DT' : ''}) #{c.idLucrare}
+                    {c.suprafata != null && <> · {c.suprafata} mp</>}
+                    {c.dataIntrare && <> · {new Date(c.dataIntrare).toLocaleDateString('ro-RO')}</>}
+                    {c.t1 && <> · T1 {c.t1}</>}
                   </div>
-
-                  {/* Nevoia */}
-                  <div onClick={stop} className="w-[150px]">
-                    <select className={'field !py-1 !px-2 !text-[11.5px] !border-transparent hover:!border-[var(--line-2)] rounded-[var(--r-sm)] ' + (c.nevoia ? 'font-semibold' : '')}
-                            style={c.nevoia ? nevoiaChip(c.nevoia) : { background: 'transparent' }}
-                            value={c.nevoia ?? ''} onChange={e => updateInline(c.id, 'nevoia', e.target.value)}>
-                      {NEVOI.map(n => <option key={n} value={n}>{n || 'Nevoia —'}</option>)}
-                    </select>
-                  </div>
-
-                  {/* Stadiu */}
-                  <div onClick={stop}>
-                    <select className={'pill border-0 cursor-pointer ' + pillClass(c.stadiu)}
-                            value={c.stadiu ?? ''} onChange={e => setStadiu(c.id, e.target.value)}>
-                      {STADII.map(s => <option key={s} value={s}>{s || 'în lucru'}</option>)}
-                    </select>
-                  </div>
-
-                  {/* Prioritate (stea) */}
-                  <div onClick={stop} title="Prioritate — merge live în CRM">
-                    <PriorityStars value={c.stelutaCat} onSet={cat => setSteluta(c.id, c.idLucrare, cat)} />
-                  </div>
-
-                  {/* Intrare în fișă — buton primar */}
-                  <button onClick={e => { stop(e); router.push('/strategie/' + c.id); }} className="btn btn-fisa">VEZI FIȘA →</button>
+                  {c.reminderText
+                    ? <div className="fr__rem"><Icon name="clock" size={12} />Reminder: {c.reminderText}</div>
+                    : <div className="fr__rem fr__rem--none"><Icon name="clock" size={12} />Fără reminder</div>}
                 </div>
 
-                {c.reminderText && (
-                  <div className="mt-2 pt-2 border-t border-[var(--line)] text-[11.5px] text-[var(--fg-soft)] leading-snug line-clamp-2">
-                    <span className="text-[var(--fg-faint)] font-semibold mr-1">⏰ Reminder:</span>{c.reminderText}
+                <div className="fr__ctl" onClick={stop}>
+                  <RotText stage={stage} days={days} />
+                  <div className="fr__steps">
+                    {stages.map(s => {
+                      const on = !!(s.v && s.v.trim());
+                      return <StepToggle key={s.k} label={s.l} done={on}
+                        onClick={() => updateInline(c.id, s.k, on ? '' : todayRO())} />;
+                    })}
                   </div>
-                )}
-              </div>
+                  <select className="cell-select fr__nevoie" style={c.nevoia ? { ...nevoiaChip(c.nevoia), fontWeight: 600 } : undefined}
+                    value={c.nevoia ?? ''} onChange={e => updateInline(c.id, 'nevoia', e.target.value)}>
+                    {NEVOI.map(n => <option key={n} value={n}>{n || 'Nevoia —'}</option>)}
+                  </select>
+                  <select className={'cell-select status-sel ' + pillClass(c.stadiu)}
+                    value={c.stadiu ?? ''} onChange={e => setStadiu(c.id, e.target.value)}>
+                    {STADII.map(s => <option key={s} value={s}>{s || 'în lucru'}</option>)}
+                  </select>
+                  <PriorityStar value={stelutaToPrio(c.stelutaCat)} withLabel size={16}
+                    onClick={() => setSteluta(c.id, c.idLucrare, prioToSteluta(stelutaToPrio((c.stelutaCat + 1) % 5)))} />
+                  <button className="btn btn-pine btn-sm fr__fisa" onClick={e => { stop(e); router.push('/strategie/' + c.id); }}>
+                    VEZI FIȘA<Icon name="arrowR" size={14} />
+                  </button>
+                </div>
+              </article>
             );
           })}
         </div>

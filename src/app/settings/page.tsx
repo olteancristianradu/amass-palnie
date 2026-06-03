@@ -3,22 +3,11 @@ import { useEffect, useState } from 'react';
 import { Layout } from '@/components/Layout';
 import { useT } from '@/lib/i18n';
 
-// Mărimi interfață (zoom pe <html>). 1 = normal. Se ține minte pe dispozitiv (amass-scale).
-// Pași dramatici (cu %) ca efectul să fie EVIDENT, nu subtil.
-const SCALES: Array<{ v: string; label: string }> = [
-  { v: '0.9', label: 'Compact 90%' }, { v: '1', label: 'Normal 100%' }, { v: '1.15', label: 'Mare 115%' },
-  { v: '1.3', label: 'Foarte mare 130%' }, { v: '1.5', label: 'Maxim 150%' }
-];
+// Mărimea textului/interfeței + tema/accentul se reglează acum în „Aspect aplicație" (motorul Aspect,
+// prin --text-scale). Cardul vechi cu zoom a fost scos ca să nu intre în conflict cu motorul.
 
 export default function SettingsPage() {
   const { lang, setLang } = useT();
-  const [scale, setScale] = useState('1');
-  useEffect(() => { try { setScale(localStorage.getItem('amass-scale') || '1'); } catch {} }, []);
-  function applyScale(v: string) {
-    setScale(v);
-    try { localStorage.setItem('amass-scale', v); } catch {}
-    document.documentElement.style.zoom = v;
-  }
   const [crmUser, setCrmUser] = useState('');
   const [crmPass, setCrmPass] = useState('');
   const [hasCreds, setHasCreds] = useState(false);
@@ -116,14 +105,10 @@ export default function SettingsPage() {
             <button onClick={() => setLang('en')} className={'px-3 py-1.5 border-l border-[var(--border-strong)] ' + (lang === 'en' ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'text-[var(--text-secondary)] hover:bg-[var(--surface-2)]')}>English</button>
           </div>
         </div>
-        <div className="card p-4 rise">
+        <a href="/aspect" className="card p-4 rise block no-underline hover:border-[var(--accent)] transition-colors">
           <div className="text-[12px] font-semibold text-[var(--text-secondary)] mb-2">Mărime text / interfață</div>
-          <div className="inline-flex rounded-[var(--r-sm)] border border-[var(--border-strong)] overflow-hidden text-[12px] font-semibold">
-            {SCALES.map(o => (
-              <button key={o.v} onClick={() => applyScale(o.v)} className={'px-3 py-1.5 border-l first:border-l-0 border-[var(--border-strong)] ' + (scale === o.v ? 'bg-[var(--accent)] text-[var(--on-accent)]' : 'text-[var(--text-secondary)] hover:bg-[var(--surface-2)]')}>{o.label}</button>
-            ))}
-          </div>
-        </div>
+          <div className="text-[13px] text-[var(--fg-soft)]">Reglează mărimea textului, tema, accentul și culorile de stadiu în <b>Aspect aplicație</b> ›</div>
+        </a>
       </div>
 
       {/* Import date din pâlnia veche — în contul TĂU (nu „pentru toți"); potrivire pe id_lucrare */}
@@ -149,7 +134,7 @@ export default function SettingsPage() {
           </div>
           <div>
             <label className="kpi-label block mb-1.5">Parolă CRM</label>
-            <input type="password" className="field" value={crmPass} onChange={e => setCrmPass(e.target.value)} placeholder={hasCreds ? '(păstrată — completează doar dacă schimbi)' : ''} required />
+            <input type="password" className="field" value={crmPass} onChange={e => setCrmPass(e.target.value)} placeholder={hasCreds ? '(reintrodu parola pentru a salva)' : ''} required />
           </div>
           <div className="flex gap-2 pt-1">
             <button type="submit" disabled={loading} className="btn btn-primary">{loading ? '…' : 'Salvează criptat'}</button>

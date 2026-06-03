@@ -25,18 +25,26 @@ export async function POST(req: NextRequest) {
   const scope = await requireAdmin();
   if (!scope) return NextResponse.json({ ok: false, error: 'Doar admin' }, { status: 403 });
   const { email, password, name, role } = await req.json();
-  if (!email || !password || password.length < 6) {
-    return NextResponse.json({ ok: false, error: 'Email + parolă (min 6 caractere) necesare' }, { status: 400 });
+  const emailNorm = String(email ?? '').trim().toLowerCase();
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailNorm || !EMAIL_RE.test(emailNorm) || !password || password.length < 6) {
+    return NextResponse.json({ ok: false, error: 'Email valid + parolă (min 6 caractere) necesare' }, { status: 400 });
   }
   const r = ['agent', 'manager', 'admin'].includes(role) ? role : 'agent';
-  const exists = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+  const exists = await prisma.user.findUnique({ where: { email: emailNorm } });
   if (exists) return NextResponse.json({ ok: false, error: 'Email deja folosit' }, { status: 400 });
   const hash = await bcrypt.hash(password, 10);
-  const u = await prisma.user.create({
-    data: { email: email.toLowerCase(), passwordHash: hash, name: name || email, role: r }
-  });
-  await auditLog({ userId: scope.userId, func: 'users/create', action: 'CREATE', entity: 'User', entityId: u.id, fields: 'email=' + u.email + '; role=' + r });
-  return NextResponse.json({ ok: true, id: u.id });
+  try {
+    const u = await prisma.user.create({
+      data: { email: emailNorm, passwordHash: hash, name: name || emailNorm, role: r }
+    });
+    await auditLog({ userId: scope.userId, func: 'users/create', action: 'CREATE', entity: 'User', entityId: u.id, fields: 'email=' + u.email + '; role=' + r });
+    return NextResponse.json({ ok: true, id: u.id });
+  } catch (e: any) {
+    // Cursă: doi admini creează același email simultan → P2002 (unic) → mesaj prietenos, nu 500.
+    if (e?.code === 'P2002') return NextResponse.json({ ok: false, error: 'Email deja folosit' }, { status: 400 });
+    throw e;
+  }
 }
 
 export async function PATCH(req: NextRequest) {
@@ -53,18 +61,39 @@ export async function PATCH(req: NextRequest) {
     if (!tgt) return NextResponse.json({ ok: false, error: 'Utilizator destinație inexistent' }, { status: 404 });
     const src = await prisma.client.findMany({ where: { ownerId: id }, select: { id: true, idLucrare: true } });
     const have = new Set((await prisma.client.findMany({ where: { ownerId: reassignTo }, select: { idLucrare: true } })).map(c => c.idLucrare));
-    let moved = 0, skipped = 0;
+    const toMoveIds: string[] = [];
+    let skipped = 0;
     for (const c of src) {
       if (have.has(c.idLucrare)) { skipped++; continue; }
-      await prisma.client.update({ where: { id: c.id }, data: { ownerId: reassignTo } });
-      moved++;
+      toMoveIds.push(c.id);
+    }
+    const moved = toMoveIds.length;
+    // ATOMIC: tot-sau-nimic într-o tranzacție → niciun eșec parțial care lasă clienții împărțiți între 2 owneri.
+    // updateMany (în loturi de 500 pt limita SQLite la IN(...)) elimină și N+1-ul de update-uri individuale.
+    if (moved > 0) {
+      await prisma.$transaction(async (tx) => {
+        for (let i = 0; i < toMoveIds.length; i += 500) {
+          await tx.client.updateMany({ where: { id: { in: toMoveIds.slice(i, i + 500) } }, data: { ownerId: reassignTo } });
+        }
+      });
     }
     await auditLog({ userId: scope.userId, func: 'users/reassign', action: 'REASSIGN', entity: 'Client', entityId: id, fields: `moved=${moved} skipped=${skipped} to=${reassignTo}` });
     return NextResponse.json({ ok: true, moved, skipped });
   }
 
   const data: any = {};
-  if (role && ['agent', 'manager', 'admin'].includes(role)) data.role = role;
+  if (role && ['agent', 'manager', 'admin'].includes(role)) {
+    // Nu retrograda ULTIMUL admin → altfel toate rutele admin dau 403 și gestionarea conturilor devine
+    // imposibilă din aplicație (recuperare doar direct în DB). Aceeași protecție ca la DELETE.
+    if (role !== 'admin') {
+      const tgt = await prisma.user.findUnique({ where: { id }, select: { role: true } });
+      if (tgt?.role === 'admin') {
+        const admins = await prisma.user.count({ where: { role: 'admin' } });
+        if (admins <= 1) return NextResponse.json({ ok: false, error: 'Nu poți retrograda ultimul admin' }, { status: 400 });
+      }
+    }
+    data.role = role;
+  }
   if (password && password.length >= 6) data.passwordHash = await bcrypt.hash(password, 10);
   // Freeze/unfreeze cont. Nu-ți poți îngheța propriul cont (te-ai bloca afară).
   if (typeof active === 'boolean') {
@@ -100,6 +129,9 @@ export async function PATCH(req: NextRequest) {
     data.position = p || null;
   }
   if (Object.keys(data).length === 0) return NextResponse.json({ ok: false, error: 'Nimic de schimbat' }, { status: 400 });
+  // Verifică existența (ex. doi admini lucrează simultan, unul tocmai a șters contul) → 404 clar, nu 500 generic.
+  const existsU = await prisma.user.findUnique({ where: { id }, select: { id: true } });
+  if (!existsU) return NextResponse.json({ ok: false, error: 'Cont inexistent' }, { status: 404 });
   await prisma.user.update({ where: { id }, data });
   await auditLog({ userId: scope.userId, func: 'users/update', action: 'UPDATE', entity: 'User', entityId: id, fields: Object.keys(data).join(',') });
   return NextResponse.json({ ok: true });

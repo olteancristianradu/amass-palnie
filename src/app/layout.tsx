@@ -1,6 +1,9 @@
 import './globals.css';
+import './amass-pa.css';
+import './amass-pa2.css';
 import type { Metadata } from 'next';
 import { Montserrat, Inter, JetBrains_Mono } from 'next/font/google';
+import Script from 'next/script';
 import { SessionProvider } from '@/components/SessionProvider';
 import { LangProvider } from '@/lib/i18n';
 
@@ -30,19 +33,21 @@ export const viewport = { width: 'device-width', initialScale: 1, maximumScale: 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   // Aplică preferințele de stil ÎNAINTE de paint (fără flash), din localStorage.
   // Noul sistem: doar setăm atribute pe <html>; CSS-ul ([data-accent], [data-radius]...) face restul.
-  const themeScript = `(function(){try{
-    var s=JSON.parse(localStorage.getItem('amass-style')||'{}');var d=document.documentElement;
-    d.setAttribute('data-theme', s.theme==='dark'?'dark':'light');
-    d.setAttribute('data-density', s.density||'comfortable');
-    d.setAttribute('data-accent', s.accent||'amass');
-    d.setAttribute('data-radius', s.radius||'default');
-    var lang=localStorage.getItem('amass-lang'); if(lang==='en'||lang==='ro') d.setAttribute('lang', lang);
-    var z=localStorage.getItem('amass-scale'); if(z) d.style.zoom=z;
-  }catch(e){}})();`;
+  // Limba (RO/EN) o aplicăm înainte de paint; restul aspectului (temă, accent, fonturi, mărime text,
+  // formă, culori stadii) e gestionat de motorul „Aspect" (public/aspect.js → window.Aspect, beforeInteractive).
+  const langScript = `(function(){try{var l=localStorage.getItem('amass-lang');if(l==='en'||l==='ro')document.documentElement.setAttribute('lang',l);}catch(e){}})();`;
   return (
     <html lang="ro" className={`${montserrat.variable} ${inter.variable} ${mono.variable}`}>
-      <head><script dangerouslySetInnerHTML={{ __html: themeScript }} /></head>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* Fonturi suplimentare pentru selectorul „Aspect" (Montserrat/Inter/JetBrains vin din next/font). */}
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" />
+        <script dangerouslySetInnerHTML={{ __html: langScript }} />
+      </head>
       <body>
+        {/* Motorul Aspect — aplică tokens pe <html> înainte de hidratare (fără FOUC). */}
+        <Script src="/aspect.js" strategy="beforeInteractive" />
         <SessionProvider><LangProvider>{children}</LangProvider></SessionProvider>
       </body>
     </html>

@@ -1,7 +1,9 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { PriorityStars } from '@/components/ui';
+import { Icon } from '@/components/Icon';
+import { PriorityStar, RotText } from '@/components/indicators';
+import { stelutaToPrio } from '@/lib/aspect-meta';
 import { deriveStage } from '@/lib/stage-rules';
 
 // Kanban = a TREIA vizualizare a pâlniei (drag & drop). Trăiește în pagina /palnie,
@@ -35,12 +37,6 @@ function parseRO(s: string | null): Date | null { const m = s && String(s).match
 function ageDays(c: KanbanClient): number | null {
   const ref = parseRO(c.ofertat) || parseRO(c.preOfertat) || parseRO(c.schitaStatus) || (c.dataIntrare ? new Date(c.dataIntrare) : null);
   return ref ? Math.floor((Date.now() - ref.getTime()) / 86400000) : null;
-}
-function ageBadge(d: number | null): { c: string; t: string } | null {
-  if (d == null || d <= 7) return null;
-  if (d <= 14) return { c: '#c98a2b', t: d + 'z' };
-  if (d <= 25) return { c: '#e07a2e', t: d + 'z' };
-  return { c: 'var(--err)', t: d + 'z' };
 }
 
 interface Props {
@@ -97,55 +93,62 @@ export function KanbanBoard({ clienti, isManager, ownerFilter, onPatch, setMsg, 
 
   return (
     <>
-      <div className="flex gap-2 overflow-x-auto scroll-area pb-2 rise" style={{ minHeight: '60vh' }}>
-        {COLS.map(col => {
-          const cards = byCol[col.key];
-          const mp = cards.reduce((s, c) => s + (c.suprafata || 0), 0);
-          return (
-            <div key={col.key}
-                 onDragOver={e => { e.preventDefault(); setOver(col.key); }}
-                 onDragLeave={() => setOver(o => o === col.key ? null : o)}
-                 onDrop={e => { e.preventDefault(); const id = e.dataTransfer.getData('text/plain'); setOver(null); setDrag(null); if (id && stageOf(clienti.find(c => c.id === id)!) !== col.key) requestMove(id, col.key); }}
-                 className="flex-shrink-0 w-[224px] rounded-[var(--radius)] transition-colors"
-                 style={{ background: over === col.key ? 'var(--ember-soft)' : 'var(--paper)', border: '1px solid var(--line)' }}>
-              {/* Antet coloană COMPACT pe un singur rând (nume + mp + count) → mai mult loc pentru carduri */}
-              <div className="px-2 py-1.5 sticky top-0 z-10 rounded-t-[var(--radius)] flex items-center justify-between gap-1" style={{ background: 'var(--card)', borderBottom: '2px solid ' + col.color }}>
-                <span className="font-display font-semibold text-[12.5px] truncate" style={{ color: col.color }}>{col.label}</span>
-                <span className="flex items-center gap-1 flex-shrink-0">
-                  <span className="text-[9px] text-[var(--fg-faint)] tabular" title="Suprafață totală în coloană">{mp ? mp.toLocaleString('ro-RO') + 'mp' : ''}</span>
-                  <span className="pill pill-lucru !py-0 !px-1.5 !text-[10px] tabular">{cards.length}</span>
-                </span>
-              </div>
-              <div className="p-1.5 space-y-1.5 overflow-y-auto scroll-area" style={{ maxHeight: 'calc(100vh - 188px)' }}>
-                {cards.map(c => (
-                  <div key={c.id} draggable
-                       onDragStart={e => { e.dataTransfer.setData('text/plain', c.id); e.dataTransfer.effectAllowed = 'move'; setDrag(c.id); }}
-                       onDragEnd={() => { setDrag(null); setOver(null); }}
-                       onClick={() => router.push('/strategie/' + c.id)}
-                       className="card p-1.5 cursor-grab active:cursor-grabbing hover:border-[var(--line-2)]"
-                       style={{ opacity: drag === c.id ? 0.4 : 1, borderLeft: '3px solid ' + col.color }}
-                       title="Trage pentru a schimba stadiul · click pentru fișă">
-                    <div className="flex items-center justify-between gap-1">
-                      <div className="font-display font-semibold text-[12px] leading-tight truncate">{c.nume || '(fără nume)'}</div>
-                      <span className="flex-shrink-0" title="Prioritate (live în CRM)"><PriorityStars value={c.stelutaCat} readOnly size={12} /></span>
-                    </div>
-                    <div className="flex items-center justify-between gap-1 mt-0.5">
-                      <div className="text-[10px] text-[var(--fg-faint)] font-mono truncate">
-                        {c.localitate ? c.localitate + ' · ' : ''}{c.suprafata != null ? c.suprafata + 'mp' : ''}
-                      </div>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        {!col.terminal && (() => { const b = ageBadge(ageDays(c)); return b ? <span className="text-[9px] font-bold tabular px-1 rounded" style={{ color: b.c, border: '1px solid ' + b.c }} title="Zile în stadiu (deal care îmbătrânește)">{b.t}</span> : null; })()}
-                        {isManager && ownerFilter === 'all' && c.owner && <span className="pill pill-lucru !py-0 !px-1 !text-[8px] truncate max-w-[60px]">{c.owner.name || c.owner.email}</span>}
-                      </div>
-                    </div>
-                    {c.reminderText && <div className="text-[10px] text-[var(--fg-soft)] mt-1 pt-1 border-t border-[var(--line)] line-clamp-2">⏰ {c.reminderText}</div>}
+      <div className="kanban-wrap scroll-thin rise">
+        <div className="kanban">
+          {COLS.map(col => {
+            const cards = byCol[col.key];
+            const mp = cards.reduce((s, c) => s + (c.suprafata || 0), 0);
+            return (
+              <section key={col.key}
+                   onDragOver={e => { e.preventDefault(); setOver(col.key); }}
+                   onDragLeave={() => setOver(o => o === col.key ? null : o)}
+                   onDrop={e => { e.preventDefault(); const id = e.dataTransfer.getData('text/plain'); setOver(null); setDrag(null); if (id && stageOf(clienti.find(c => c.id === id)!) !== col.key) requestMove(id, col.key); }}
+                   className={'kcol' + (over === col.key ? ' is-over' : '')}
+                   style={{ '--sc': col.color } as React.CSSProperties}>
+                {/* Antet coloană (nume + count + suprafață totală) */}
+                <header className="kcol__head">
+                  <span className="kcol__bar" />
+                  <div className="kcol__title">
+                    <span className="kcol__name" style={{ color: col.color }}>{col.label}</span>
                   </div>
-                ))}
-                {cards.length === 0 && <div className="text-center text-[11px] text-[var(--fg-faint)] py-6">— gol —</div>}
-              </div>
-            </div>
-          );
-        })}
+                  <div className="kcol__stats">
+                    <span className="kcol__wip">{cards.length}</span>
+                    <span className="mono muted" title="Suprafață totală în coloană">{mp ? 'Σ ' + mp.toLocaleString('ro-RO') + ' mp' : ''}</span>
+                  </div>
+                </header>
+                <div className="kcol__list scroll-thin">
+                  {cards.map(c => (
+                    <article key={c.id} draggable
+                         onDragStart={e => { e.dataTransfer.setData('text/plain', c.id); e.dataTransfer.effectAllowed = 'move'; setDrag(c.id); }}
+                         onDragEnd={() => { setDrag(null); setOver(null); }}
+                         onClick={() => router.push('/strategie/' + c.id)}
+                         className={'kc' + (drag === c.id ? ' is-dragging' : '')}
+                         style={{ '--sc': col.color } as React.CSSProperties}
+                         title="Trage pentru a schimba stadiul · click pentru fișă">
+                      <span className="kc__handle" title="Trage"><Icon name="grip" size={14} /></span>
+                      <div className="kc__body">
+                        <div className="kc__top">
+                          <span className="kc__name">{c.nume || '(fără nume)'}</span>
+                          <span onClick={stop} title="Prioritate (live în CRM)"><PriorityStar value={stelutaToPrio(c.stelutaCat)} size={16} /></span>
+                        </div>
+                        <div className="kc__meta">
+                          {c.localitate && <span><Icon name="pin" size={11} />{c.localitate}</span>}
+                          {c.suprafata != null && <span className="mono">{c.suprafata} mp</span>}
+                          {isManager && ownerFilter === 'all' && c.owner && <span className="truncate" style={{ maxWidth: 80 }}>{c.owner.name || c.owner.email}</span>}
+                        </div>
+                        <div className="kc__foot">
+                          {c.reminderText && <span className="rot rot--fresh truncate" style={{ maxWidth: 120 }} title={c.reminderText}><Icon name="clock" size={11} />{c.reminderText}</span>}
+                          {!col.terminal && <span style={{ marginLeft: 'auto' }}><RotText stage={col.key} days={ageDays(c) ?? 0} /></span>}
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                  {cards.length === 0 && <div className="kcol__empty">— gol —</div>}
+                </div>
+              </section>
+            );
+          })}
+        </div>
       </div>
       {closeModal && (
         <WinLossModal colKey={closeModal.colKey}

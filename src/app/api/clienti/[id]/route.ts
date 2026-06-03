@@ -14,6 +14,23 @@ const SIMPLE_FIELDS = ['stadiu', 'nevoia', 'schitaStatus', 'preOfertat', 'oferta
   't1', 't1Locked', 'probabilitate', 'closeDate', 'forecastCategory', 'closureReason', 'closureReasonDetail', 'nextStepText', 'nextStepDue', 'obsSituatie', 'strategieNevoi', 'notaManager'];
 const DATE_FIELDS = ['closeDate', 'nextStepDue'];
 
+// ANTI-WIPE blob strategie (paritate spreadsheet, bug-ul Paulian): la salvarea fișei NU lăsăm o
+// valoare GOALĂ să suprascrie o valoare NON-GOALĂ deja stocată. Merge cheie-cu-cheie peste blob-ul
+// existent: valorile noi non-goale se scriu; goalul peste non-gol păstrează existentul.
+function mergeStrategieBlob(existing: string | null, incoming: any): string {
+  let base: Record<string, any> = {};
+  if (existing) { try { const b = JSON.parse(existing); if (b && typeof b === 'object' && !Array.isArray(b)) base = b; } catch {} }
+  const inc = (incoming && typeof incoming === 'object' && !Array.isArray(incoming)) ? incoming : {};
+  const merged: Record<string, any> = { ...base };
+  for (const [k, v] of Object.entries(inc)) {
+    const empty = v === undefined || v === null || (typeof v === 'string' && v.trim() === '') || (Array.isArray(v) && v.length === 0);
+    if (!empty) merged[k] = v;            // valoare nouă utilă → scrie
+    else if (!(k in base)) merged[k] = v; // cheie nouă goală (nu exista) → ok
+    // altfel: gol peste non-gol → PĂSTREAZĂ existentul (anti-wipe)
+  }
+  return JSON.stringify(merged);
+}
+
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const scope = await getScope();
   if (!scope) return NextResponse.json({ ok: false }, { status: 401 });

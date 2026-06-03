@@ -1,133 +1,229 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Layout } from '@/components/Layout';
-import { PriorityStars } from '@/components/ui';
 
-// Cheile = valorile scrise în data-accent (trebuie să corespundă selectorilor
-// [data-accent="…"] din globals.css). Swatch-urile reflectă culoarea --accent reală.
-// 'amass' = roșul implicit (nu are selector dedicat → cade pe :root). Vechile chei
-// (ember/brick/blue/violet/gold) rămân pentru compat cu localStorage existent, fiindcă
-// globals.css le mapează încă; le păstrăm ca alias-uri ascunse mai jos.
-const ACCENTS: Record<string, [string, string]> = {
-  amass:  ['#CC0000', 'Roșu AMASS (implicit)'],
-  pine:   ['#2F6B5E', 'Pine'],
-  cobalt: ['#2456C4', 'Cobalt']
-};
-// Alias-uri vechi încă recunoscute de globals.css — afișate doar dacă sunt deja selectate.
-const LEGACY_ACCENTS: Record<string, [string, string]> = {
-  ember:  ['#CC0000', 'Ember (compat)'],
-  brick:  ['#CC0000', 'Cărămidă (compat)'],
-  blue:   ['#2456C4', 'Albastru (compat)'],
-  violet: ['#6D28D9', 'Mov (compat)'],
-  gold:   ['#B7791F', 'Auriu (compat)']
-};
-interface Style { accent: string; theme: string; density: string; radius: string; }
-const DEFAULT: Style = { accent: 'amass', theme: 'light', density: 'comfortable', radius: 'normal' };
+// Motorul de teme e încărcat global (public/aspect.js → window.Aspect, beforeInteractive).
+const A = () => (typeof window !== 'undefined' ? (window as any).Aspect : null);
 
-// Aplică preferințele EXACT ca boot-script-ul din layout.tsx: doar atribute pe <html>.
-// CSS-ul ([data-theme]/[data-density]/[data-accent]/[data-radius]) reacționează la ele.
-function apply(s: Style) {
-  const d = document.documentElement;
-  d.setAttribute('data-theme', s.theme === 'dark' ? 'dark' : 'light');
-  d.setAttribute('data-density', s.density || 'comfortable');
-  d.setAttribute('data-accent', s.accent || 'amass');
-  // 'normal'/'sharp'/'round' au selectori în globals.css ([data-radius="normal"]/["sharp"]/["round"]).
-  d.setAttribute('data-radius', s.radius || 'normal');
+// Subset de iconuri din handoff (icons2.jsx).
+const IP: Record<string, string> = {
+  palette: 'M12 22a10 10 0 1 1 0-20c5.5 0 10 3.6 10 8 0 3-2.5 4-4 4h-2a2 2 0 0 0-1 3.7A2 2 0 0 1 12 22zM7.5 11a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM12 7.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM16.5 11a1 1 0 1 0 0-2 1 1 0 0 0 0 2z',
+  contrast: 'M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20zM12 2v20',
+  sun: 'M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4',
+  moon: 'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z',
+  monitor: 'M3 4h18v12H3zM8 20h8M12 16v4',
+  type: 'M4 7V5h16v2M9 19h6M12 5v14',
+  sliders: 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6',
+  kanban: 'M4 4h4v16H4zM10 4h4v10h-4zM16 4h4v13h-4z',
+  reset: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5',
+  check: 'M20 6L9 17l-5-5',
+  alert: 'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
+};
+function Icon({ name, size = 16, style }: { name: string; size?: number; style?: any }) {
+  const d = IP[name] || '';
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      {d.split('M').filter(Boolean).map((seg, i) => <path key={i} d={'M' + seg} />)}
+    </svg>
+  );
+}
+
+function Segmented({ value, options, onChange }: { value: string; options: { value: string; label: string; icon?: string }[]; onChange: (v: string) => void }) {
+  return (
+    <div className="segmented" role="tablist">
+      {options.map(o => (
+        <button key={o.value} role="tab" aria-selected={o.value === value}
+          className={'segmented__btn' + (o.value === value ? ' is-on' : '')} onClick={() => onChange(o.value)}>
+          {o.icon && <Icon name={o.icon} size={15} />}{o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+function StepSlider({ label, value, labels, onChange }: { label: string; value: number; labels: string[]; onChange: (v: number) => void }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <span className="label">{label}</span>
+      <input type="range" className="step-range" min={0} max={labels.length - 1} step={1} value={value} onChange={e => onChange(+e.target.value)} />
+      <div className="step-ticks">{labels.map((l, i) => <button key={i} className={'step-tick' + (i === value ? ' is-on' : '')} onClick={() => onChange(i)}>{l}</button>)}</div>
+    </div>
+  );
+}
+function Section({ title, icon, children, highlight }: { title: string; icon: string; children: React.ReactNode; highlight?: boolean }) {
+  return (
+    <section className={'aset' + (highlight ? ' aset--hl' : '')}>
+      <h3 className="aset__title"><Icon name={icon} size={15} />{title}</h3>
+      <div>{children}</div>
+    </section>
+  );
+}
+
+function PriorityStar({ value, size = 14, withLabel }: { value: string; size?: number; withLabel?: boolean }) {
+  const a = A(); if (!a) return null;
+  const p = a.PRIORITY_MAP[value] || a.PRIORITY_MAP.alb;
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+      <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 2.5l2.9 6.1 6.6.9-4.8 4.6 1.2 6.6L12 18.6 6.1 21.3l1.2-6.6L2.5 9.5l6.6-.9z" fill={p.color}
+          stroke={p.outline ? 'var(--text-faint)' : 'rgba(0,0,0,.25)'} strokeWidth={p.outline ? 1.5 : 1} strokeLinejoin="round" />
+      </svg>{withLabel && <span className="prio-lbl">{p.label}</span>}
+    </span>
+  );
+}
+function StagePill({ stage, size }: { stage: string; size?: string }) {
+  const a = A(); if (!a) return null;
+  const st = a.STAGE_MAP[stage]; if (!st) return null;
+  const c = 'var(--st-' + stage + ')';
+  return (
+    <span className={'stage-pill' + (size === 'sm' ? ' stage-pill--sm' : '')}
+      style={{ color: c, background: 'color-mix(in oklab, ' + c + ', var(--surface) 86%)', borderColor: 'color-mix(in oklab, ' + c + ', var(--surface) 60%)' }}>
+      <span className="stage-pill__dot" style={{ background: c }}></span>{st.label}
+    </span>
+  );
+}
+
+function LivePreview() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button className="btn btn-primary btn-sm">Buton primar</button>
+        <button className="btn btn-secondary btn-sm">Secundar</button>
+      </div>
+      <div className="lp-card card card--pad" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+          <b style={{ fontFamily: 'var(--font-display)' }}>Popa Nicoleta</b>
+          <StagePill stage="ofertat" size="sm" />
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: '.8125rem', color: 'var(--text-muted)', alignItems: 'center' }}>
+          <PriorityStar value="rosu" withLabel size={14} />
+          <span className="mono">145 mp</span>
+          <span className="rot rot--warn"><Icon name="contrast" size={11} /><span className="mono">12z</span></span>
+        </div>
+        <a href="#" onClick={e => e.preventDefault()}>Link activ accent</a>
+      </div>
+      <div className="lp-row">
+        <span>Rând tabel</span><span className="mono">240</span><StagePill stage="schita" size="sm" />
+      </div>
+      <input className="input field" placeholder="Câmp de input…" />
+    </div>
+  );
 }
 
 export default function AspectPage() {
-  const [s, setS] = useState<Style>(DEFAULT);
-
+  const [s, setS] = useState<any>(null);
   useEffect(() => {
-    try { const saved = JSON.parse(localStorage.getItem('amass-style') || '{}'); setS({ ...DEFAULT, ...saved }); } catch {}
+    const a = A(); if (!a) return;
+    setS(a.get());
+    const off = a.subscribe((st: any) => setS({ ...st, stages: { ...st.stages } }));
+    return off;
   }, []);
 
-  function set<K extends keyof Style>(k: K, v: Style[K]) {
-    const next = { ...s, [k]: v };
-    setS(next);
-    apply(next);
-    try { localStorage.setItem('amass-style', JSON.stringify(next)); } catch {}
-  }
-  function reset() { setS(DEFAULT); apply(DEFAULT); try { localStorage.removeItem('amass-style'); } catch {} }
-
-  // Lista de accenți afișați: noii (amass/pine/cobalt) + accentul vechi salvat
-  // (ex. ember/blue), ca selecția existentă a userului să rămână vizibilă și marcată.
-  const accentChoices: Record<string, [string, string]> =
-    !ACCENTS[s.accent] && LEGACY_ACCENTS[s.accent]
-      ? { ...ACCENTS, [s.accent]: LEGACY_ACCENTS[s.accent] }
-      : ACCENTS;
-
-  const Opt = ({ active, onClick, children, swatch }: any) => (
-    <button onClick={onClick}
-      className={'px-3.5 py-2 rounded-[var(--radius-sm)] text-[13px] font-semibold border transition-all flex items-center gap-2 '
-        + (active ? 'border-[var(--ember)] text-[var(--ember-deep)] bg-[var(--ember-soft)]' : 'border-[var(--line-2)] text-[var(--fg-soft)] hover:border-[var(--fg-faint)]')}>
-      {swatch && <span className="w-3.5 h-3.5 rounded-full inline-block" style={{ background: swatch }} />}
-      {children}
-    </button>
-  );
+  const a = A();
+  if (!s || !a) return <Layout><div className="card p-10 text-center text-[var(--fg-soft)]">Se încarcă „Aspect"…</div></Layout>;
+  const set = (patch: any) => a.set(patch);
+  const surface = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() || '#fff';
+  const ratioSurface = a.contrast(s.accent, surface);
+  const ratioOn = a.contrast(s.accent, a.onColor(s.accent));
+  const rateSurface = a.rate(ratioSurface);
 
   return (
     <Layout>
-      <div className="flex items-end justify-between mb-5 rise flex-wrap gap-3">
-        <div>
-          <h1 className="text-[26px]">Aspect</h1>
-          <p className="text-[var(--fg-soft)] text-[13px] mt-0.5">Personalizează tema. Se aplică instant și se ține minte pe acest dispozitiv.</p>
-        </div>
-        <button onClick={reset} className="btn btn-secondary">Resetează la implicit</button>
-      </div>
+      <h1 className="text-[24px] mb-1">Aspect aplicație</h1>
+      <p className="text-[13px] text-[var(--fg-soft)] mb-5 max-w-2xl">
+        Culoare, formă, fonturi, mărime text și culorile de stadiu — cu previzualizare live. Steluța de prioritate
+        are 5 culori fixe (limbaj comun, nepersonalizabile). Preferințele se salvează pe acest dispozitiv.
+      </p>
+      <div className="aspect">
+        <div className="aspect__main">
+          <Section title="Mod culoare" icon="contrast">
+            <Segmented value={s.mode} onChange={v => set({ mode: v })}
+              options={[{ value: 'light', label: 'Light', icon: 'sun' }, { value: 'dark', label: 'Dark', icon: 'moon' }, { value: 'system', label: 'Sistem', icon: 'monitor' }]} />
+          </Section>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-4">
-        <div className="space-y-4">
-          <div className="card p-5 rise rise-1">
-            <div className="panel-head"><span className="dot" />Culoare accent</div>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(accentChoices).map(([k, v]) => (
-                <Opt key={k} active={s.accent === k} onClick={() => set('accent', k)} swatch={v[0]}>{v[1]}</Opt>
+          <Section title="Accent / brand" icon="palette">
+            <div className="preset-row">
+              {a.PRESETS.map((p: any) => (
+                <button key={p.id} className={'preset' + (s.preset === p.id ? ' is-on' : '')} onClick={() => set({ accent: p.accent, preset: p.id })} title={p.name}>
+                  <span className="preset__sw" style={{ background: p.accent }}></span>{p.name}
+                </button>
               ))}
             </div>
-          </div>
-          <div className="card p-5 rise rise-2">
-            <div className="panel-head"><span className="dot" />Temă</div>
-            <div className="flex flex-wrap gap-2">
-              <Opt active={s.theme === 'light'} onClick={() => set('theme', 'light')} swatch="#f5f2ea">Luminos (warm)</Opt>
-              <Opt active={s.theme === 'dark'} onClick={() => set('theme', 'dark')} swatch="#14191c">Întunecat</Opt>
+            <div className="accent-pick">
+              <label className="accent-pick__color">
+                <input type="color" value={s.accent} onChange={e => set({ accent: e.target.value, preset: 'custom' })} />
+                <span className="accent-pick__chip" style={{ background: s.accent }}></span>
+              </label>
+              <input className="input field mono" style={{ width: 120 }} value={String(s.accent).toUpperCase()}
+                onChange={e => { const v = e.target.value; if (/^#?[0-9a-fA-F]{0,6}$/.test(v)) set({ accent: v.startsWith('#') ? v : '#' + v, preset: 'custom' }); }} />
+              <span className={'wcag wcag--' + (rateSurface === 'slab' ? 'bad' : rateSurface === 'AA mare' ? 'warn' : 'ok')}>
+                {rateSurface === 'slab'
+                  ? <><Icon name="alert" size={13} />Contrast slab ({ratioSurface.toFixed(1)}:1)</>
+                  : <><Icon name="check" size={13} />Contrast {rateSurface} ({ratioSurface.toFixed(1)}:1)</>}
+              </span>
             </div>
-          </div>
-          <div className="card p-5 rise rise-3">
-            <div className="panel-head"><span className="dot" />Densitate</div>
-            <div className="flex flex-wrap gap-2">
-              <Opt active={s.density === 'comfortable'} onClick={() => set('density', 'comfortable')}>Confortabil</Opt>
-              <Opt active={s.density === 'compact'} onClick={() => set('density', 'compact')}>Compact</Opt>
+            <p className="aspect__hint">Din accent se derivă hover, focus ring și suprafețele soft. Logo-ul AMASS rămâne mereu roșu. Text pe accent: contrast {ratioOn.toFixed(1)}:1.</p>
+          </Section>
+
+          <Section title="Font" icon="type">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 160 }}><span className="label">Titluri</span>
+                <select className="select field" value={s.fontDisplay} onChange={e => set({ fontDisplay: e.target.value })}>
+                  {Object.keys(a.FONTS.display).map((f: string) => <option key={f}>{f}</option>)}
+                </select></label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 160 }}><span className="label">Interfață</span>
+                <select className="select field" value={s.fontUi} onChange={e => set({ fontUi: e.target.value })}>
+                  {Object.keys(a.FONTS.ui).map((f: string) => <option key={f}>{f}</option>)}
+                </select></label>
             </div>
-          </div>
-          <div className="card p-5 rise rise-4">
-            <div className="panel-head"><span className="dot" />Colțuri</div>
-            <div className="flex flex-wrap gap-2">
-              <Opt active={s.radius === 'sharp'} onClick={() => set('radius', 'sharp')}>Drepte</Opt>
-              <Opt active={s.radius === 'normal'} onClick={() => set('radius', 'normal')}>Normale</Opt>
-              <Opt active={s.radius === 'round'} onClick={() => set('radius', 'round')}>Rotunjite</Opt>
+          </Section>
+
+          <Section title="Formă" icon="sliders">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <StepSlider label="Colțuri (radius)" value={s.radius} labels={a.RADIUS_LABELS} onChange={v => set({ radius: v })} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span className="label">Densitate</span>
+                <Segmented value={s.density} onChange={v => set({ density: v })}
+                  options={[{ value: 'compact', label: 'Compact' }, { value: 'normal', label: 'Normal' }, { value: 'comfortable', label: 'Confortabil' }]} />
+              </div>
             </div>
+          </Section>
+
+          <Section title="Mărime text" icon="type" highlight>
+            <StepSlider label={'Scală: ' + a.TEXT_LABELS[s.textSize] + ' (' + Math.round(a.TEXT_STEPS[s.textSize] * 100) + '%)'}
+              value={s.textSize} labels={a.TEXT_LABELS} onChange={v => set({ textSize: v })} />
+            <p className="aspect__hint">Scalează toată interfața. Vezi previzualizarea live →</p>
+          </Section>
+
+          <Section title="Culori stadii" icon="kanban">
+            <p className="aspect__hint" style={{ marginTop: 0 }}>Personalizează fiecare stadiu — apare instant în Kanban, Tabel, Carduri și Dashboard.</p>
+            <div className="stage-colors">
+              {a.ALL_STAGES.map((st: any) => (
+                <label key={st.key} className="stage-color">
+                  <input type="color" value={a.stageColor(st.key)} onChange={e => a.setStage(st.key, e.target.value)} />
+                  <span className="stage-color__chip" style={{ background: 'var(--st-' + st.key + ')' }}></span>
+                  <span>{st.label}</span>
+                  {s.stages[st.key] && <button className="stage-color__reset" title="Implicit" onClick={e => { e.preventDefault(); a.resetStage(st.key); }}><Icon name="reset" size={12} /></button>}
+                </label>
+              ))}
+            </div>
+          </Section>
+
+          <Section title="Prioritate (fix — limbaj comun)" icon="alert">
+            <p className="aspect__hint" style={{ marginTop: 0 }}>Cele 5 culori ale steluței NU se personalizează (sens universal în toată echipa).</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+              {a.PRIORITIES.map((p: any) => <PriorityStar key={p.key} value={p.key} withLabel size={16} />)}
+            </div>
+          </Section>
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => a.reset()}><Icon name="reset" size={14} />Resetează tot</button>
           </div>
         </div>
 
-        {/* Previzualizare live */}
-        <div className="card p-5 rise rise-2 self-start">
-          <div className="panel-head"><span className="dot" />Previzualizare</div>
-          <div className="client-card mb-3" style={{ cursor: 'default' }}>
-            <div className="font-display font-semibold text-[15px]">Popescu Andrei <span className="text-[var(--fg-soft)] font-normal text-[13px]">· Brașov</span></div>
-            <div className="text-[11px] text-[var(--fg-faint)] font-mono mt-0.5">(2) #12402 · 245 mp</div>
-            <div className="flex items-center gap-2 mt-2">
-              <PriorityStars value={3} readOnly size={15} />
-              <span className="pill pill-contractat">Contractat</span>
-            </div>
-          </div>
-          <div className="flex gap-2 mb-3">
-            <button className="btn btn-primary">Buton primar</button>
-            <button className="btn btn-fisa">VEZI FIȘA →</button>
-          </div>
-          <input className="field" placeholder="Câmp de text…" readOnly />
-          <div className="toast toast-ok mt-3">Exemplu de mesaj de succes.</div>
-        </div>
+        <aside className="aspect__preview">
+          <div className="label" style={{ marginBottom: 10 }}>Previzualizare live</div>
+          <LivePreview />
+        </aside>
       </div>
     </Layout>
   );

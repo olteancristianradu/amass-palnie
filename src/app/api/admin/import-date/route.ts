@@ -1,22 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { getScope, getVisibleOwnerIds } from '@/lib/scope';
+import { getScope } from '@/lib/scope';
 import { auditLog } from '@/lib/audit';
 
-// Import O SINGURĂ DATĂ al datelor din spreadsheet (strategii + status).
+// Import O SINGURĂ DATĂ al datelor din spreadsheet (strategii + status) — STRICT în contul propriu.
 // Body: { clients: [ { idLucrare, strategieV1?, strategieV2?, stadiu?, nevoia?,
 //                       schitaStatus?, preOfertat?, ofertat?, strategieNevoi?, obsSituatie?, t1? } ] }
-// Match pe idLucrare în SCOPUL userului: admin = TOȚI clienții (chiar dacă-s deținuți de agenți),
-// manager = subtree-ul lui, agent = doar ai lui. Așa adminul poate popula strategiile tuturor din spreadsheet.
+// Match pe idLucrare DOAR în clienții lui scope.userId. idLucrare e unic per owner (@@unique([ownerId,idLucrare])),
+// deci match-ul e NEAMBIGUU și NU se poate scrie pe clientul altui agent (fiecare agent își importă propriile date).
 // UPDATE, nu creează clienți noi (aceia vin din sync CRM). Blob strategie = MERGE (nu pierde ce era).
 
+function isPlainObject(x: any): x is Record<string, any> {
+  return x != null && typeof x === 'object' && !Array.isArray(x);
+}
 function mergeBlob(existing: string | null, incoming: any): string | undefined {
   if (incoming == null || incoming === '') return undefined;
   let base: Record<string, any> = {};
-  if (existing) { try { base = JSON.parse(existing) || {}; } catch { base = {}; } }
-  let inc: Record<string, any> = {};
-  if (typeof incoming === 'string') { try { inc = JSON.parse(incoming) || {}; } catch { return undefined; } }
-  else if (typeof incoming === 'object') inc = incoming;
+  if (existing) { try { const b = JSON.parse(existing); if (isPlainObject(b)) base = b; } catch { /* base = {} */ } }
+  let inc: Record<string, any>;
+  if (typeof incoming === 'string') { try { const p = JSON.parse(incoming); inc = isPlainObject(p) ? p : {}; } catch { return undefined; } }
+  else if (isPlainObject(incoming)) inc = incoming;
+  else return undefined; // number/boolean/array → nimic de merge-uit (fără write inutil, fără chei numerice '0','1')
   // import-ul are prioritate per cheie, dar NU suprascrie cu gol
   const merged: Record<string, any> = { ...base };
   for (const [k, v] of Object.entries(inc)) {
@@ -28,8 +32,8 @@ function mergeBlob(existing: string | null, incoming: any): string | undefined {
 export async function POST(req: NextRequest) {
   const scope = await getScope();
   if (!scope) return NextResponse.json({ ok: false, error: 'Neautentificat' }, { status: 401 });
-  // Orice user autentificat își poate importa PROPRIILE date — totul e filtrat pe ownerId: scope.userId
-  // (match pe idLucrare DOAR în clienții lui). NU afectează alți agenți.
+  // Orice user autentificat își poate importa PROPRIILE date — match pe idLucrare DOAR în clienții lui
+  // (ownerId: scope.userId). NU afectează alți agenți și NU poate nimeri clientul altcuiva cu același idLucrare.
 
   let body: any;
   try { body = await req.json(); } catch { return NextResponse.json({ ok: false, error: 'JSON invalid' }, { status: 400 }); }
@@ -38,9 +42,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: 'Lipsește lista de clienți (clients[]) sau e goală' }, { status: 400 });
   }
 
-  // Scopul: admin → toți; manager → subtree; agent → doar ai lui.
-  const visible = await getVisibleOwnerIds(scope);
-
   let updated = 0, notFound = 0, skipped = 0;
   const notFoundSample: string[] = [];
   const SCALAR = ['stadiu', 'nevoia', 'schitaStatus', 'preOfertat', 'ofertat', 'strategieNevoi', 'obsSituatie', 't1'];
@@ -48,10 +49,10 @@ export async function POST(req: NextRequest) {
   for (const it of items) {
     const idLucrare = String(it?.idLucrare ?? it?.id_lucrare ?? '').trim();
     if (!idLucrare) { skipped++; continue; }
-    const where: any = visible === 'ALL' ? { idLucrare } : { idLucrare, ownerId: { in: visible } };
+    // STRICT pe contul propriu → match neambiguu (idLucrare e unic per owner).
     const client = await prisma.client.findFirst({
-      where,
-      select: { id: true, strategieV1: true, strategieV2: true }
+      where: { idLucrare, ownerId: scope.userId },
+      select: { id: true, strategieV1: true, strategieV2: true, t1Locked: true }
     });
     if (!client) { notFound++; if (notFoundSample.length < 50) notFoundSample.push(idLucrare); continue; }
 
@@ -61,6 +62,7 @@ export async function POST(req: NextRequest) {
     if (v1 !== undefined) data.strategieV1 = v1;
     if (v2 !== undefined) data.strategieV2 = v2;
     for (const k of SCALAR) {
+      if (k === 't1' && client.t1Locked) continue; // respectă T1 fixat manual (ca sync-engine.ts) — importul nu-l suprascrie
       if (it[k] != null && String(it[k]).trim() !== '') data[k] = String(it[k]);
     }
     if (Object.keys(data).length === 0) { skipped++; continue; }

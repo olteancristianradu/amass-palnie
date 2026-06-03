@@ -212,7 +212,11 @@ export default function UsersPage() {
     else setMsg('❌ ' + j.error);
   }
   async function changeRole(id: string, role: string) {
-    await fetch('/api/users', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, role }) });
+    setMsg('');
+    const r = await fetch('/api/users', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, role }) });
+    const j = await r.json().catch(() => ({} as any));
+    if (!j.ok) setMsg('❌ ' + (j.error || 'Nu s-a putut schimba rolul'));
+    else setMsg('✅ Rol actualizat');
     await load();
   }
   async function changeManager(id: string, managerId: string) {

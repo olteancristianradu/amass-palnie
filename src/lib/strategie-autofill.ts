@@ -20,6 +20,8 @@
 export interface AutofillResult {
   /** Sistem actual de încălzire, mapat la valoarea din dropdown V2 (SISTEM_OPTS). '' dacă necunoscut. */
   sistem_actual: string;
+  /** Sistem actual mapat la dropdown-ul V1 (ca_sistem) — etichete diferite de V2. '' dacă necunoscut. */
+  sistem_actual_v1: string;
   /** Cost lunar actual (lei), număr rotunjit format RO, sau null. */
   costLunar: number | null;
   /** Buget achiziție (text brut sau sumă), sau null. */
@@ -113,13 +115,34 @@ export function mapSistemActualV2(raw: string | null | undefined): string {
 }
 
 /**
+ * Variantă V1 (construcție) — port _mapSistemActualV1_. Dropdown-ul ca_sistem din V1 are ALTE etichete
+ * decât V2 (ex. 'Centrala gaz'/'Pompa de caldura' vs 'CT gaz'/'Pompa caldura'). Fără asta, clienții V1
+ * primeau valori V2 care nu existau în dropdown-ul lor (apăreau invalide/goale). Vezi SEED_V1 (z02 ca_sistem).
+ */
+export function mapSistemActualV1(raw: string | null | undefined): string {
+  if (!raw) return '';
+  const s = normalizeRo(String(raw)).toLowerCase();
+  if (/pompa\s*(de\s*)?caldura/.test(s)) return 'Pompa de caldura';
+  if (/peleti/.test(s)) return 'Centrala peleti';
+  if (/centrala?\s*(pe\s*)?(gaz|gazoasa)/.test(s) || /\bgaz\b/.test(s)) return 'Centrala gaz';
+  if (/centrala?\s*(pe\s*)?(lemne|lemn)/.test(s) || /lemne/.test(s)) return 'Centrala lemne';
+  if (/centrala?\s*(pe\s*)?electric/.test(s)) return 'Centrala electrica';
+  if (/sobe|\bsoba\b/.test(s)) return 'Soba';
+  if (/radiator.*ulei|\bulei\b/.test(s)) return 'Calorifere electrice';
+  if (/aer\s*conditionat|\bac\b/.test(s)) return 'Aer conditionat';
+  if (/plasm|infraros/.test(s)) return 'Calorifere electrice';
+  if (/\biep\b|pardoseal/.test(s)) return 'Calorifere electrice';
+  return '';
+}
+
+/**
  * Parser principal — portat 1:1 din Strategie.js::_parseObservatiiForm_ (logica line-based).
  * Primește textul OBSERVATII (deja decodificat în webapp) → întoarce câmpurile de autofill.
  * @param obsText textul brut OBSERVATII (plain text, cu newline-uri)
  */
 export function parseObservatii(obsText: string | null | undefined): AutofillResult {
   const empty: AutofillResult = {
-    sistem_actual: '', costLunar: null, bugetAchizitie: null, alternativa: null,
+    sistem_actual: '', sistem_actual_v1: '', costLunar: null, bugetAchizitie: null, alternativa: null,
     bransament: null, doresteOftv: null, puterePftv: null
   };
   if (!obsText) return empty;
@@ -261,6 +284,7 @@ export function parseObservatii(obsText: string | null | undefined): AutofillRes
 
   return {
     sistem_actual: mapSistemActualV2(tipIncalzire),
+    sistem_actual_v1: mapSistemActualV1(tipIncalzire),
     costLunar,
     bugetAchizitie,
     alternativa: alternativa || null,

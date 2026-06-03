@@ -155,7 +155,7 @@ export interface CrmDetail {
   situatie: string;
   t1: string;
   suprafata: number | '';
-  hasAudio: boolean;
+  hasAudio?: boolean;   // undefined = nedeterminat (eroare la listarea fișierelor) → NU suprascrie în DB
   stelutaCat: number;
   judet?: string;
   localitate?: string;
@@ -243,14 +243,20 @@ export async function fetchDetail(userId: string, idLucrare: string): Promise<Cr
     if (numMatch) suprafata = parseFloat(numMatch[1].replace(',', '.')) || '';
   }
 
-  // Audio prin AJAX fișiere
-  let hasAudio = false;
+  // Audio prin AJAX fișiere. FAIL-SAFE (paritate spreadsheet): o eroare tranzitorie la listarea
+  // fișierelor NU trebuie să marcheze fals clientul „fără audio". undefined ⇒ Prisma update sare
+  // peste câmp ⇒ păstrează marcajul existent (la create cade pe default-ul de schemă = true).
+  let hasAudio: boolean | undefined = false;
   try {
     const filesR = await fetch(CRM_BASE + '?m=files&a=lista_fisiere&suppressHeaders=1&id_lucrare=' + idSafe,
       { headers: { Cookie: cookie } });
+    if (filesR.status !== 200) throw new Error('files HTTP ' + filesR.status);
     const filesTxt = await filesR.text();
+    if (isLoginPage(filesTxt)) throw new Error('files: sesiune expirată');
     hasAudio = /\.(amr|mp3|mp4|ogg|wav|m4a|aac|opus|3gp|wma|flac)/i.test(filesTxt) || /WhatsApp\s+Audio/i.test(filesTxt);
-  } catch {}
+  } catch {
+    hasAudio = undefined;
+  }
 
   // Steluță categorie favorit
   let stelutaCat = 0;
@@ -330,6 +336,44 @@ export async function fetchUltimulReminderDeschis(userId: string, idLucrare: str
   return [dataf, ora].filter(Boolean).join(' ') + (tip ? ' · ' + tip : '') + (info ? ' · ' + info : '');
 }
 
+// Coduri tip reminder gestcom (din RemindereDialog.html).
+const TIP_REMINDER: Record<string, string> = {
+  '1': 'INTALNIRE', '2': 'DELEGATIE', '4': 'ASISTENTA', '5': 'SERVICE', '6': 'MONTAJ',
+  '8': 'TELEFON', '9': 'EMAIL', '10': 'SMS', '11': 'TRIM. OFERTA', '12': 'REDACTARE CONTRACT',
+  '13': 'INTREBARE', '14': 'RASPUNS', '16': 'IMPINGERE CONTRACT'
+};
+
+/** LISTA COMPLETĂ de remindere ale unei lucrări (pt panoul „Remindere existente" din fișă, ca în spreadsheet). */
+export async function listRemindere(userId: string, idLucrare: string): Promise<Array<{ data: string; ora: string; tip: string; info: string; status: string }>> {
+  const { cookie } = await login(userId);
+  const idSafe = String(idLucrare).replace(/[^0-9]/g, '');
+  const url = CRM_BASE + '?m=remindere&a=lista_remindere&suppressHeaders=1&tip_reminder=0&status_reminder=0&idlucrare_reminder=' + idSafe;
+  const r = await fetch(url, { headers: { Cookie: cookie } });
+  const txt = await r.text();
+  let data: any;
+  try { data = JSON.parse(txt); } catch { return []; }
+  if (!Array.isArray(data)) return [];
+  const STATUS: Record<string, string> = { '0': 'deschis', '3': 'executat' };
+  const cleanInfo = (s: string) => String(s || '')
+    .replace(/<br\s*\/?>/gi, ' ').replace(/<\/?[a-z][^>]*>/gi, '')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#0?39;|&apos;/g, "'")
+    .replace(/&abreve;/gi, 'ă').replace(/&acirc;/gi, 'â').replace(/&icirc;/gi, 'î')
+    .replace(/&scedil;/gi, 'ș').replace(/&scaron;/gi, 'ș').replace(/&tcedil;/gi, 'ț')
+    .replace(/&[a-z]+;/gi, ' ').replace(/\s+/g, ' ').trim();
+  const sortKey = (d: string) => d.split('.').reverse().join(''); // dd.mm.yyyy → yyyymmdd
+  return data.map((x: any) => {
+    const d = String(x.datareminder_reminder || '');
+    const dataf = /^\d{4}-\d{2}-\d{2}$/.test(d) ? `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}` : d;
+    return {
+      data: dataf,
+      ora: String(x.orareminder_reminder || '').slice(0, 5),
+      tip: TIP_REMINDER[String(x.tip_reminder)] || '',
+      info: cleanInfo(x.info_reminder),
+      status: STATUS[String(x.status_reminder)] || String(x.status_reminder || '')
+    };
+  }).sort((a, b) => sortKey(b.data).localeCompare(sortKey(a.data))); // newest first
+}
+
 export async function setSteluta(userId: string, idLucrare: string, cat: number): Promise<boolean> {
   const idSafe = String(idLucrare).replace(/[^0-9]/g, '');
   const url = CRM_BASE + '?m=lucrari&a=adfav&suppressHeaders=1&id_lucrare=' + idSafe + '&categorie_favorit=' + cat;
@@ -342,6 +386,19 @@ export async function setSteluta(userId: string, idLucrare: string, cat: number)
     if (r.status !== 200) return false;
     const body = await r.text();
     if (isLoginPage(body)) { await invalidateCookie(userId); continue; }
+    // READBACK (paritate spreadsheet): confirmă valoarea aplicată; loghează MISMATCH = eșec silențios.
+    try {
+      const vr = await fetch(CRM_BASE + '?m=lucrari&a=view&id_lucrare=' + idSafe, { headers: { Cookie: cookie } });
+      const vhtml = await vr.text();
+      if (!isLoginPage(vhtml)) {
+        const m = vhtml.match(new RegExp('adfav\\(' + idSafe + ',\\s*this\\)[\\s\\S]{0,1500}<\\/select>', 'i'));
+        const om = m && (m[0].match(/<option\b[^>]*value=["'](\d)["'][^>]*\bselected\b/i) || m[0].match(/<option\b[^>]*\bselected\b[^>]*value=["'](\d)["']/i));
+        if (om) {
+          const applied = parseInt(om[1], 10);
+          if (applied !== Number(cat)) { console.warn('[setSteluta] MISMATCH id=' + idSafe + ' cerut=' + cat + ' aplicat=' + applied); return false; }
+        }
+      }
+    } catch { /* readback flaky → nu penaliza; set-ul a întors 200 fără pagină de login */ }
     return true;
   }
   return false;
@@ -418,8 +475,15 @@ function parseFormFields(html: string): Record<string, string> {
 
 function normalizeObs(s: string): string {
   return String(s || '')
-    .replace(/<br\s*\/?>/gi, '\n').replace(/\r\n/g, '\n')
-    .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n');
+    .replace(/\r\n?/g, '\n')             // CRLF/CR → LF (uniformizează ÎNTÂI)
+    // gestcom face nl2br pe Observatii: stochează `<br>` PESTE newline-ul existent. Dacă tratam
+    // `<br>`→`\n` independent de `\r\n`→`\n`, fiecare linie căpăta DUBLU newline la fiecare push
+    // (spațiere care se acumula). Tratăm `<br>` lipit de un newline ca UN SINGUR break.
+    .replace(/<br\s*\/?>\n/gi, '\n')     // <br>\n  → \n
+    .replace(/\n<br\s*\/?>/gi, '\n')     // \n<br>  → \n
+    .replace(/<br\s*\/?>/gi, '\n')       // <br> rămas singur → \n
+    .replace(/[ \t]+\n/g, '\n')          // taie spațiile dinaintea unui newline
+    .replace(/\n{3,}/g, '\n\n');         // maxim o linie goală între paragrafe
 }
 
 /**

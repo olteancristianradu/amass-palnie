@@ -13,7 +13,13 @@ export async function getScope(): Promise<Scope | null> {
   const session = await getServerSession(authOptions);
   if (!session?.user) return null;
   const userId = (session.user as any).id as string;
-  const role = ((session.user as any).role as string) || 'agent';
+  if (!userId) return null;
+  // SURSA DE ADEVĂR pentru rol + stare cont = DB, NU token-ul JWT (care poate fi vechi până la 30 zile).
+  // Astfel: „Îngheață cont" (active=false) și schimbarea de rol devin EFECTIVE IMEDIAT pe următorul request,
+  // nu abia la următorul login. Cont șters/înghețat → fără scope → blocat instant.
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { role: true, active: true } });
+  if (!u || u.active === false) return null;
+  const role = u.role || 'agent';
   const isAdmin = role === 'admin';
   // manager „efectiv" = admin SAU rol manager SAU are cel puțin un raport direct în arbore
   let hasReports = false;

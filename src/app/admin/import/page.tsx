@@ -24,10 +24,10 @@ export default function ImportPage() {
     const body = Array.isArray(parsed) ? { clients: parsed } : parsed;
     try {
       const r = await fetch('/api/admin/import-date', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      const j = await r.json();
-      if (r.status === 403) { setMsg('❌ Doar admin/manager poate importa.'); }
+      const j = await r.json().catch(() => ({} as any));
+      if (r.status === 401) { setMsg('❌ Sesiune expirată — reautentifică-te și încearcă din nou.'); }
       else if (j.ok) { setResult(j); setMsg(`✅ Gata: ${j.updated} actualizați, ${j.notFound} negăsiți, ${j.skipped} săriți (din ${j.total}).`); }
-      else { setMsg('❌ ' + (j.error || 'Eroare')); }
+      else { setMsg('❌ ' + (j.error || `Eroare (${r.status})`)); }
     } catch (e: any) { setMsg('❌ ' + e.message); }
     setBusy(false);
   }
