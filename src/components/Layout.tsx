@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { signOut, useSession } from 'next-auth/react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useT } from '@/lib/i18n';
 import { Icon } from './Icon';
 import { HelpPanel, Tour } from './Help';
@@ -39,6 +39,7 @@ export function Layout({ children, title, topbar, contentMod }: {
 }) {
   const { data: session } = useSession();
   const pathname = usePathname() || '';
+  const router = useRouter();
   const role = ((session?.user as any)?.role as string) || 'agent';
   const { t } = useT();
   const [collapsed, setCollapsed] = useState(false);
@@ -52,6 +53,9 @@ export function Layout({ children, title, topbar, contentMod }: {
   // Tur ghidat AUTO la prima vizită (o singură dată). „Ajutor" îl reia oricând.
   useEffect(() => { try { if (localStorage.getItem('amass.onboarded') !== '1') { const t = setTimeout(() => setTourOpen(true), 800); return () => clearTimeout(t); } } catch {} }, []);
   const endTour = () => { setTourOpen(false); try { localStorage.setItem('amass.onboarded', '1'); } catch {} };
+  // Navigare pt turul ghidat CROSS-RUTĂ. Pt pâlnie, forțăm vizualizarea Tabel ÎNAINTE de push,
+  // ca pașii pe tabel (.tbl-info, .t1cell) să-și găsească ținta la montarea paginii.
+  const tourNav = (r: string) => { if (r === '/palnie') { try { localStorage.setItem('amass-palnie-view', 'tabel'); } catch {} } router.push(r); };
   const toggleCollapsed = () => setCollapsed(c => { const n = !c; try { localStorage.setItem('amass-nav', n ? '0' : '1'); } catch {} return n; });
 
   const name = session?.user?.name || 'Agent';
@@ -120,14 +124,15 @@ export function Layout({ children, title, topbar, contentMod }: {
       <main className="main">
         <header className="topbar">
           <button className="topbar__menu btn btn-ghost btn-icon" onClick={() => setNavOpen(true)} aria-label="Meniu"><Icon name="menu" size={20} /></button>
-          {pageTitle && <h1 className="topbar__title">{pageTitle}</h1>}
+          {/* Titlu în topbar DOAR pentru Pâlnie (celelalte pagini au propriul titlu → evităm dublarea). */}
+          {pageTitle && pathname === '/palnie' && <h1 className="topbar__title">{pageTitle}</h1>}
           {topbar}
           <button className="btn btn-ghost btn-sm help-btn" style={{ marginLeft: 'auto' }} onClick={() => setHelpOpen(true)} title="Ajutor: ghid și explicații pentru fiecare buton"><Icon name="help" size={17} /><span className="help-btn__lbl">Ajutor</span></button>
         </header>
         <div className={'content' + (contentMod ? ' ' + contentMod : '')}>{children}</div>
       </main>
       <HelpPanel open={helpOpen} onClose={() => setHelpOpen(false)} onStartTour={() => { setHelpOpen(false); setTourOpen(true); }} />
-      <Tour run={tourOpen} onClose={endTour} />
+      <Tour run={tourOpen} onClose={endTour} nav={tourNav} />
     </div>
   );
 }

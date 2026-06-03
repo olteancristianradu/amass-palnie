@@ -36,6 +36,8 @@ interface Client {
   obsSituatie?: string | null;
   nextStepText?: string | null;
   nextStepDue?: string | null;
+  inCRM?: boolean | null;
+  telefon?: string | null;
   updatedAt?: string | null;
   owner?: { id: string; name: string | null; email: string } | null;
 }
@@ -79,6 +81,7 @@ interface FilterState {
   nevoia: string;       // valoare NEVOI sau ''
   steluta: string;      // '' sau '0'..'4'
   audio: 'all' | 'yes' | 'no';
+  inCRM: 'all' | 'yes' | 'no';   // Înregistrare CRM: Toate / În CRM / Fără CRM (null tratat ca în CRM)
   mpMin: string;
   mpMax: string;
   dateFrom: string;     // yyyy-mm-dd — Perioadă intrare (pe dataIntrare)
@@ -86,7 +89,10 @@ interface FilterState {
   stageFrom: string;    // yyyy-mm-dd — Perioadă schimbare stadiu (pe updatedAt)
   stageTo: string;      // yyyy-mm-dd
 }
-const DEFAULT_FILTERS: FilterState = { stage: '', stadiu: '', nevoia: '', steluta: '', audio: 'all', mpMin: '', mpMax: '', dateFrom: '', dateTo: '', stageFrom: '', stageTo: '' };
+const DEFAULT_FILTERS: FilterState = { stage: '', stadiu: '', nevoia: '', steluta: '', audio: 'all', inCRM: 'all', mpMin: '', mpMax: '', dateFrom: '', dateTo: '', stageFrom: '', stageTo: '' };
+
+// Înregistrare CRM: null sau true = client real (în CRM); doar false = creat manual în webapp.
+const isInCRM = (c: { inCRM?: boolean | null }) => c.inCRM !== false;
 
 // Dată cu NUME DE LUNĂ (ex. „8 mai 2026"). Acceptă ISO (din DateTime) sau dd.mm.yyyy (text T1 din CRM).
 function fmtDateRO(v: string | null | undefined): string {
@@ -203,6 +209,8 @@ export default function PalniePage() {
   const [view, setView] = useState<'cards' | 'tabel' | 'kanban'>('cards');
   // Modal de motiv la închidere (Contractat/Anulat) — API-ul cere closureReason; fără el PATCH-ul dă 400.
   const [closeModal, setCloseModal] = useState<{ id: string; stadiu: 'Contractat' | 'Anulat' } | null>(null);
+  // Modal „+ Client nou" (creare manuală, inCRM=false) — deschis din topbar.
+  const [newModal, setNewModal] = useState(false);
   useEffect(() => { const v = localStorage.getItem('amass-palnie-view'); if (v === 'tabel' || v === 'cards' || v === 'kanban') setView(v); }, []);
   const switchView = (v: 'cards' | 'tabel' | 'kanban') => { setView(v); try { localStorage.setItem('amass-palnie-view', v); } catch {} };
 
@@ -274,6 +282,29 @@ export default function PalniePage() {
       else { setMsg('❌ ' + j.error); }
     } catch (e: any) { setMsg('❌ ' + e.message); }
     setSync(null);
+  }
+
+  // Creare client manual (inCRM=false) → POST /api/clienti. La succes: reîncarcă pâlnia și
+  // navighează la fișa noului client (paritate cu fluxul „vezi fișa").
+  async function createClient(payload: { nume: string; localitate: string; judet: string; telefon: string; idLucrare: string; suprafata: string }) {
+    setMsg('⏳ Creez clientul…');
+    try {
+      const r = await fetch('/api/clienti', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const j = await r.json().catch(() => ({} as any));
+      if (r.ok && j.ok) {
+        setMsg('✅ Client creat (⚠ fără înregistrare CRM)');
+        setNewModal(false);
+        await load();
+        if (j.id) router.push('/strategie/' + j.id);
+      } else {
+        setMsg('❌ ' + (j.error || `Eroare server (${r.status})`));
+      }
+    } catch (e: any) {
+      setMsg('❌ ' + (e?.message || 'Nu s-a putut crea clientul'));
+    }
   }
 
   async function setSteluta(clientId: string, idLucrare: string, cat: number) {
@@ -353,6 +384,9 @@ export default function PalniePage() {
       // Audio
       if (filters.audio === 'yes' && !c.hasAudio) return false;
       if (filters.audio === 'no' && c.hasAudio) return false;
+      // Înregistrare CRM (null tratat ca „în CRM")
+      if (filters.inCRM === 'yes' && !isInCRM(c)) return false;
+      if (filters.inCRM === 'no' && isInCRM(c)) return false;
       // Suprafață min/max
       const supr = mp(c);
       if (filters.mpMin !== '') { if (supr == null || supr < Number(filters.mpMin)) return false; }
@@ -398,6 +432,7 @@ export default function PalniePage() {
   const activeFilterCount = (
     (filters.stage ? 1 : 0) + (filters.stadiu ? 1 : 0) + (filters.nevoia ? 1 : 0) +
     (filters.steluta !== '' ? 1 : 0) + (filters.audio !== 'all' ? 1 : 0) +
+    (filters.inCRM !== 'all' ? 1 : 0) +
     (filters.mpMin !== '' || filters.mpMax !== '' ? 1 : 0) +
     (filters.dateFrom || filters.dateTo ? 1 : 0) +
     (filters.stageFrom || filters.stageTo ? 1 : 0)
@@ -411,6 +446,7 @@ export default function PalniePage() {
     filters.nevoia ? { k: 'nevoia', label: filters.nevoia, clear: () => setF('nevoia', '') } : null,
     filters.steluta !== '' ? { k: 'steluta', label: 'Prio: ' + (STELUTA_OPTIONS[Number(filters.steluta)] || filters.steluta), clear: () => setF('steluta', '') } : null,
     filters.audio !== 'all' ? { k: 'audio', label: filters.audio === 'yes' ? 'Cu audio' : 'Fără audio', clear: () => setF('audio', 'all') } : null,
+    filters.inCRM !== 'all' ? { k: 'inCRM', label: filters.inCRM === 'yes' ? 'În CRM' : 'Fără CRM', clear: () => setF('inCRM', 'all') } : null,
     (filters.mpMin !== '' || filters.mpMax !== '') ? { k: 'mp', label: `mp ${filters.mpMin || '0'}–${filters.mpMax || '∞'}`, clear: () => setFilters(p => ({ ...p, mpMin: '', mpMax: '' })) } : null,
     (filters.dateFrom || filters.dateTo) ? { k: 'date', label: `Intrare ${filters.dateFrom || '…'}→${filters.dateTo || '…'}`, clear: () => setFilters(p => ({ ...p, dateFrom: '', dateTo: '' })) } : null,
     (filters.stageFrom || filters.stageTo) ? { k: 'stage-date', label: `Stadiu ${filters.stageFrom || '…'}→${filters.stageTo || '…'}`, clear: () => setFilters(p => ({ ...p, stageFrom: '', stageTo: '' })) } : null,
@@ -435,6 +471,9 @@ export default function PalniePage() {
           ]} />
       </div>
       <div className="topbar__sp" />
+      <button className="btn btn-pine btn-sm" onClick={() => setNewModal(true)} title={t('Adaugă un client manual (fără înregistrare CRM)')}>
+        <Icon name="plus" size={14} />{t('Client nou')}
+      </button>
       <SyncBadge last={lastSync} syncing={!!sync} auto={autoSync} />
       <div className="topbar__search">
         <Icon name="search" size={15} />
@@ -487,6 +526,9 @@ export default function PalniePage() {
           <FilterGroup label={t('Audio')} value={filters.audio}
             onChange={(k) => setF('audio', k as FilterState['audio'])}
             options={[['all', t('Toate')], ['yes', t('Cu audio')], ['no', t('Fără audio')]]} />
+          <FilterGroup label={t('Înregistrare CRM')} value={filters.inCRM}
+            onChange={(k) => setF('inCRM', k as FilterState['inCRM'])}
+            options={[['all', t('Toate')], ['yes', t('În CRM')], ['no', t('Fără CRM')]]} />
           {isManager && (
             <FilterGroup label={t('Agent (echipă)')} value={ownerFilter}
               onChange={setOwnerFilter}
@@ -730,6 +772,10 @@ export default function PalniePage() {
           onClose={() => setCloseModal(null)}
           onConfirm={(detail) => { closeWithReason(closeModal.id, closeModal.stadiu, detail); setCloseModal(null); }} />
       )}
+
+      {newModal && (
+        <NewClientModal onClose={() => setNewModal(false)} onCreate={createClient} />
+      )}
     </Layout>
   );
 }
@@ -774,4 +820,69 @@ function CloseReasonModal({ stadiu, onConfirm, onClose }: { stadiu: 'Contractat'
 function todayRO() {
   const d = new Date();
   return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
+}
+
+// Modal „+ Client nou" — creare manuală a unui client (inCRM=false → ⚠ la nume). Doar Nume e
+// obligatoriu; restul sunt opționale. idLucrare gol → backend-ul pune un placeholder unic ('MAN-…').
+function NewClientModal({ onCreate, onClose }: {
+  onCreate: (p: { nume: string; localitate: string; judet: string; telefon: string; idLucrare: string; suprafata: string }) => void;
+  onClose: () => void;
+}) {
+  const [nume, setNume] = useState('');
+  const [localitate, setLocalitate] = useState('');
+  const [judet, setJudet] = useState('');
+  const [telefon, setTelefon] = useState('');
+  const [idLucrare, setIdLucrare] = useState('');
+  const [suprafata, setSuprafata] = useState('');
+  const [saving, setSaving] = useState(false);
+  const blocked = !nume.trim() || saving;
+  const submit = () => {
+    if (blocked) return;
+    setSaving(true);
+    onCreate({ nume: nume.trim(), localitate, judet, telefon, idLucrare, suprafata });
+  };
+  return (
+    <div className="fixed inset-0 bg-[rgba(20,32,28,.5)] backdrop-blur-sm flex items-center justify-center z-50 p-6" onClick={onClose}>
+      <div className="card !shadow-[var(--shadow-lg)] max-w-sm w-full p-6 rise" onClick={e => e.stopPropagation()}>
+        <h2 className="text-lg mb-1">+ Client nou</h2>
+        <p className="text-[12px] text-[var(--fg-soft)] mb-4">Creat manual în webapp — apare cu ⚠ (fără înregistrare CRM) până la sincronizare.</p>
+        <div className="space-y-3 mb-4">
+          <label className="block">
+            <span className="label">Nume *</span>
+            <input className="field w-full" autoFocus value={nume} onChange={e => setNume(e.target.value)}
+              placeholder="Numele clientului" onKeyDown={e => { if (e.key === 'Enter') submit(); }} />
+          </label>
+          <div className="flex gap-2">
+            <label className="block flex-1">
+              <span className="label">Localitate</span>
+              <input className="field w-full" value={localitate} onChange={e => setLocalitate(e.target.value)} placeholder="Oraș/comună" />
+            </label>
+            <label className="block flex-1">
+              <span className="label">Județ</span>
+              <input className="field w-full" value={judet} onChange={e => setJudet(e.target.value)} placeholder="Județ" />
+            </label>
+          </div>
+          <label className="block">
+            <span className="label">Telefon</span>
+            <input className="field w-full" value={telefon} onChange={e => setTelefon(e.target.value)} placeholder="Telefon" />
+          </label>
+          <div className="flex gap-2">
+            <label className="block flex-1">
+              <span className="label">idLucrare (opțional)</span>
+              <input className="field w-full" value={idLucrare} onChange={e => setIdLucrare(e.target.value)} placeholder="lasă gol → automat" />
+            </label>
+            <label className="block flex-1">
+              <span className="label">Suprafață (mp)</span>
+              <input className="field w-full" type="number" min={0} inputMode="numeric"
+                value={suprafata} onChange={e => setSuprafata(e.target.value)} placeholder="mp" />
+            </label>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="btn btn-secondary">Anulează</button>
+          <button onClick={submit} disabled={blocked} className="btn btn-pine">Creează</button>
+        </div>
+      </div>
+    </div>
+  );
 }

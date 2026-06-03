@@ -34,22 +34,21 @@ export default function ImportPage() {
 
   return (
     <Layout>
-      <h1 className="text-[24px] mb-1">Import date din spreadsheet</h1>
-      <p className="text-[13px] text-[var(--fg-soft)] mb-5 max-w-2xl">
+      <p className="text-[13px] text-[var(--fg-soft)] mb-5 max-w-2xl rise">
         Aduce în contul tău <b>strategiile</b>, <b>statusul</b> și <b>etapele</b> pe care le-ai făcut deja în spreadsheet.
         Se potrivește pe <b>id_lucrare</b> și actualizează DOAR clienții care există deja (importă întâi clienții din CRM cu „Sync"). Nu pierzi date — blob-ul de strategie se completează, nu se șterge.
       </p>
 
-      <div className="card p-5 max-w-2xl space-y-4 rise">
+      <div className="card card--pad max-w-2xl space-y-4 rise rise-1">
         <div>
-          <label className="block text-[12px] font-semibold text-[var(--text-secondary)] mb-1">1. Încarcă fișierul exportat din spreadsheet (.json)</label>
+          <label className="label block mb-1.5">1. Încarcă fișierul exportat din spreadsheet (.json)</label>
           <input type="file" accept=".json,application/json" onChange={onFile} className="block text-[13px]" />
         </div>
         <div>
-          <label className="block text-[12px] font-semibold text-[var(--text-secondary)] mb-1">…sau lipește JSON-ul aici</label>
+          <label className="label block mb-1.5">…sau lipește JSON-ul aici</label>
           <textarea value={raw} onChange={e => setRaw(e.target.value)} rows={8}
             placeholder='{"clients":[{"idLucrare":"12345","strategieV2":{...},"stadiu":"Contractat","nevoia":"Nevoie Acoperita"}]}'
-            className="field w-full font-mono text-[11px]" />
+            className="input w-full font-mono text-[11px]" />
         </div>
         <div className="flex items-center gap-3">
           <button onClick={doImport} disabled={busy || !raw.trim()} className="btn btn-primary">{busy ? '⏳ Import…' : 'Importă în contul meu'}</button>

@@ -33,7 +33,13 @@ export async function PATCH(req: NextRequest) {
   if (scope.role !== 'admin') return NextResponse.json({ ok: false, error: 'Doar admin' }, { status: 403 });
 
   const { variant, titlu, zones } = await req.json();
-  const v = validateTemplate({ variant, titlu, zones });
+  if (variant !== 'V1' && variant !== 'V2')
+    return NextResponse.json({ ok: false, error: 'variant trebuie V1 sau V2' }, { status: 400 });
+
+  // Protecție anti-orfanizare: încarcă template-ul curent și respinge dacă vreo cheie existentă dispare
+  // din noul payload (redenumire/ștergere de câmp existent = pierdere de date la clienți).
+  const prev = await loadTemplate(variant);
+  const v = validateTemplate({ variant, titlu, zones }, prev);
   if (!v.ok) return NextResponse.json({ ok: false, error: v.error }, { status: 400 });
 
   const seed = SEEDS[variant as 'V1' | 'V2'];

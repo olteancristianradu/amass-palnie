@@ -86,6 +86,7 @@ model Client {
   dataIntrare   DateTime?
   t1            String?
   hasAudio      Boolean   @default(true)
+  inCRM         Boolean?  @default(true)   // false = client creat manual în webapp (nu există în gestcom) → ⚠ la nume. Nullable → citire nu poate eșua.
   nevoia        String?
   schitaStatus  String?
   preOfertat    String?

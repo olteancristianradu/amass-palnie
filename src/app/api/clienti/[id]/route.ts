@@ -31,6 +31,38 @@ function mergeStrategieBlob(existing: string | null, incoming: any): string {
   return JSON.stringify(merged);
 }
 
+// ── MIGRARE strategie V1 ↔ V2 când se schimbă categoria clientului ──
+// V1 (cat 1, construcție) și V2 (cat 2+) au chei de blob parțial diferite (vezi fisa-template-seed.ts).
+// Cheile COMUNE (păstrate identic la migrare): suprafata, bransament, alternativa, motiv_principal,
+//   tip_plata, interval_buget, nivel_bani, tipologie, preventie, obs_*, strategie_nevoi etc.
+// Cheile cu ALIAS diferit între variante (se mapează 1:1):
+//   V1.ca_sistem      ↔ V2.sistem_actual
+//   V1.ca_cost_lunar  ↔ V2.suma
+const ALIAS_V1_TO_V2: Record<string, string> = {
+  ca_sistem: 'sistem_actual',
+  ca_cost_lunar: 'suma',
+};
+const ALIAS_V2_TO_V1: Record<string, string> = Object.fromEntries(
+  Object.entries(ALIAS_V1_TO_V2).map(([v1, v2]) => [v2, v1])
+);
+
+// Mapează un blob dintr-o variantă în cealaltă: cheile comune trec neatinse, cheile cu alias sunt
+// redenumite. Cheile pur-calc (`_c_*`) nu sunt stocate, deci nu apar aici. Helper de mapare aliasuri.
+function mapStrategieAliases(blob: Record<string, any>, aliasMap: Record<string, string>): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const [k, v] of Object.entries(blob)) {
+    const target = aliasMap[k] ?? k; // alias dacă există, altfel cheie comună (păstrată)
+    out[target] = v;
+  }
+  return out;
+}
+
+function parseBlob(s: string | null): Record<string, any> {
+  if (!s) return {};
+  try { const b = JSON.parse(s); if (b && typeof b === 'object' && !Array.isArray(b)) return b; } catch {}
+  return {};
+}
+
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const scope = await getScope();
   if (!scope) return NextResponse.json({ ok: false }, { status: 401 });
@@ -57,6 +89,39 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (updates.strategieV1 !== undefined) data.strategieV1 = JSON.stringify(updates.strategieV1);
   if (updates.strategieV2 !== undefined) data.strategieV2 = JSON.stringify(updates.strategieV2);
 
+  // `categorie` (Int) și `isDT` (Boolean) — permise la update, cu coerciție de tip (nu sunt în
+  // SIMPLE_FIELDS fiindcă acolo valorile se scriu brute). NOTĂ: categoria poate să NU fie încă
+  // editabilă în UI; migrarea de mai jos e gata pentru momentul în care va deveni editabilă.
+  if (updates.categorie !== undefined && updates.categorie !== null) data.categorie = Number(updates.categorie);
+  if (updates.isDT !== undefined) data.isDT = Boolean(updates.isDT);
+
+  // ── MIGRARE blob V1 ↔ V2 la schimbarea categoriei (1 → ≥2 sau ≥2 → 1) ──
+  // V1 = categoria 1; V2 = categoria ≥2. Migrăm DOAR la traversarea acestei granițe.
+  // NU ștergem blob-ul vechi (rămâne ca backup); creăm doar blob-ul lipsă în varianta-țintă.
+  if (data.categorie !== undefined) {
+    const wasV1 = before.categorie === 1;
+    const willV1 = data.categorie === 1;
+    if (wasV1 && !willV1) {
+      // 1 → V2: dacă există strategieV1 și NU există strategieV2, generează strategieV2 din V1.
+      const v1 = parseBlob(before.strategieV1);
+      const hasV1 = Object.keys(v1).length > 0;
+      const v2Exists = Object.keys(parseBlob(before.strategieV2)).length > 0
+        || (data.strategieV2 !== undefined && Object.keys(parseBlob(data.strategieV2)).length > 0);
+      if (hasV1 && !v2Exists && data.strategieV2 === undefined) {
+        data.strategieV2 = JSON.stringify(mapStrategieAliases(v1, ALIAS_V1_TO_V2));
+      }
+    } else if (!wasV1 && willV1) {
+      // ≥2 → 1: dacă există strategieV2 și NU există strategieV1, generează strategieV1 din V2.
+      const v2 = parseBlob(before.strategieV2);
+      const hasV2 = Object.keys(v2).length > 0;
+      const v1Exists = Object.keys(parseBlob(before.strategieV1)).length > 0
+        || (data.strategieV1 !== undefined && Object.keys(parseBlob(data.strategieV1)).length > 0);
+      if (hasV2 && !v1Exists && data.strategieV1 === undefined) {
+        data.strategieV1 = JSON.stringify(mapStrategieAliases(v2, ALIAS_V2_TO_V1));
+      }
+    }
+  }
+
   // VALIDARE DE TRANZIȚIE (blocant la avansare) — dacă patch-ul schimbă stadiul derivat.
   if (STAGE_FIELDS.some(f => updates[f] !== undefined)) {
     const merged: any = { ...before, ...data };
@@ -74,6 +139,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         dataSnapshot: JSON.stringify(updated)
       }
     });
+    // CAP anti-creștere nelimitată: păstrează DOAR ultimele 50 de snapshoturi per client.
+    // Ia ID-urile celor mai vechi (peste primele 50, ordonate desc după createdAt) și le șterge.
+    const old = await prisma.arhivaEntry.findMany({
+      where: { clientId: params.id },
+      orderBy: { createdAt: 'desc' },
+      skip: 50,
+      select: { id: true }
+    });
+    if (old.length > 0) {
+      await prisma.arhivaEntry.deleteMany({ where: { id: { in: old.map(o => o.id) } } });
+    }
   }
   await auditLog({
     userId, func: 'clienti/update', action: 'UPDATE',

@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Layout } from '@/components/Layout';
+import { Segmented } from '@/components/indicators';
 
 interface U { id: string; email: string; name: string | null; role: string; active?: boolean; managerId: string | null; position?: string | null; department?: { id: string; name: string } | null; createdAt: string; _count: { clienti: number; reports: number }; crmCreds: { crmUser: string } | null; }
 interface Dept { id: string; name: string; createdAt: string; _count: { users: number }; }
@@ -263,34 +264,35 @@ export default function UsersPage() {
     if (!reassignFor || !reassignTo) return;
     const r = await fetch('/api/users', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: reassignFor.id, reassignTo }) });
     const j = await r.json();
-    setMsg(j.ok ? `✅ Mutați ${j.moved} clienți${j.skipped ? ` (${j.skipped} săriți — existau deja la destinație)` : ''}. (doar în aplicație, nu în CRM)` : '❌ ' + j.error);
+    const warn = j.ok && j.crmMismatch
+      ? ` ⚠ Conturi CRM diferite (${j.srcCrmUser ?? '—'} → ${j.tgtCrmUser ?? '—'}) — sincronizarea/push-ul în CRM pot eșua sau nimeri greșit.`
+      : '';
+    setMsg(j.ok ? `✅ Mutați ${j.moved} clienți${j.skipped ? ` (${j.skipped} săriți — existau deja la destinație)` : ''}. (doar în aplicație, nu în CRM)${warn}` : '❌ ' + j.error);
     setReassignFor(null); setReassignTo('');
     await load();
   }
 
-  if (forbidden) return <Layout><div className="card p-10 text-center text-[var(--fg-soft)]">Doar administratorul poate gestiona conturile.</div></Layout>;
+  if (forbidden) return <Layout><div className="card card--pad text-center text-[var(--fg-soft)]" style={{ padding: 40 }}>Doar administratorul poate gestiona conturile.</div></Layout>;
 
   const tree = buildTree(users);
 
   return (
     <Layout>
-      <h1 className="text-[26px] mb-1 rise">Echipă & roluri</h1>
       <p className="text-[var(--fg-soft)] text-[13px] mb-5 rise">
         Vizibilitatea e <b>ierarhică</b>: fiecare vede pâlnia lui + a <b>tuturor celor de sub el</b> în organigramă (recursiv, nu lateral). Setează <b>managerul</b> fiecărui cont pentru a construi arborele. <b>Admin</b> vede tot.
       </p>
 
       <div className="flex items-center gap-2 mb-3 rise">
-        <span className="kpi-label">Vizualizare ierarhie:</span>
-        <div className="inline-flex rounded-[var(--r-sm)] border border-[var(--border)] overflow-hidden">
-          <button type="button" onClick={() => setView('arbore')}
-            className={'px-3 py-1 text-[12px] font-semibold transition-colors ' + (view === 'arbore' ? 'bg-[var(--accent)] text-white' : 'text-[var(--fg-soft)] hover:text-[var(--text)]')}>
-            Arbore
-          </button>
-          <button type="button" onClick={() => setView('organigrama')}
-            className={'px-3 py-1 text-[12px] font-semibold transition-colors border-l border-[var(--border)] ' + (view === 'organigrama' ? 'bg-[var(--accent)] text-white' : 'text-[var(--fg-soft)] hover:text-[var(--text)]')}>
-            Organigramă
-          </button>
-        </div>
+        <span className="label">Vizualizare ierarhie</span>
+        <Segmented
+          size="sm"
+          value={view}
+          onChange={v => setView(v as 'arbore' | 'organigrama')}
+          options={[
+            { value: 'arbore', label: 'Arbore' },
+            { value: 'organigrama', label: 'Organigramă' },
+          ]}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -360,7 +362,7 @@ export default function UsersPage() {
 
         <div className="space-y-4 self-start">
         {/* CARD Departamente — grupare gestionată de admin. NU înlocuiește rolurile de permisiuni. */}
-        <div className="card p-5 rise rise-2 space-y-3">
+        <div className="card card--pad rise rise-2 space-y-3">
           <div className="panel-head"><span className="dot" />Departamente</div>
           <p className="text-[11px] text-[var(--fg-soft)] -mt-1">Grupare a echipei (ex. „Vânzări", „Logistică"). Nu afectează rolul de permisiuni sau vizibilitatea — alocarea pe user e în tabelul „Departament".</p>
           <form onSubmit={createDept} className="flex gap-2">
@@ -399,12 +401,12 @@ export default function UsersPage() {
           )}
         </div>
 
-        <form onSubmit={create} className="card p-5 rise rise-2 space-y-3">
+        <form onSubmit={create} className="card card--pad rise rise-2 space-y-3">
           <div className="panel-head"><span className="dot" />Adaugă cont</div>
-          <div><label className="kpi-label block mb-1">Nume</label><input className="field" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} /></div>
-          <div><label className="kpi-label block mb-1">Email firmă</label><input className="field" type="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} required /></div>
-          <div><label className="kpi-label block mb-1">Parolă (min 6)</label><input className="field" type="text" value={f.password} onChange={e => setF({ ...f, password: e.target.value })} required /></div>
-          <div><label className="kpi-label block mb-1">Rol</label>
+          <div><label className="label block mb-1">Nume</label><input className="field" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} /></div>
+          <div><label className="label block mb-1">Email firmă</label><input className="field" type="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} required /></div>
+          <div><label className="label block mb-1">Parolă (min 6)</label><input className="field" type="text" value={f.password} onChange={e => setF({ ...f, password: e.target.value })} required /></div>
+          <div><label className="label block mb-1">Rol</label>
             <select className="field" value={f.role} onChange={e => setF({ ...f, role: e.target.value })}>
               <option value="agent">Agent</option>
               <option value="manager">Manager</option>
@@ -420,17 +422,31 @@ export default function UsersPage() {
 
       {/* MODAL reasignare clienți — DOAR în aplicație, nu în CRM */}
       {reassignFor && (
-        <div className="fixed inset-0 bg-[rgba(20,32,28,.5)] backdrop-blur-sm flex items-center justify-center z-50 p-6" onClick={() => setReassignFor(null)}>
-          <div className="card !shadow-[var(--shadow-lg)] max-w-md w-full p-6 rise" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50 p-6" style={{ background: 'var(--overlay)' }} onClick={() => setReassignFor(null)}>
+          <div className="card card--pad !shadow-[var(--shadow-lg)] max-w-md w-full rise" onClick={e => e.stopPropagation()}>
             <h2 className="text-[17px] mb-1">Reasignează clienții lui {reassignFor.name || reassignFor.email}</h2>
             <p className="text-[12px] text-[var(--fg-soft)] mb-3">
               Mută cei <b>{reassignFor._count.clienti}</b> clienți către alt agent. <b className="text-[var(--text)]">Doar în aplicație — NU în gestcom CRM.</b> Clienții al căror <i>id_lucrare</i> există deja la destinație (duplicate) sunt săriți.
             </p>
-            <label className="kpi-label block mb-1">Mută către</label>
+            <label className="label block mb-1">Mută către</label>
             <select className="field w-full mb-4" value={reassignTo} onChange={e => setReassignTo(e.target.value)}>
               <option value="">— alege agentul —</option>
               {users.filter(o => o.id !== reassignFor.id).map(o => <option key={o.id} value={o.id}>{o.name || o.email} · {o.role} ({o._count.clienti} clienți)</option>)}
             </select>
+            {(() => {
+              if (!reassignTo) return null;
+              const dest = users.find(o => o.id === reassignTo);
+              if (!dest) return null;
+              const srcCrm = reassignFor.crmCreds?.crmUser ?? null;
+              const dstCrm = dest.crmCreds?.crmUser ?? null;
+              if (srcCrm === dstCrm) return null;
+              return (
+                <div className="toast toast-err mb-4 !text-left" style={{ whiteSpace: 'normal' }}>
+                  ⚠ {reassignFor.name || reassignFor.email} și {dest.name || dest.email} au conturi CRM diferite ({srcCrm ?? '— lipsă'} vs {dstCrm ?? '— lipsă'}).
+                  După reasignare, sincronizarea și push-ul în CRM pentru acești clienți pot eșua sau nimeri greșit, fiindcă lucrările rămân în contul gestcom al lui {reassignFor.name || reassignFor.email}. Continui?
+                </div>
+              );
+            })()}
             <div className="flex justify-end gap-2">
               <button onClick={() => setReassignFor(null)} className="btn btn-secondary">Anulează</button>
               <button onClick={doReassign} disabled={!reassignTo} className="btn btn-primary">Mută clienții</button>

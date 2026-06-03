@@ -3,34 +3,43 @@ import { useState, useEffect, useLayoutEffect } from 'react';
 import { Icon } from './Icon';
 
 // ── TUR GHIDAT (coachmarks cu spotlight) — port din handoff help.jsx ──
-// Adaptat pt Next: evidențiază elementele de pe pagina CURENTĂ; pașii cu țintă lipsă → tooltip centrat.
-const TOUR_STEPS: Array<{ sel: string; title: string; body: string[]; place?: string }> = [
+// Adaptat pt Next: turul funcționează CROSS-RUTĂ. Pașii cu `route` declanșează navigarea (nav)
+// înainte de măsurare; pașii fără țintă → tooltip centrat.
+const TOUR_STEPS: Array<{ sel: string; title: string; body: string[]; place?: string; route?: string }> = [
   { sel: '.sidebar__nav', title: 'Meniul principal', body: ['Dashboard = rapoarte și cifre cheie', 'Pâlnie clienți = lista ta de lucru', 'Numărul = câți clienți ai în pâlnie'], place: 'right' },
-  { sel: '.topbar__switch', title: '3 moduri de a vedea pâlnia', body: ['Carduri = răsfoire rapidă cu acțiuni', 'Tabel = totul dens, ca în Excel', 'Kanban = tragi clienții între stadii (drag & drop)'], place: 'bottom' },
-  { sel: '.topbar__search', title: 'Caută orice client', body: ['Scrie numele, orașul sau ID-ul', 'Lista se filtrează instant', 'Funcționează în toate vizualizările'], place: 'bottom' },
-  { sel: '.filter-toggle', title: 'Filtre', body: ['Filtrează după stadiu, prioritate, vârstă, agent, CRM sau perioadă', 'Filtrele rămân active în Carduri, Tabel și Kanban', 'Apasă „Curăță" ca să le resetezi'], place: 'bottom' },
-  { sel: '.tbl-info', title: 'Legenda simbolurilor (ⓘ)', body: ['Explicațiile stau ascunse sub butonul info', 'Punct albastru = T1 completat automat', '⚠ la nume = client fără CRM'], place: 'bottom' },
-  { sel: '.t1cell', title: 'T1 — automat dar editabil', body: ['Se completează singur din Data intrare', 'Dacă scrii tu o dată → devine „manual"', 'Manual NU se mai suprascrie niciodată'], place: 'bottom' },
+  { sel: '.topbar__switch', title: '3 moduri de a vedea pâlnia', body: ['Carduri = răsfoire rapidă cu acțiuni', 'Tabel = totul dens, ca în Excel', 'Kanban = tragi clienții între stadii (drag & drop)'], place: 'bottom', route: '/palnie' },
+  { sel: '.topbar__search', title: 'Caută orice client', body: ['Scrie numele, orașul sau ID-ul', 'Lista se filtrează instant', 'Funcționează în toate vizualizările'], place: 'bottom', route: '/palnie' },
+  { sel: '.filter-toggle', title: 'Filtre', body: ['Filtrează după stadiu, prioritate, vârstă, agent, CRM sau perioadă', 'Filtrele rămân active în Carduri, Tabel și Kanban', 'Apasă „Curăță" ca să le resetezi'], place: 'bottom', route: '/palnie' },
+  { sel: '.tbl-info', title: 'Legenda simbolurilor (ⓘ)', body: ['Explicațiile stau ascunse sub butonul info', 'Punct albastru = T1 completat automat', '⚠ la nume = client fără CRM'], place: 'bottom', route: '/palnie' },
+  { sel: '.t1cell', title: 'T1 — automat dar editabil', body: ['Se completează singur din Data intrare', 'Dacă scrii tu o dată → devine „manual"', 'Manual NU se mai suprascrie niciodată'], place: 'bottom', route: '/palnie' },
   { sel: '.help-btn', title: 'Butonul de Ajutor', body: ['Disponibil pe orice pagină', 'Reia turul oricând', 'Explică ce face fiecare buton și setare'], place: 'bottom' },
   { sel: '.userbtn', title: 'Cont & Setări', body: ['Click pe numele tău → meniu', 'Setări: CRM, sincronizare, apoi aspect', 'Comutare temă light/dark'], place: 'top' },
 ];
 
-export function Tour({ run, onClose }: { run: boolean; onClose: () => void }) {
+export function Tour({ run, onClose, nav }: { run: boolean; onClose: () => void; nav?: (route: string) => void }) {
   const [i, setI] = useState(0);
   const [rect, setRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   const step = TOUR_STEPS[i];
   useEffect(() => { if (run) setI(0); }, [run]);
   useLayoutEffect(() => {
     if (!run || !step) return;
-    let raf: any;
+    let raf: any; let navTimer: any;
     const measure = () => {
       const el = document.querySelector(step.sel) as HTMLElement | null;
       if (el) { el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); const r = el.getBoundingClientRect(); setRect({ top: r.top, left: r.left, width: r.width, height: r.height }); }
       else setRect(null);
     };
-    raf = setTimeout(measure, 80);
+    // Pas cu țintă pe altă rută: navighează întâi, apoi măsoară (navigarea Next e async).
+    const needNav = !!step.route && (typeof window !== 'undefined') && window.location.pathname !== step.route;
+    if (needNav && nav) {
+      setRect(null);                 // ascunde spotlight-ul vechi cât navigăm
+      nav(step.route as string);
+      navTimer = setTimeout(measure, 350);
+    } else {
+      raf = setTimeout(measure, 80);
+    }
     window.addEventListener('resize', measure); window.addEventListener('scroll', measure, true);
-    return () => { clearTimeout(raf); window.removeEventListener('resize', measure); window.removeEventListener('scroll', measure, true); };
+    return () => { clearTimeout(raf); clearTimeout(navTimer); window.removeEventListener('resize', measure); window.removeEventListener('scroll', measure, true); };
   }, [run, i]); // eslint-disable-line
   if (!run || !step) return null;
   const pad = 6;

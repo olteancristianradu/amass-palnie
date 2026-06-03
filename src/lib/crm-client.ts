@@ -653,3 +653,103 @@ export async function addReminder(userId: string, payload: {
   }
   return { ok: false, error: 'Sesiune CRM expirată după retry' };
 }
+
+/**
+ * Marchează TOATE reminderele DESCHISE (status_reminder='0') ale unei lucrări ca EXECUTATE
+ * (status_reminder='3'). Paritate cu spreadsheet: la salvarea unui reminder nou, vechile
+ * remindere deschise se închid automat.
+ *
+ * gestcom editează (nu creează) un reminder când id_reminder e setat la POST do_reminder_aed.
+ * Re-trimitem ACELEAȘI câmpuri ale reminderului existent + id_reminder + status_reminder='3'.
+ *
+ * BEST-EFFORT: scriere în CRM de producție → fiecare reminder într-un try/catch propriu;
+ * NU aruncă niciodată, doar loghează și întoarce câte a marcat. Retry pe sesiune expirată
+ * la nivel de citire a listei, ca celelalte funcții.
+ */
+export async function markOpenRemindersExecuted(userId: string, idLucrare: string): Promise<{ ok: boolean; marked: number; error?: string }> {
+  const idSafe = String(idLucrare).replace(/[^0-9]/g, '');
+  if (!idSafe) return { ok: false, marked: 0, error: 'id_lucrare invalid' };
+
+  // 1) Citește lista de remindere (raw JSON), cu retry pe sesiune expirată.
+  let deschise: any[] = [];
+  let cookie = '';
+  try {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const sess = await login(userId);
+      cookie = sess.cookie;
+      const url = CRM_BASE + '?m=remindere&a=lista_remindere&suppressHeaders=1&tip_reminder=0&status_reminder=0&idlucrare_reminder=' + idSafe;
+      const r = await fetch(url, { headers: { Cookie: cookie } });
+      const txt = await r.text();
+      if (isLoginPage(txt)) { await invalidateCookie(userId); continue; }
+      let data: any;
+      try { data = JSON.parse(txt); } catch { data = null; }
+      if (!Array.isArray(data)) { deschise = []; break; }
+      deschise = data.filter((x: any) => String(x.status_reminder) === '0');
+      break;
+    }
+  } catch (e: any) {
+    console.warn('[markOpenRemindersExecuted] eroare la citirea listei id_lucrare=' + idSafe + ': ' + (e?.message || e));
+    return { ok: false, marked: 0, error: 'Nu am putut citi reminderele deschise' };
+  }
+
+  if (deschise.length === 0) return { ok: true, marked: 0 };
+
+  // 2) Pentru fiecare reminder deschis, re-POST cu id_reminder + status_reminder='3' (executat).
+  //    Best-effort: orice eroare pe un reminder e logată, NU oprește restul.
+  let marked = 0;
+  for (const rem of deschise) {
+    try {
+      const idReminder = String(rem.id_reminder ?? rem.idreminder_reminder ?? '').replace(/[^0-9]/g, '');
+      if (!idReminder) { console.warn('[markOpenRemindersExecuted] reminder fără id, sărit (id_lucrare=' + idSafe + ')'); continue; }
+
+      const d = String(rem.datareminder_reminder || '');
+      const roData = /^\d{4}-\d{2}-\d{2}$/.test(d) ? `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}` : '';
+
+      const form: Record<string, string> = {
+        dosql: 'do_reminder_aed',
+        id_lucrare: idSafe, nume_lucrare: '',
+        idlucrare_conluc: idSafe, idlucrare_contract: idSafe, idlucrare_oferta: idSafe,
+        id_reminder: idReminder,
+        idlucrare_reminder: idSafe,
+        idcontact_reminder: String(rem.idcontact_reminder ?? rem.idcontact ?? ''),
+        tip_reminder: String(rem.tip_reminder ?? ''),
+        subtip_reminder: String(rem.subtip_reminder ?? 0),
+        idlocalitate_reminder: String(rem.idlocalitate_reminder ?? ''),
+        nume_localitate: '',
+        datareminder_reminder: d,
+        ro_datareminder_reminder: roData,
+        orareminder_reminder: String(rem.orareminder_reminder ?? '').slice(0, 5),
+        durata_reminder: String(rem.durata_reminder ?? ''),
+        notificare_reminder: String(rem.notificare_reminder ?? 0),
+        info_reminder: String(rem.info_reminder ?? ''),
+        status_reminder: '3'
+      };
+
+      const r = await fetch(CRM_BASE + '?m=remindere', {
+        method: 'POST', redirect: 'manual',
+        headers: { Cookie: cookie, 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+        body: new URLSearchParams(form).toString()
+      });
+      const loc = r.headers.get('location') || '';
+      if (r.status === 302 && /m=login/i.test(loc)) {
+        console.warn('[markOpenRemindersExecuted] sesiune expirată la id_reminder=' + idReminder + ' (id_lucrare=' + idSafe + ')');
+        continue;
+      }
+      if (r.status === 200) {
+        const body = await r.text();
+        if (isLoginPage(body)) {
+          console.warn('[markOpenRemindersExecuted] sesiune expirată (200/login) la id_reminder=' + idReminder + ' (id_lucrare=' + idSafe + ')');
+          continue;
+        }
+      } else if (r.status !== 302 && r.status !== 303) {
+        console.warn('[markOpenRemindersExecuted] HTTP ' + r.status + ' la id_reminder=' + idReminder + ' (id_lucrare=' + idSafe + ')');
+        continue;
+      }
+      marked++;
+    } catch (e: any) {
+      console.warn('[markOpenRemindersExecuted] eroare la marcarea unui reminder (id_lucrare=' + idSafe + '): ' + (e?.message || e));
+    }
+  }
+
+  return { ok: true, marked };
+}

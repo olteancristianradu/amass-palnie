@@ -57,8 +57,13 @@ export async function PATCH(req: NextRequest) {
   // Sărim clienții al căror idLucrare există deja la destinație (constrângere unică @@unique([ownerId,idLucrare])).
   if (reassignTo !== undefined) {
     if (!reassignTo || reassignTo === id) return NextResponse.json({ ok: false, error: 'Alege un alt utilizator destinație' }, { status: 400 });
-    const tgt = await prisma.user.findUnique({ where: { id: reassignTo }, select: { id: true } });
+    const tgt = await prisma.user.findUnique({ where: { id: reassignTo }, select: { id: true, crmCreds: { select: { crmUser: true } } } });
     if (!tgt) return NextResponse.json({ ok: false, error: 'Utilizator destinație inexistent' }, { status: 404 });
+    // Conturi gestcom diferite: lucrările (idLucrare) rămân în contul CRM al sursei → push/sync pot nimeri greșit după mutare.
+    const srcUser = await prisma.user.findUnique({ where: { id }, select: { crmCreds: { select: { crmUser: true } } } });
+    const srcCrmUser = srcUser?.crmCreds?.crmUser ?? null;
+    const tgtCrmUser = tgt.crmCreds?.crmUser ?? null;
+    const crmMismatch = srcCrmUser !== tgtCrmUser;
     const src = await prisma.client.findMany({ where: { ownerId: id }, select: { id: true, idLucrare: true } });
     const have = new Set((await prisma.client.findMany({ where: { ownerId: reassignTo }, select: { idLucrare: true } })).map(c => c.idLucrare));
     const toMoveIds: string[] = [];
@@ -77,8 +82,8 @@ export async function PATCH(req: NextRequest) {
         }
       });
     }
-    await auditLog({ userId: scope.userId, func: 'users/reassign', action: 'REASSIGN', entity: 'Client', entityId: id, fields: `moved=${moved} skipped=${skipped} to=${reassignTo}` });
-    return NextResponse.json({ ok: true, moved, skipped });
+    await auditLog({ userId: scope.userId, func: 'users/reassign', action: 'REASSIGN', entity: 'Client', entityId: id, fields: `moved=${moved} skipped=${skipped} to=${reassignTo} crmMismatch=${crmMismatch}` });
+    return NextResponse.json({ ok: true, moved, skipped, crmMismatch, srcCrmUser, tgtCrmUser });
   }
 
   const data: any = {};

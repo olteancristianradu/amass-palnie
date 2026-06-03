@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { addReminder } from '@/lib/crm-client';
+import { addReminder, markOpenRemindersExecuted } from '@/lib/crm-client';
 import { auditLog } from '@/lib/audit';
 import { getScope, findClientInScope } from '@/lib/scope';
 
@@ -25,7 +25,36 @@ export async function POST(req: NextRequest) {
     const r = await addReminder(client.ownerId, payload);
     await auditLog({ userId, func: 'reminder/add', action: 'CRM_WRITE', entityId: payload.idLucrare,
       fields: 'tip=' + payload.tip + '; data=' + payload.data, diff: r.ok ? 'OK' : r.error });
-    return NextResponse.json(r);
+
+    // Paritate spreadsheet: la salvarea unui reminder, marchează reminderele deschise ca EXECUTATE.
+    // Doar dacă reminderul nou a fost salvat și userul a cerut-o (markOthersDone, bifat implicit în UI).
+    // Best-effort: NU bloca răspunsul dacă întârzie; întoarce markedDone dacă se rezolvă repede.
+    let markedDone: number | undefined;
+    if (r.ok && payload.markOthersDone) {
+      try {
+        const markPromise = markOpenRemindersExecuted(client.ownerId, String(payload.idLucrare))
+          .then(async (mr) => {
+            await auditLog({ userId, func: 'reminder/markOthersDone', action: 'CRM_WRITE', entityId: payload.idLucrare,
+              fields: 'auto-executate la salvare reminder', diff: mr.ok ? ('marked=' + mr.marked) : (mr.error || 'eroare') });
+            return mr;
+          })
+          .catch((e: any) => {
+            console.warn('[reminder/route] markOpenRemindersExecuted eșuat: ' + (e?.message || e));
+            return { ok: false, marked: 0 } as { ok: boolean; marked: number };
+          });
+        // Așteaptă scurt (best-effort): dacă se rezolvă repede întoarcem markedDone, altfel lăsăm fire-and-forget.
+        const winner = await Promise.race([
+          markPromise,
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000))
+        ]);
+        if (winner && typeof (winner as any).marked === 'number') markedDone = (winner as any).marked;
+      } catch (e: any) {
+        // Niciodată nu lăsa marcarea automată să strice răspunsul reminderului principal.
+        console.warn('[reminder/route] markOthersDone wrapper eroare: ' + (e?.message || e));
+      }
+    }
+
+    return NextResponse.json({ ...r, ...(markedDone !== undefined ? { markedDone } : {}) });
   } catch (e: any) {
     return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
   }

@@ -23,15 +23,17 @@ export default function AuditPage() {
   const filtered = entries.filter(e => !filter ||
     (e.func + ' ' + e.action + ' ' + (e.entity ?? '') + ' ' + (e.fields ?? '')).toLowerCase().includes(filter.toLowerCase())
   );
+  const topbar = (
+    <div className="topbar__tools" style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto' }}>
+      <input className="input" style={{ minHeight: 34, width: 220 }} placeholder="Filtrează…" value={filter} onChange={e => setFilter(e.target.value)} />
+    </div>
+  );
+
   return (
-    <Layout>
-      <div className="flex justify-between items-end mb-5 rise">
-        <div>
-          <h1 className="text-[26px]">Jurnal acțiuni</h1>
-          <p className="text-[var(--fg-soft)] text-[13px] mt-0.5">Fiecare scriere CRM, sync și editare e înregistrată aici.</p>
-        </div>
-        <input className="field w-52" placeholder="Filtrează…" value={filter} onChange={e => setFilter(e.target.value)} />
-      </div>
+    <Layout topbar={topbar}>
+      <p className="muted rise" style={{ fontSize: 'var(--fs-sm)', marginBottom: 'var(--sp-5)' }}>
+        {filtered.length} din {entries.length} acțiuni · fiecare scriere CRM, sync și editare e înregistrată aici.
+      </p>
       <div className="card overflow-hidden rise rise-1"><div className="overflow-x-auto scroll-area">
         <table className="tbl">
           <thead><tr>

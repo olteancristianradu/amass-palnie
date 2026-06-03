@@ -118,6 +118,8 @@ export async function syncNewClients(userId: string) {
       } catch (e: any) { console.error('syncNewClients id=' + id, e?.message); }
     }
     await prisma.syncRun.update({ where: { id: run.id }, data: { status: 'COMPLETED', completedAt: new Date(), total: allIds.length, processed: added } });
+    // Audit sync: sumar processed/total/fetches/errors (fără să stricăm fluxul de sync/SyncRun).
+    await auditLog({ userId, func: 'sync/clients-new', action: 'SYNC', fields: JSON.stringify({ processed: added, total: allIds.length, fetches: fresh.length, errors: fresh.length - added }) });
     return { ok: true as const, totalCRM: allIds.length, added };
   } catch (e: any) {
     return { ok: false as const, error: e?.message };
@@ -167,6 +169,8 @@ export async function refreshDetailsBatch(userId: string, limit = 0, type = 'DET
       processed++;
     }
     await prisma.syncRun.update({ where: { id: run.id }, data: { status: 'COMPLETED', completedAt: new Date(), processed, total: clienti.length } });
+    // Audit sync: sumar processed/total/fetches/errors (fără să stricăm fluxul de sync/SyncRun).
+    await auditLog({ userId, func: 'sync/details', action: 'SYNC', fields: JSON.stringify({ processed, total: clienti.length, fetches: processed, updated, errors }) });
     return { ok: true as const, processed, updated, errors, total: clienti.length };
   } catch (e: any) {
     await prisma.syncRun.update({ where: { id: run.id }, data: { status: 'FAILED', completedAt: new Date(), errorMessage: e?.message } });
@@ -189,6 +193,8 @@ export async function refreshRemindere(userId: string) {
       processed++;
     }
     await prisma.syncRun.update({ where: { id: run.id }, data: { status: 'COMPLETED', completedAt: new Date(), processed, total: clienti.length } });
+    // Audit sync: sumar processed/total/fetches/errors (fără să stricăm fluxul de sync/SyncRun).
+    await auditLog({ userId, func: 'sync/reminders', action: 'SYNC', fields: JSON.stringify({ processed, total: clienti.length, fetches: processed, withReminder, errors: 0 }) });
     return { ok: true as const, processed, withReminder, total: clienti.length };
   } catch (e: any) {
     await prisma.syncRun.update({ where: { id: run.id }, data: { status: 'FAILED', completedAt: new Date(), errorMessage: e?.message } });

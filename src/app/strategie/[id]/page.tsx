@@ -50,6 +50,9 @@ export default function StrategiePage() {
   const [reminderOpen, setReminderOpen] = useState(false);
   const [infoCrmOpen, setInfoCrmOpen] = useState(false);
   const [infoText, setInfoText] = useState('');
+  // Contact LIVE din CRM (telefon/email reale) pentru header-ul fișei.
+  // null = încă nu am încărcat / fetch eșuat => fallback la client.telefon / client.email.
+  const [liveContact, setLiveContact] = useState<{ telefon?: string; email?: string } | null>(null);
   const { data: session } = useSession();
 
   useEffect(() => {
@@ -117,6 +120,25 @@ export default function StrategiePage() {
       }
     });
   }, [params?.id]);
+
+  // CONTACT LIVE: după ce s-a încărcat clientul, citim contactele reale din CRM
+  // (/api/crm/contacte?idLucrare=...) și folosim telefonul primului contact util în header.
+  // Email-ul nu e expus de endpoint-ul de contacte => îl luăm din client.email.
+  // Orice eșec (fetch, lipsă contacte) => liveContact rămâne null și header-ul cade pe client.*.
+  useEffect(() => {
+    if (!client?.idLucrare) return;
+    let cancelled = false;
+    fetch('/api/crm/contacte?idLucrare=' + client.idLucrare)
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => {
+        if (cancelled || !j?.ok || !Array.isArray(j.contacte)) return;
+        const cuTel = j.contacte.find((c: any) => c && String(c.telefon || '').trim() !== '');
+        const tel = (cuTel?.telefon || '').trim();
+        if (tel) setLiveContact({ telefon: tel, email: client.email ?? undefined });
+      })
+      .catch(() => { /* fallback la client.telefon / client.email */ });
+    return () => { cancelled = true; };
+  }, [client?.idLucrare, client?.email]);
 
   const isV1 = client?.categorie === 1;
   // V1 (construcție): costul actual vine din ca_cost_lunar (casa actuală), nu din suma.
@@ -317,12 +339,18 @@ export default function StrategiePage() {
           <h1>{client.nume}</h1>
           {client.localitate && <span className="fisa__city">· {client.localitate}</span>}
           <span className="fisa__id mono">#{client.idLucrare}{client.judet ? ' · ' + client.judet : ''}</span>
-          {(client.telefon || client.email) && (
-            <div className="fisa__contact mono">
-              <Icon name="phone" size={14} />
-              {[client.telefon, client.email].filter(Boolean).join(' · ')}
-            </div>
-          )}
+          {(() => {
+            // Telefon/email REALE din CRM (liveContact), cu fallback la datele clientului.
+            const telDisplay = liveContact?.telefon || client.telefon;
+            const emailDisplay = liveContact?.email || client.email;
+            if (!telDisplay && !emailDisplay) return null;
+            return (
+              <div className="fisa__contact mono">
+                <Icon name="phone" size={14} />
+                {[telDisplay, emailDisplay].filter(Boolean).join(' · ')}
+              </div>
+            );
+          })()}
         </div>
 
         {msg && <div className={'toast mb-4 ' + (msg.startsWith('✅') ? 'toast--success' : msg.startsWith('❌') ? 'toast--error' : 'toast--info')}>{msg}</div>}
@@ -622,6 +650,8 @@ function ReminderModal({ client, onClose, onDone }: { client: Client; onClose: (
   const [loadingContacte, setLoadingContacte] = useState(true);
   const [existing, setExisting] = useState<Array<{ data: string; ora: string; tip: string; info: string; status: string }> | null>(null);
   const [loading, setLoading] = useState(false);
+  // Paritate spreadsheet: la salvare, marchează automat reminderele deschise ca efectuate (bifat implicit).
+  const [markOthersDone, setMarkOthersDone] = useState(true);
 
   const needsSubtip = tip === '1' || tip === '2';
   const suggestion = suggestReminder(client.stadiu);
@@ -643,11 +673,18 @@ function ReminderModal({ client, onClose, onDone }: { client: Client; onClose: (
     setLoading(true);
     const r = await fetch('/api/crm/reminder', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ idLucrare: client.idLucrare, idContact, data, ora, durata, tip, subtip, info, notificare })
+      body: JSON.stringify({ idLucrare: client.idLucrare, idContact, data, ora, durata, tip, subtip, info, notificare, markOthersDone })
     });
     const j = await r.json();
     setLoading(false);
-    onDone(j.ok ? '✅ Reminder salvat în CRM' : '❌ ' + j.error);
+    if (j.ok) {
+      const suf = (markOthersDone && typeof j.markedDone === 'number' && j.markedDone > 0)
+        ? ` (+ ${j.markedDone} reminder${j.markedDone === 1 ? '' : 'e'} deschis${j.markedDone === 1 ? '' : 'e'} marcat${j.markedDone === 1 ? '' : 'e'} ca efectuat${j.markedDone === 1 ? '' : 'e'})`
+        : '';
+      onDone('✅ Reminder salvat în CRM' + suf);
+    } else {
+      onDone('❌ ' + j.error);
+    }
   }
 
   return (
@@ -702,6 +739,10 @@ function ReminderModal({ client, onClose, onDone }: { client: Client; onClose: (
               </div>
               <pre className="whitespace-pre-wrap font-mono text-[11px] text-[var(--fg-soft)] m-0">{suggestion.info}</pre>
             </div>
+            <label className="flex items-start gap-2 mt-3 text-[12px] text-[var(--fg-soft)] cursor-pointer select-none">
+              <input type="checkbox" className="mt-0.5" checked={markOthersDone} onChange={e => setMarkOthersDone(e.target.checked)} />
+              <span>La salvare: marchează <b>TOATE</b> reminderele deschise ca efectuate <span className="text-[var(--fg-faint)]">(paritate spreadsheet)</span></span>
+            </label>
             <div className="flex justify-end gap-2 mt-4">
               <button type="button" onClick={onClose} className="btn btn-secondary">Anulează</button>
               <button type="submit" disabled={loading} className="btn btn-primary">{loading ? '…' : 'Salvează în CRM'}</button>

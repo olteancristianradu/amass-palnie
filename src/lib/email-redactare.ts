@@ -52,6 +52,22 @@ BR + BR + '<b>ATENTIE — DE ATASAT OBLIGATORIU:</b>' + BR +
 '• <b>Schitele tehnice ale lucrarii</b>' + BR +
 '• <b>Dovada de primire schite</b> (semnatura / email confirmare arhitect sau client)' + BR + BR;
 
+  // DIFERENTIERE V1 vs V2 — categoria 1 = CONSTRUCTIE noua, restul (2 / 3 DT) = CASA LOCUITA.
+  // Folosim primul caracter al categoriei deja primite (ex. "1", "2", "3 DT").
+  const isV1 = String(d.categorie).trim().charAt(0) === '1';
+  // Paragraf de context specific, accentuat, relevant fiecarei categorii.
+  const accentCategorie = isV1
+    ? h_('Specific constructie (V1)') + BR +
+      'Lucrarea este pe o <b>constructie noua / in santier</b>: dimensionarea se face dupa proiect, ' +
+      'nu dupa consum istoric. Va rog corelati componentele cu <b>planurile / schitele de proiectare</b> ' +
+      'si tineti cont de <b>etapizarea pe santier</b> (turnare sapa, finisaje) la stabilirea termenului de executie. ' +
+      'Branșamentul si eventualul PFTV se prevad din faza de proiect.' + BR + BR
+    : h_('Specific casa locuita (V2)') + BR +
+      'Lucrarea este pe o <b>casa deja locuita</b>: este esential sa pornim de la <b>consumul actual real</b> ' +
+      'si de la <b>sistemul de incalzire existent</b> pentru a calcula economia si amortizarea. ' +
+      'Va rog tineti cont de <b>interventia in spatiu locuit</b> (acces, mobilier, durata fara caldura) ' +
+      'si de comparatia clara intre costul actual si cel cu sistemul AMASS, pe care clientul o asteapta.' + BR + BR;
+
   // V2 (categoria 2 / 3 DT) — replica codului Apps Script
   const body =
 '<b>Nume lucrare CRM:</b> <b>' + titluLucrare + '</b>' + BR + BR +
@@ -59,6 +75,7 @@ BR + BR + '<b>ATENTIE — DE ATASAT OBLIGATORIU:</b>' + BR +
 'Rog Redactare fisa ISO + DEVIZ pentru domnul/doamna ' + esc(d.nume) + ' - ' + esc(d.localitate) + ' ' + catParen + '.' + BR +
 'Proiectarea este facuta de doamna Rulea si planurile ' + m_('[le aduc personal / trimise de arhitect / urmeaza]') + '.' + BR + BR +
 'Deviz pe materiale: ' + m_('[Premium / Premium si Economic]') + BR + BR +
+accentCategorie +
 h_('Proiectarea') + BR +
 m_('[componente pe zone / nivele - se completeaza manual]') + BR + BR +
 h_('Termen de executie') + '  ' + m_('[ora / finalul zilei]') + BR + BR +

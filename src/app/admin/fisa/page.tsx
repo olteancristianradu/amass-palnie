@@ -27,8 +27,17 @@ type Variant = 'V1' | 'V2';
 
 // Generează un id de zonă unic (nu se afișează, doar pentru cheia de randare).
 function newZoneId() { return 'z' + Math.random().toString(36).slice(2, 8); }
-// Generează un key nou pentru un câmp manual adăugat (cheie de stocare, vizibilă read-only).
+// Generează un key nou pentru un câmp manual adăugat (cheie de stocare; editabilă până la prima salvare).
 function newFieldKey() { return 'camp_' + Math.random().toString(36).slice(2, 8); }
+// Normalizează un label în cheie de stocare (slug ASCII: litere/cifre/_), pentru câmpurile noi.
+function keyFromLabel(label: string): string {
+  const slug = (label || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // scoate diacriticele combinate (ă→a, ș→s, …)
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return slug ? 'camp_' + slug : newFieldKey();
+}
 
 export default function AdminFisaPage() {
   const [forbidden, setForbidden] = useState(false);
@@ -37,6 +46,9 @@ export default function AdminFisaPage() {
   const [tpl, setTpl] = useState<Record<Variant, FisaTemplateData | null>>({ V1: null, V2: null });
   const [msg, setMsg] = useState('');
   const [saving, setSaving] = useState(false);
+  // Cheile câmpurilor ADĂUGATE în sesiunea curentă (încă nesalvate) — doar acestea au `key` editabil.
+  // Câmpurile venite din DB au cheia fixă (read-only): schimbarea ar orfaniza datele clienților.
+  const [newKeys, setNewKeys] = useState<Set<string>>(new Set());
 
   async function load() {
     setLoading(true);
@@ -44,6 +56,7 @@ export default function AdminFisaPage() {
     if (r.status === 403 || r.status === 401) { setForbidden(true); setLoading(false); return; }
     const j = await r.json();
     if (j.ok) setTpl({ V1: j.templates.V1, V2: j.templates.V2 });
+    setNewKeys(new Set()); // tot ce vine din DB e existent → key fix
     setLoading(false);
   }
   useEffect(() => { load(); }, []);
@@ -89,10 +102,34 @@ export default function AdminFisaPage() {
   }
   function addField(zi: number) {
     const f: FisaField = { key: newFieldKey(), label: 'Câmp nou', control: 'text', source: 'manual' };
+    setNewKeys(prev => new Set(prev).add(f.key)); // câmp nou → key editabil până la salvare
     setZones(zs => zs.map((z, i) => i !== zi ? z : { ...z, fields: [...z.fields, f] }));
   }
+  // Editează `key`-ul unui câmp NOU (nesalvat). Menține setul newKeys sincronizat (cheia veche → cheia nouă).
+  function setFieldKey(zi: number, fi: number, oldKey: string, raw: string) {
+    const next = raw.toLowerCase().replace(/[^a-z0-9_]/g, '');
+    setNewKeys(prev => {
+      const s = new Set(prev);
+      s.delete(oldKey);
+      s.add(next);
+      return s;
+    });
+    setField(zi, fi, { key: next });
+  }
+  // La ieșirea din câmpul de cheie nouă: dacă a rămas gol, generează-o din label.
+  function ensureFieldKey(zi: number, fi: number, oldKey: string, label: string) {
+    if (oldKey) return;
+    const gen = keyFromLabel(label);
+    setNewKeys(prev => { const s = new Set(prev); s.delete(oldKey); s.add(gen); return s; });
+    setField(zi, fi, { key: gen });
+  }
   function removeField(zi: number, fi: number) {
-    setZones(zs => zs.map((z, i) => i !== zi ? z : { ...z, fields: z.fields.filter((_, k) => k !== fi) }));
+    setZones(zs => zs.map((z, i) => {
+      if (i !== zi) return z;
+      const removed = z.fields[fi];
+      if (removed) setNewKeys(prev => { const s = new Set(prev); s.delete(removed.key); return s; });
+      return { ...z, fields: z.fields.filter((_, k) => k !== fi) };
+    }));
   }
   function moveField(zi: number, fi: number, dir: -1 | 1) {
     setZones(zs => zs.map((z, i) => {
@@ -115,6 +152,7 @@ export default function AdminFisaPage() {
     });
     if (r.status === 403) { setMsg('❌ Doar admin poate salva formatul fișei.'); setSaving(false); return; }
     const j = await r.json().catch(() => ({ ok: false, error: 'Răspuns invalid' }));
+    if (j.ok) setNewKeys(new Set()); // câmpurile salvate devin existente → key fix
     setMsg(j.ok ? '✅ Format ' + cur.variant + ' salvat.' : '❌ ' + (j.error || 'Eroare la salvare'));
     setSaving(false);
   }
@@ -182,8 +220,10 @@ export default function AdminFisaPage() {
                   {z.fields.map((f, fi) => {
                     const isCalc = f.control === 'calc';
                     const hasOptions = f.control === 'dropdown' || f.control === 'multiselect';
+                    const isNewField = newKeys.has(f.key); // câmp nou (nesalvat) → key editabil
                     return (
-                      <div key={f.key} className="border border-[var(--border)] rounded-[var(--r-sm)] p-3 bg-[var(--surface-2)]">
+                      // Key React stabil pe poziție (NU pe f.key): cheia unui câmp nou se editează live, n-o folosim ca key React.
+                      <div key={(z.id || zi) + '-' + fi} className="border border-[var(--border)] rounded-[var(--r-sm)] p-3 bg-[var(--surface-2)]">
                         <div className="flex items-start gap-3 flex-wrap">
                           {/* Label */}
                           <div className="flex-1 min-w-[200px]">
@@ -227,15 +267,38 @@ export default function AdminFisaPage() {
                           </div>
                         )}
 
-                        {/* Rând opțiuni meta: full + key + nota calc */}
+                        {/* Rând opțiuni meta: full + cheie de stocare + nota calc */}
                         <div className="mt-2 flex items-center gap-4 flex-wrap text-[11px]">
                           <label className="flex items-center gap-1.5 cursor-pointer text-[var(--fg-soft)]">
                             <input type="checkbox" checked={!!f.full} onChange={e => setField(zi, fi, { full: e.target.checked })} />
                             Ocupă tot rândul
                           </label>
-                          <span className="text-[var(--fg-faint)]">
-                            <span className="font-mono text-[10px] bg-[var(--bg)] border border-[var(--border)] rounded px-1.5 py-0.5">{f.key}</span>
-                            <span className="ml-1">cheie de stocare — nu se schimbă</span>
+                          {/* Cheie de stocare: editabilă DOAR pentru câmpuri noi (nesalvate); fixă pentru cele existente. */}
+                          <span className="flex items-center gap-1.5 text-[var(--fg-faint)]">
+                            <span>Cheie:</span>
+                            {isNewField ? (
+                              <>
+                                <input
+                                  className="field !py-0.5 !px-1.5 !h-auto font-mono !text-[10px] !w-[160px]"
+                                  value={f.key}
+                                  placeholder="se generează din etichetă"
+                                  title="Cheia de stocare a câmpului nou. După prima salvare nu se mai poate schimba (ar orfaniza datele)."
+                                  onChange={e => setFieldKey(zi, fi, f.key, e.target.value)}
+                                  onBlur={() => ensureFieldKey(zi, fi, f.key, f.label)}
+                                />
+                                <span className="text-[var(--fg-faint)]">editabilă doar până la prima salvare</span>
+                              </>
+                            ) : (
+                              <>
+                                <input
+                                  className="field !py-0.5 !px-1.5 !h-auto font-mono !text-[10px] !w-[160px] disabled:opacity-100 disabled:cursor-not-allowed"
+                                  value={f.key}
+                                  disabled
+                                  title="Cheia nu se poate schimba după creare (ar orfaniza datele)"
+                                />
+                                <span title="Cheia nu se poate schimba după creare (ar orfaniza datele)">cheie de stocare — nu se schimbă</span>
+                              </>
+                            )}
                           </span>
                           {isCalc && (
                             <span className="pill pill-lucru text-[10px]">formulă fixă{f.calcKey ? ' · ' + f.calcKey : ''} (read-only)</span>

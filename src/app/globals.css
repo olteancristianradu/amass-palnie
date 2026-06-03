@@ -95,8 +95,10 @@
 /* ============================================================================ RESET / BAZĂ */
 * { box-sizing:border-box; }
 html, body { margin:0; padding:0; }
-/* Mărime text / interfață globală — controlată de motorul Aspect prin --text-scale (0.875→1.5). */
-html { zoom:var(--text-scale, 1); }
+/* Mărime text / interfață globală — root font-size scalat de motorul Aspect (--text-scale 0.875→1.5).
+   REM-based (standard, fără problemele lui `zoom` la poziționare fixă). Tot ce e în rem/em scalează;
+   literalele px rămase din paginile vechi rămân fixe (se migrează pe măsură ce le redesenăm). */
+html { font-size: calc(100% * var(--text-scale, 1)); }
 body {
   font-family:var(--font-ui); font-size:var(--fs-body); line-height:var(--lh-body);
   color:var(--text); background:var(--bg);
