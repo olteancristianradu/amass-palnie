@@ -14,7 +14,7 @@ const SIMPLE_FIELDS = ['stadiu', 'nevoia', 'schitaStatus', 'preOfertat', 'oferta
   't1', 't1Locked', 'probabilitate', 'closeDate', 'forecastCategory', 'closureReason', 'closureReasonDetail', 'nextStepText', 'nextStepDue', 'obsSituatie', 'strategieNevoi', 'notaManager'];
 const DATE_FIELDS = ['closeDate', 'nextStepDue'];
 
-// ANTI-WIPE blob strategie (paritate spreadsheet, bug-ul Paulian): la salvarea fișei NU lăsăm o
+// ANTI-WIPE blob strategie (paritate spreadsheet, bug-ul istoric de wipe): la salvarea fișei NU lăsăm o
 // valoare GOALĂ să suprascrie o valoare NON-GOALĂ deja stocată. Merge cheie-cu-cheie peste blob-ul
 // existent: valorile noi non-goale se scriu; goalul peste non-gol păstrează existentul.
 function mergeStrategieBlob(existing: string | null, incoming: any): string {
