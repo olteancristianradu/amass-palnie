@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
 
   const clienti = await prisma.client.findMany({
     where,
-    select: { stadiu: true, categorie: true, suprafata: true, t1: true, nevoia: true, schitaStatus: true, preOfertat: true, ofertat: true, stelutaCat: true }
+    select: { id: true, nume: true, stadiu: true, categorie: true, suprafata: true, t1: true, nevoia: true, schitaStatus: true, preOfertat: true, ofertat: true, stelutaCat: true }
   });
   const byStadiu: Record<string, number> = {};
   const byCategorie: Record<string, number> = {};
@@ -71,6 +71,20 @@ export async function GET(req: NextRequest) {
   // Rata conversie = Contract / Intrați (cohortă), ca în KPI-ul din Dashboard.gs.
   const rataConversie = funnel.intrari > 0 ? funnel.contractat / funnel.intrari : 0;
 
+  // Worklist „Clienți cu schiță în lucru" (paritate design pa-dashboard.jsx): schiță setată,
+  // FĂRĂ pre-ofertă; sortat după vechimea schiței (cele mai vechi sus). Cap la 50 de rânduri.
+  const parseRoDays = (v: any): number => {
+    const m = String(v ?? '').match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+    if (!m) return 0;
+    const d = new Date(+m[3], +m[2] - 1, +m[1]);
+    return Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
+  };
+  const schitaInLucru = clienti
+    .filter(c => nz(c.schitaStatus) && !nz(c.preOfertat))
+    .map(c => ({ id: c.id, nume: c.nume, schitaStatus: c.schitaStatus, stelutaCat: c.stelutaCat ?? 0, zile: parseRoDays(c.schitaStatus) }))
+    .sort((a, b) => b.zile - a.zile)
+    .slice(0, 50);
+
   const visible = await getVisibleOwnerIds(scope);
   const recentSyncs = await prisma.syncRun.findMany({
     where: visible === 'ALL' ? {} : { userId: { in: visible } },
@@ -91,6 +105,6 @@ export async function GET(req: NextRequest) {
     ok: true,
     isManager: scope.isManager,
     autoSync: getAutoSyncState(scope.userId),
-    stats: { total: clienti.length, byStadiu, byCategorie, byPrioritate, totalSuprafata, funnel, rataConversie, schitaFaraOferta, ofertatFaraContract, recentSyncs, agents }
+    stats: { total: clienti.length, byStadiu, byCategorie, byPrioritate, totalSuprafata, funnel, rataConversie, schitaFaraOferta, ofertatFaraContract, schitaInLucru, recentSyncs, agents }
   });
 }

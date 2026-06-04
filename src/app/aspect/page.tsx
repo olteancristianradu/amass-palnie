@@ -19,6 +19,10 @@ const IP: Record<string, string> = {
   reset: 'M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5',
   check: 'M20 6L9 17l-5-5',
   alert: 'M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
+  user: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+  download: 'M12 3v12M7 10l5 5 5-5M5 21h14',
+  upload: 'M12 21V9M7 14l5-5 5 5M5 3h14',
+  target: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
 };
 function Icon({ name, size = 16, style }: { name: string; size?: number; style?: any }) {
   const d = IP[name] || '';
@@ -225,6 +229,12 @@ export default function AspectPage() {
             </div>
           </Section>
 
+          <Section title={t('Poziție meniu & unelte')} icon="sliders">
+            <p className="aspect__hint" style={{ marginTop: 0 }}>{t('Mută meniul din stânga, comutatorul de vizualizări, filtrul și Ajutorul pe partea preferată.')}</p>
+            <Segmented value={s.layoutSide || 'left'} onChange={v => set({ layoutSide: v })}
+              options={[{ value: 'left', label: t('Stânga') }, { value: 'right', label: t('Dreapta') }]} />
+          </Section>
+
           <Section title={t('Fundal')} icon="palette">
             <p className="aspect__hint" style={{ marginTop: 0, marginBottom: 8 }}>{t('Temele de sus setează deja un fundal — aici îl poți schimba separat.')}</p>
             <div className="bg-row">
@@ -242,6 +252,43 @@ export default function AspectPage() {
               {a.PRIORITIES.map((p: any) => <PriorityStar key={p.key} value={p.key} withLabel size={16} />)}
             </div>
           </Section>
+
+          <Section title={t('Profilul meu de aspect')} icon="user">
+            <p className="aspect__hint" style={{ marginTop: 0 }}>{t('Setările de aspect sunt salvate doar pe acest dispozitiv — nu afectează ceilalți agenți. Le poți exporta și trimite altcuiva.')}</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <button className="btn btn-secondary btn-sm" onClick={() => {
+                const blob = new Blob([JSON.stringify(a.get(), null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob); const el = document.createElement('a');
+                el.href = url; el.download = 'aspect-amass.json'; el.click(); URL.revokeObjectURL(url);
+              }}><Icon name="download" size={14} />{t('Exportă aspectul meu')}</button>
+              <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer' }}>
+                <Icon name="upload" size={14} />{t('Importă aspect')}
+                <input type="file" accept="application/json" style={{ display: 'none' }} onChange={e => {
+                  const f = e.target.files?.[0]; if (!f) return; const r = new FileReader();
+                  r.onload = () => {
+                    try {
+                      const data = JSON.parse(String(r.result));
+                      if (!data || typeof data !== 'object') { alert(t('Fișier invalid')); return; }
+                      const allowed = Object.keys(a.DEFAULTS);
+                      const patch: any = {};
+                      allowed.forEach((k: string) => { if (data[k] !== undefined) patch[k] = data[k]; });
+                      if (data.theme !== undefined) patch.theme = data.theme;
+                      set(patch);
+                    } catch { alert(t('Fișier invalid')); }
+                  };
+                  r.readAsText(f); e.target.value = '';
+                }} />
+              </label>
+            </div>
+          </Section>
+
+          <div className="gamecard">
+            <div className="gamecard__ic"><Icon name="target" size={20} /></div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <b>{t('🏆 Concursul „Cea mai mișto pâlnie"')}</b>
+              <span style={{ fontSize: '.8125rem', color: 'var(--text-muted)' }}>{t('Exportă-ți aspectul și intră în clasamentul lunar al agenților — cea mai personalizată și mai productivă pâlnie câștigă premii. Fundalul propriu contează la „stil".')}</span>
+            </div>
+          </div>
 
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
             <button className="btn btn-secondary btn-sm" onClick={() => a.reset()}><Icon name="reset" size={14} />{t('Resetează tot')}</button>

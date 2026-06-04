@@ -15,9 +15,17 @@ interface Stats {
   rataConversie: number;
   schitaFaraOferta: number;
   ofertatFaraContract: number;
+  schitaInLucru: Array<{ id: string; nume: string | null; schitaStatus: string | null; stelutaCat: number; zile: number }>;
   recentSyncs: any[];
   agents: Array<{ id: string; name: string }>;
 }
+
+// Preset-uri perioadă (paritate design pa-dashboard.jsx) — setează start/end (filtrare server-side).
+const DATE_PRESETS: Array<{ k: string; label: string }> = [
+  { k: 'azi', label: 'Azi' }, { k: 'ieri', label: 'Ieri' }, { k: '7', label: '7 zile' },
+  { k: '30', label: '30 zile' }, { k: 'an', label: 'Anul curent' }, { k: 'tot', label: 'Tot' },
+];
+const isoDay = (off: number) => { const d = new Date(); d.setDate(d.getDate() - off); return d.toISOString().slice(0, 10); };
 
 // Stadiu (etichetă DB) → token de stadiu (--st-*) pentru StagePill / culori bare.
 function stStadiu(k: string): string {
@@ -38,7 +46,17 @@ export default function DashboardPage() {
   const [owner, setOwner] = useState('all');
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
+  const [preset, setPreset] = useState('tot');
   const [err, setErr] = useState<string | null>(null);
+  function applyPreset(k: string) {
+    setPreset(k);
+    if (k === 'tot') { setStart(''); setEnd(''); }
+    else if (k === 'azi') { setStart(isoDay(0)); setEnd(isoDay(0)); }
+    else if (k === 'ieri') { setStart(isoDay(1)); setEnd(isoDay(1)); }
+    else if (k === '7') { setStart(isoDay(7)); setEnd(isoDay(0)); }
+    else if (k === '30') { setStart(isoDay(30)); setEnd(isoDay(0)); }
+    else if (k === 'an') { setStart(new Date().getFullYear() + '-01-01'); setEnd(isoDay(0)); }
+  }
   function load(o = owner, st = start, en = end) {
     const qs = new URLSearchParams({ owner: o });
     if (st) qs.set('start', st);
@@ -73,6 +91,7 @@ export default function DashboardPage() {
   const lastSync: SyncInfo | null = (s.recentSyncs || [])[0] || null;
   const num = (n: number) => (n ?? 0).toLocaleString('ro-RO');
   const conv = (s.rataConversie * 100).toFixed(1);
+  const worklist = s.schitaInLucru || []; // guard defensiv (răspuns API mai vechi → listă goală)
 
   // Funnel REAL: 7 trepte, bare proporțional din "Intrări".
   // "Nevoie" = nevoie acoperită (acoperită / cu condiții). "T1" = status, nu treaptă propriu-zisă.
@@ -114,17 +133,6 @@ export default function DashboardPage() {
   const topbar = (
     <div className="topbar__tools" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginLeft: 'auto' }}>
       <SyncBadge last={lastSync} />
-      <label className="d2ctrl" style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-        <span className="muted" style={{ fontSize: '.6875rem' }}>{t('De la')}</span>
-        <input className="input" type="date" style={{ minHeight: 34, width: 140 }} value={start} max={end || undefined} onChange={e => setStart(e.target.value)} />
-      </label>
-      <label className="d2ctrl" style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-        <span className="muted" style={{ fontSize: '.6875rem' }}>{t('până la')}</span>
-        <input className="input" type="date" style={{ minHeight: 34, width: 140 }} value={end} min={start || undefined} onChange={e => setEnd(e.target.value)} />
-      </label>
-      {(start || end) && (
-        <button className="btn btn-ghost btn-sm" title={t('Șterge intervalul')} onClick={() => { setStart(''); setEnd(''); }}><Icon name="x" size={15} /></button>
-      )}
       {isManager && (
         <select className="select" style={{ minHeight: 34, minWidth: 180 }} value={owner} onChange={e => setOwner(e.target.value)}>
           <option value="all">{t('Echipa mea (toți)')}</option>
@@ -147,6 +155,19 @@ export default function DashboardPage() {
           <span className="dash2__sub">{t('Privire de ansamblu ·')} {intervalLbl}</span>
         </div>
 
+        {/* Filtru perioadă: preset-uri + interval manual (paritate design pa-dashboard.jsx) */}
+        <div className="dash2__ctrls drange">
+          <div className="drange__presets">
+            {DATE_PRESETS.map(p => (
+              <button key={p.k} className={'drange__preset' + (preset === p.k ? ' is-on' : '')} onClick={() => applyPreset(p.k)}>{t(p.label)}</button>
+            ))}
+          </div>
+          <label className="d2ctrl"><span className="label">{t('De la')}</span>
+            <input className="input" type="date" value={start} max={end || undefined} onChange={e => { setStart(e.target.value); setPreset('custom'); }} /></label>
+          <label className="d2ctrl"><span className="label">{t('până la')}</span>
+            <input className="input" type="date" value={end} min={start || undefined} onChange={e => { setEnd(e.target.value); setPreset('custom'); }} /></label>
+        </div>
+
         {/* Cifre cheie */}
         <div className="d2sec-lbl">{t('Cifre cheie')}</div>
         <div className="d2-keyrow">
@@ -161,12 +182,12 @@ export default function DashboardPage() {
           <div className="d2sec-lbl">{t('Cum curge pâlnia')}</div>
           <div className="d2funnel">
             {funnel.map(f => (
-              <div key={f.label} className="d2fn">
+              <a key={f.label} href="/palnie" className="d2fn" title={t('Vezi clienții în pâlnie')} style={{ cursor: 'pointer' }}>
                 <span className="d2fn__lbl">{f.label}</span>
                 <span className="d2fn__n mono">{f.n}</span>
                 <span className="d2fn__track"><span className="d2fn__bar" style={{ width: Math.max(f.n / top * 100, 2) + '%', background: f.color }} /></span>
                 <span className="d2fn__pct mono">{Math.round(f.n / top * 100)}%</span>
-              </div>
+              </a>
             ))}
           </div>
           <div className="muted" style={{ fontSize: '.6875rem', marginTop: 12 }}>
@@ -275,6 +296,30 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+
+        {/* Clienți cu schiță în lucru (paritate design pa-dashboard.jsx) — worklist acționabil */}
+        <div className="card">
+          <div className="card-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: 'var(--sp-4)' }}>
+            <h2>{t('Clienți cu schiță în lucru')}</h2>
+            <span className="muted" style={{ fontSize: '.8125rem' }}>{worklist.length} {t('clienți')}</span>
+          </div>
+          <div className="tbl-scroll">
+            <table className="tbl">
+              <thead><tr><th>{t('Client')}</th><th>{t('Data schiță')}</th><th className="num">{t('Zile așteptare')}</th><th /></tr></thead>
+              <tbody>
+                {worklist.map(c => (
+                  <tr key={c.id}>
+                    <td className="strong"><PriorityStars value={c.stelutaCat} readOnly size={13} /> {c.nume || t('(fără nume)')}</td>
+                    <td className="mono">{c.schitaStatus}</td>
+                    <td className="num"><span className={'rot rot--' + (c.zile >= 10 ? 'late' : c.zile >= 5 ? 'warn' : 'fresh')}><span className="mono">{c.zile}z</span></span></td>
+                    <td className="num"><a className="btn btn-ghost btn-sm" href={'/strategie/' + c.id}>{t('Fișă')}<Icon name="arrowR" size={13} /></a></td>
+                  </tr>
+                ))}
+                {!worklist.length && <tr><td colSpan={4} className="muted" style={{ textAlign: 'center', padding: 18 }}>{t('Nicio schiță în lucru.')}</td></tr>}
+              </tbody>
+            </table>
           </div>
         </div>
       </div>

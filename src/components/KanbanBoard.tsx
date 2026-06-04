@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/Icon';
 import { PriorityStar, RotText } from '@/components/indicators';
@@ -38,6 +38,12 @@ const COLS: Array<{ key: string; label: string; color: string; terminal?: boolea
   { key: 'anulat',      label: 'Anulat',       color: 'var(--st-anulat)',      terminal: true, patch: () => ({ stadiu: 'Anulat' }) },
 ];
 const stageOf = deriveStage; // sursă unică de adevăr (lib/stage-rules)
+// Motorul de teme e încărcat global (public/aspect.js → window.Aspect). Acces guardat
+// identic cu src/app/aspect/page.tsx (citit înainte de implementare).
+const A = () => (typeof window !== 'undefined' ? (window as any).Aspect : null);
+// FEATURE A (paritate design pa-kanban.jsx): coloanele PRINCIPALE vizibile implicit;
+// stadiile finale (Amânat / Finalizat / Anulat) sunt ascunse în spatele unui buton „Stadii finale".
+const MAIN_KEYS = ['intrare', 't1', 'schita', 'preofertat', 'ofertat', 'contractat'];
 function parseRO(s: string | null): Date | null { const m = s && String(s).match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/); return m ? new Date(+m[3], +m[2] - 1, +m[1]) : null; }
 function ageDays(c: KanbanClient): number | null {
   const ref = parseRO(c.ofertat) || parseRO(c.preOfertat) || parseRO(c.schitaStatus) || (c.dataIntrare ? new Date(c.dataIntrare) : null);
@@ -60,6 +66,14 @@ export function KanbanBoard({ clienti, isManager, ownerFilter, onPatch, setMsg, 
   const [over, setOver] = useState<string | null>(null);
   const [closeModal, setCloseModal] = useState<{ id: string; colKey: string } | null>(null);
   const [nextStepModal, setNextStepModal] = useState<{ id: string; colKey: string } | null>(null);
+  // FEATURE A: dezvăluie stadiile finale; FEATURE B: ce coloană are popover-ul de culoare deschis.
+  const [showTerminal, setShowTerminal] = useState(false);
+  const [editColor, setEditColor] = useState<string | null>(null);
+  // FEATURE C: meniul „mută în stadiu…" (poziție ancorată) pentru un card.
+  const [moveFor, setMoveFor] = useState<{ id: string; x: number; y: number } | null>(null);
+  // Re-randare la schimbarea culorilor de stadiu (window.Aspect.subscribe), ca în pagina /aspect.
+  const [, force] = useState(0);
+  useEffect(() => { const a = A(); return a ? a.subscribe(() => force(x => x + 1)) : undefined; }, []);
 
   // Închiderea (Contractat/Anulat) cere întâi motivul (win/loss);
   // mutarea în „Ofertat" cere pasul următor + scadența (cerință blocantă în stage-rules);
@@ -96,12 +110,14 @@ export function KanbanBoard({ clienti, isManager, ownerFilter, onPatch, setMsg, 
     return (b.suprafata || 0) - (a.suprafata || 0);
   }));
   const stop = (e: React.MouseEvent) => e.stopPropagation();
+  // FEATURE A: implicit doar coloanele principale; stadiile finale apar la cerere.
+  const visibleCols = showTerminal ? COLS : COLS.filter(c => MAIN_KEYS.includes(c.key));
 
   return (
     <>
       <div className="kanban-wrap scroll-thin rise">
         <div className="kanban">
-          {COLS.map(col => {
+          {visibleCols.map(col => {
             const cards = byCol[col.key];
             const mp = cards.reduce((s, c) => s + (c.suprafata || 0), 0);
             return (
@@ -116,11 +132,17 @@ export function KanbanBoard({ clienti, isManager, ownerFilter, onPatch, setMsg, 
                   <span className="kcol__bar" />
                   <div className="kcol__title">
                     <span className="kcol__name" style={{ color: col.color }}>{t(col.label)}</span>
+                    {/* FEATURE B: editor de culoare per stadiu (window.Aspect) */}
+                    <button className="kcol__edit" title={t('Editează culoarea stadiului')}
+                      onClick={() => setEditColor(editColor === col.key ? null : col.key)}>
+                      <Icon name="palette" size={13} />
+                    </button>
                   </div>
                   <div className="kcol__stats">
                     <span className="kcol__wip">{cards.length}</span>
                     <span className="mono muted" title={t('Suprafață totală în coloană')}>{mp ? 'Σ ' + mp.toLocaleString('ro-RO') + ' mp' : ''}</span>
                   </div>
+                  {editColor === col.key && <StageColorEdit stage={col.key} onClose={() => setEditColor(null)} />}
                 </header>
                 <div className="kcol__list scroll-thin">
                   {cards.map(c => (
@@ -145,6 +167,12 @@ export function KanbanBoard({ clienti, isManager, ownerFilter, onPatch, setMsg, 
                         <div className="kc__foot">
                           {c.reminderText && <span className="rot rot--fresh truncate" style={{ maxWidth: 120 }} title={c.reminderText}><Icon name="clock" size={11} />{c.reminderText}</span>}
                           {!col.terminal && <span style={{ marginLeft: 'auto' }}><RotText stage={col.key} days={ageDays(c) ?? 0} /></span>}
+                          {/* FEATURE C: mutare fără drag — trece prin ACEEAȘI poartă requestMove (modale win/loss + pas următor) */}
+                          <button className="kc__move" title={t('Mută în stadiu…')}
+                            style={col.terminal ? { marginLeft: 'auto' } : undefined}
+                            onClick={e => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMoveFor({ id: c.id, x: r.right, y: r.bottom }); }}>
+                            <Icon name="swap" size={13} />
+                          </button>
                         </div>
                       </div>
                     </article>
@@ -154,6 +182,12 @@ export function KanbanBoard({ clienti, isManager, ownerFilter, onPatch, setMsg, 
               </section>
             );
           })}
+          {/* FEATURE A: buton de dezvăluire a stadiilor finale (Amânat / Finalizat / Anulat) */}
+          {!showTerminal && (
+            <button className="kcol-add" onClick={() => setShowTerminal(true)} title={t('Arată Amânat / Finalizat / Anulat')}>
+              <Icon name="chevR" size={16} /><span>{t('Stadii')}<br />{t('finale')}</span>
+            </button>
+          )}
         </div>
       </div>
       {closeModal && (
@@ -172,6 +206,12 @@ export function KanbanBoard({ clienti, isManager, ownerFilter, onPatch, setMsg, 
             doMove(nextStepModal.id, nextStepModal.colKey, { nextStepText: text, nextStepDue: due });
             setNextStepModal(null);
           }} />
+      )}
+      {/* FEATURE C: meniul „mută în stadiu…" — rutează prin requestMove (păstrează modalele win/loss + pas următor) */}
+      {moveFor && clienti.some(c => c.id === moveFor.id) && (
+        <MoveMenu current={stageOf(clienti.find(c => c.id === moveFor.id)!)} x={moveFor.x} y={moveFor.y}
+          onPick={(key) => { const cur = clienti.find(c => c.id === moveFor.id); setMoveFor(null); if (cur && key !== stageOf(cur)) requestMove(moveFor.id, key); }}
+          onClose={() => setMoveFor(null)} />
       )}
     </>
   );
@@ -242,6 +282,63 @@ function NextStepModal({ onConfirm, onClose }: { onConfirm: (text: string, due: 
           <button onClick={confirm} disabled={!canConfirm}
             className={'btn btn-primary' + (canConfirm ? '' : ' opacity-50 pointer-events-none')}>{t('Confirmă')}</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// FEATURE B (paritate design pa-kanban.jsx StageColorEdit): editor de culoare per stadiu.
+// Scrie în motorul global window.Aspect (stageColor/setStage/resetStage), exact ca pagina /aspect;
+// re-randarea board-ului vine din window.Aspect.subscribe (vezi useEffect din KanbanBoard).
+const STAGE_SWATCHES = ['#64748B', '#0EA5E9', '#6366F1', '#8B5CF6', '#E8870E', '#15A34A', '#0D9488', '#A16207', '#DC2626', '#DB2777', '#0891B2', '#7C3AED'];
+function StageColorEdit({ stage, onClose }: { stage: string; onClose: () => void }) {
+  const { t } = useT();
+  const ref = useRef<HTMLDivElement>(null);
+  const a = A();
+  const cur: string = (a?.stageColor?.(stage)) || '#64748B';
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
+    document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h);
+  }, [onClose]);
+  return (
+    <div className="stage-edit" ref={ref} onClick={e => e.stopPropagation()}>
+      <div className="label" style={{ marginBottom: 6 }}>{t('Culoare stadiu')}</div>
+      <div className="stage-edit__grid">
+        {STAGE_SWATCHES.map(c => (
+          <button key={c} className={'stage-edit__sw' + (c.toLowerCase() === cur.toLowerCase() ? ' is-on' : '')}
+            style={{ background: c }} onClick={() => a?.setStage?.(stage, c)} />
+        ))}
+      </div>
+      <div className="row" style={{ gap: 8, marginTop: 8 }}>
+        <input type="color" className="stage-edit__picker" value={cur} onChange={e => a?.setStage?.(stage, e.target.value)} />
+        <button className="btn btn-ghost btn-sm" onClick={() => a?.resetStage?.(stage)}>
+          <Icon name="reset" size={13} />{t('Implicit')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// FEATURE C (paritate design pa-kanban.jsx MoveMenu): listă de stadii, alternativă la drag.
+// `onPick` rutează în KanbanBoard prin requestMove → aceleași porți (win/loss, pas următor).
+function MoveMenu({ current, x, y, onPick, onClose }: { current: string; x: number; y: number; onPick: (key: string) => void; onClose: () => void }) {
+  const { t } = useT();
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
+    document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h);
+  }, [onClose]);
+  const maxX = typeof window !== 'undefined' ? window.innerWidth - 200 : 1000;
+  return (
+    <div className="pop-anchor" style={{ left: Math.min(x, maxX), top: y + 4 }}>
+      <div className="move-menu" ref={ref}>
+        <div className="label" style={{ padding: '4px 10px 6px' }}>{t('Mută în stadiu…')}</div>
+        {COLS.map(s => (
+          <button key={s.key} className={'move-menu__item' + (s.key === current ? ' is-cur' : '')}
+            disabled={s.key === current} onClick={() => onPick(s.key)}>
+            <span className="move-menu__dot" style={{ background: s.color }} />{t(s.label)}
+          </button>
+        ))}
       </div>
     </div>
   );
