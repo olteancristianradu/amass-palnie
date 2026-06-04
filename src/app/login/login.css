@@ -2,19 +2,23 @@
 .aml{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden;
   background:radial-gradient(120% 120% at 50% -10%,#1a1f26 0%,#0c0e12 55%,#08090c 100%);
   font-family:'Inter',system-ui,-apple-system,sans-serif;padding:20px;}
-/* aurora: 3 pete colorate care plutesc */
-.aml__aurora{position:absolute;inset:-20%;filter:blur(70px);opacity:.55;pointer-events:none;}
-.aml__aurora span{position:absolute;width:46vw;height:46vw;border-radius:50%;mix-blend-mode:screen;}
-.aml__aurora span:nth-child(1){background:#CC0000;top:-6%;left:-4%;animation:aml-f1 16s ease-in-out infinite;}
-.aml__aurora span:nth-child(2){background:#2563EB;bottom:-10%;right:-6%;animation:aml-f2 19s ease-in-out infinite;}
-.aml__aurora span:nth-child(3){background:#0D9488;top:30%;left:40%;width:34vw;height:34vw;animation:aml-f3 22s ease-in-out infinite;}
-@keyframes aml-f1{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(8vw,6vh) scale(1.15)}}
-@keyframes aml-f2{0%,100%{transform:translate(0,0) scale(1.1)}50%{transform:translate(-7vw,-5vh) scale(.9)}}
-@keyframes aml-f3{0%,100%{transform:translate(0,0)}50%{transform:translate(-6vw,7vh) scale(1.1)}}
-/* grilă fină peste fundal */
-.aml__grid{position:absolute;inset:0;pointer-events:none;opacity:.06;
-  background-image:linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px);
-  background-size:46px 46px;-webkit-mask-image:radial-gradient(80% 80% at 50% 40%,#000,transparent);mask-image:radial-gradient(80% 80% at 50% 40%,#000,transparent);}
+/* SCENA: podeaua camerei + cablul de incalzire care se monteaza singur (serpentina) + caldura */
+.aml__scene{position:absolute;inset:0;pointer-events:none;opacity:.92;}
+.aml__floor{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) perspective(900px) rotateX(8deg);width:122%;height:122%;
+  -webkit-mask-image:radial-gradient(95% 85% at 50% 45%,#000 55%,transparent);mask-image:radial-gradient(95% 85% at 50% 45%,#000 55%,transparent);}
+/* cablul se „deseneaza" singur (lay) apoi tine glow, apoi dispare si se reia */
+.aml__cable{stroke-dasharray:1;stroke-dashoffset:1;animation:aml-lay 9s ease-in-out infinite;}
+@keyframes aml-lay{
+  0%{stroke-dashoffset:1;opacity:0}
+  5%{opacity:.95}
+  58%{stroke-dashoffset:0;opacity:.95}
+  87%{stroke-dashoffset:0;opacity:.95}
+  97%{stroke-dashoffset:0;opacity:0}
+  100%{stroke-dashoffset:1;opacity:0}
+}
+/* podeaua se „incalzeste" cand cablul e gata */
+.aml__bloom{opacity:0;animation:aml-heat 9s ease-in-out infinite;}
+@keyframes aml-heat{0%,54%{opacity:0}80%{opacity:.7}90%{opacity:.7}100%{opacity:0}}
 /* card frosted */
 .aml__card{position:relative;z-index:2;width:100%;max-width:400px;padding:38px 34px 26px;border-radius:20px;
   background:rgba(20,24,30,.62);backdrop-filter:blur(18px) saturate(140%);-webkit-backdrop-filter:blur(18px) saturate(140%);
@@ -51,4 +55,4 @@
 @keyframes aml-shine{0%,60%{left:-60%}100%{left:160%}}
 .aml__foot{margin-top:22px;text-align:center;font-size:11px;letter-spacing:.04em;color:#6b7280;}
 @media (max-width:420px){.aml__card{padding:30px 22px 22px}.aml__title{font-size:26px}}
-@media (prefers-reduced-motion:reduce){.aml__aurora span,.aml__title,.aml__btn::after,.aml__tag{animation:none}}
+@media (prefers-reduced-motion:reduce){.aml__cable{animation:none;stroke-dashoffset:0;opacity:.9}.aml__bloom{animation:none;opacity:.35}.aml__title,.aml__btn::after,.aml__tag{animation:none}}
