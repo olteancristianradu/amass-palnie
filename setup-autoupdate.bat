@@ -31,6 +31,11 @@ if errorlevel 1 (
   exit /b 1
 )
 
+REM Task SUPLIMENTAR: ruleaza si LA PORNIREA serverului (cu 2 min intarziere ca Docker Desktop sa apuce
+REM sa porneasca) => dupa orice restart, aplicatia trage singura ultimul update fara sa astepti ciclul de 2h.
+schtasks /Create /TN "%TASK%-OnStart" /TR "cmd /c \"%~dp0auto-update.bat\"" /SC ONSTART /DELAY 0002:00 /RL HIGHEST /F >nul 2>&1
+echo [OK] Adaugat si declansatorul „la pornirea serverului" (dupa restart porneste singur).
+
 echo.
 echo [OK] Sarcina creata. Rulez ACUM o verificare ca sa confirm ca merge...
 schtasks /Run /TN "%TASK%" >nul 2>&1
@@ -40,7 +45,7 @@ echo VERIFICARI utile:
 echo   - Vezi cand a rulat ultima data:   schtasks /Query /TN "%TASK%" /V /FO LIST
 echo   - Istoric + erori:                 deschide auto-update.log
 echo   - Rulezi manual oricand:           dublu-click pe auto-update.bat
-echo   - Opresti auto-update:             schtasks /Delete /TN "%TASK%" /F
+echo   - Opresti auto-update:             schtasks /Delete /TN "%TASK%" /F ^& schtasks /Delete /TN "%TASK%-OnStart" /F
 echo.
 echo IMPORTANT pentru ca update-ul automat sa MEARGA:
 echo   1) Docker Desktop trebuie sa porneasca automat + serverul sa ramana LOGAT.
