@@ -567,10 +567,10 @@ export default function StrategiePage() {
     );
   }
 
-  // ── Secțiunea 05 · Diferențe & concluzii (DOAR V2), layout .concl ──
+  // ── Secțiunea 05 · Diferențe & concluzii (TOATE variantele — handoff 2 / pa-fisa.jsx), layout .concl ──
   function renderConcl() {
-    if (isV1) return null;
-    const z = zone('z05');
+    // z05 e definit doar în SEED_V2; pentru V1 (template fără z05) folosim definiția V2 ca fallback de etichete.
+    const z = zone('z05') || SEED_V2.zones.find(x => x.id === 'z05');
     if (!z) return null;
     const cell = (key: string, unit: string, accent?: boolean, signed?: boolean) => {
       const f = z.fields.find(x => x.key === key);
@@ -607,7 +607,7 @@ export default function StrategiePage() {
 
   // ── Secțiunea 06 · Strategie & nevoi (zona cu strategie_nevoi din template) ──
   function renderStrategie() {
-    const num = isV1 ? '05' : '06';
+    const num = '06'; // handoff 2: §05 Diferențe apare la toate variantele → Strategie e mereu 06
     return (
       <section className="fz card">
         <header className="fz__head"><span className="fz__num">{num}</span><h3>{t('Strategie & rezistențe & nevoi identificate')}</h3></header>
