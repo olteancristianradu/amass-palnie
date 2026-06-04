@@ -23,15 +23,19 @@ const nz = (v: any) => !!(v && String(v).trim());
 // Pipeline-ul lui Radu: Intrare → T1 → Schiță → Pre-ofertat → Ofertat → Contractat
 // (+ stări laterale: Amânat, Finalizat, Anulat). Drag-ul setează câmpurile etapei-țintă.
 const COLS: Array<{ key: string; label: string; color: string; terminal?: boolean; patch: () => any }> = [
-  { key: 'intrare',     label: 'Intrare',      color: 'var(--fg-faint)',  patch: () => ({ t1: '', t1Locked: false, schitaStatus: '', preOfertat: '', ofertat: '', stadiu: '' }) },
-  { key: 't1',          label: 'T1',           color: '#6b8a9e',          patch: () => ({ t1: today(), t1Locked: true, schitaStatus: '', preOfertat: '', ofertat: '', stadiu: '' }) },
-  { key: 'schita',      label: 'Schiță',       color: '#c98a2b',          patch: () => ({ schitaStatus: today(), preOfertat: '', ofertat: '', stadiu: '' }) },
-  { key: 'preofertat',  label: 'Pre-ofertat',  color: '#e07a2e',          patch: () => ({ preOfertat: today(), ofertat: '', stadiu: '' }) },
-  { key: 'ofertat',     label: 'Ofertat',      color: 'var(--ember)',     patch: () => ({ ofertat: today(), stadiu: '' }) },
-  { key: 'amanat',      label: 'Amânat',       color: 'var(--warn)',      patch: () => ({ stadiu: 'Amanat' }) },           // păstrează datele de etapă
-  { key: 'contractat',  label: 'Contractat',   color: 'var(--pine)',      terminal: true, patch: () => ({ stadiu: 'Contractat' }) },
-  { key: 'finalizat',   label: 'Finalizat',    color: '#2f7d52',          terminal: true, patch: () => ({ stadiu: 'Finalizat' }) },
-  { key: 'anulat',      label: 'Anulat',       color: 'var(--err)',       terminal: true, patch: () => ({ stadiu: 'Anulat' }) },
+  // FIX 2026-06-04 (paritate design C1): culorile coloanelor = tokenii de stadiu --st-* (rampa
+  // rece→cald slate→sky→indigo→violet→amber→green), aceiași folosiți de StagePill în Carduri/Tabel/
+  // Dashboard. Înainte erau hardcodate cu o rampă caldă (ofertat = var(--ember)/roșu de brand) →
+  // inconsistent cu restul aplicației și cu designul (pa-kanban.jsx folosește var(--st-{stage})).
+  { key: 'intrare',     label: 'Intrare',      color: 'var(--st-intrare)',     patch: () => ({ t1: '', t1Locked: false, schitaStatus: '', preOfertat: '', ofertat: '', stadiu: '' }) },
+  { key: 't1',          label: 'T1',           color: 'var(--st-t1)',          patch: () => ({ t1: today(), t1Locked: true, schitaStatus: '', preOfertat: '', ofertat: '', stadiu: '' }) },
+  { key: 'schita',      label: 'Schiță',       color: 'var(--st-schita)',      patch: () => ({ schitaStatus: today(), preOfertat: '', ofertat: '', stadiu: '' }) },
+  { key: 'preofertat',  label: 'Pre-ofertat',  color: 'var(--st-preofertat)',  patch: () => ({ preOfertat: today(), ofertat: '', stadiu: '' }) },
+  { key: 'ofertat',     label: 'Ofertat',      color: 'var(--st-ofertat)',     patch: () => ({ ofertat: today(), stadiu: '' }) },
+  { key: 'amanat',      label: 'Amânat',       color: 'var(--st-amanat)',      patch: () => ({ stadiu: 'Amanat' }) },           // păstrează datele de etapă
+  { key: 'contractat',  label: 'Contractat',   color: 'var(--st-contractat)',  terminal: true, patch: () => ({ stadiu: 'Contractat' }) },
+  { key: 'finalizat',   label: 'Finalizat',    color: 'var(--st-finalizat)',   terminal: true, patch: () => ({ stadiu: 'Finalizat' }) },
+  { key: 'anulat',      label: 'Anulat',       color: 'var(--st-anulat)',      terminal: true, patch: () => ({ stadiu: 'Anulat' }) },
 ];
 const stageOf = deriveStage; // sursă unică de adevăr (lib/stage-rules)
 function parseRO(s: string | null): Date | null { const m = s && String(s).match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/); return m ? new Date(+m[3], +m[2] - 1, +m[1]) : null; }

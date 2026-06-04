@@ -473,7 +473,7 @@ export default function PalniePage() {
           ]} />
       </div>
       <div className="topbar__sp" />
-      <button className="btn btn-pine btn-sm" onClick={() => setNewModal(true)} title={t('Adaugă un client manual (fără înregistrare CRM)')}>
+      <button className="btn btn-primary btn-sm" onClick={() => setNewModal(true)} title={t('Adaugă un client manual (fără înregistrare CRM)')}>
         <Icon name="plus" size={14} />{t('Client nou')}
       </button>
       <SyncBadge last={lastSync} syncing={!!sync} auto={autoSync} />

@@ -964,7 +964,7 @@ function InfoCrmModal({ client, text, setText, onClose, onDone }: {
           <div className="flex gap-2 flex-wrap">
             <a href={`https://gestcom.ro/amass/index.php?m=lucrari&a=view&id_lucrare=${client.idLucrare}`} target="_blank" rel="noopener" className="btn btn-secondary">{t('↗ Deschide CRM')}</a>
             <button onClick={copyText} className="btn btn-secondary">{t('📋 Copy text')}</button>
-            <button onClick={pushNow} disabled={pushing} className="btn text-white" style={{ background: '#1e7a3c' }}>{pushing ? '…' : t('↗ Push în CRM')}</button>
+            <button onClick={pushNow} disabled={pushing} className="btn btn-pine">{pushing ? '…' : t('↗ Push în CRM')}</button>
             <button onClick={onClose} className="btn btn-secondary">{t('Închide')}</button>
           </div>
         </div>
