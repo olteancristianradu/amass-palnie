@@ -76,34 +76,80 @@ export function Tour({ run, onClose, nav }: { run: boolean; onClose: () => void;
   );
 }
 
+// ── COD CULORI — legende sistematizate (aliniate, scanabile) — port din handoff help.jsx ──
+const PRIORITY_LEGEND: [string, string, string][] = [
+  ['#E11D2A', 'Urgent', 'roșu'],
+  ['#F97316', 'Ridicată', 'portocaliu'],
+  ['#2563EB', 'Normală', 'albastru'],
+  ['#16A34A', 'Scăzută', 'verde'],
+  ['#FFFFFF', 'Nesetat', 'alb'],
+];
+const AGE_LEGEND: [string, string, string][] = [
+  ['var(--rot-fresh)', 'Proaspăt', 'în termen, nicio grijă'],
+  ['var(--rot-warn)', 'Atenție', 'stă cam mult — sună-l'],
+  ['var(--rot-late)', 'Întârziat', 'a depășit timpul normal'],
+];
+
+function LegendGrid({ title, sub, rows, twoLabels }: { title: string; sub?: string; rows: [string, string, string][]; twoLabels?: boolean }) {
+  const { t } = useT();
+  return (
+    <div className="legend-block">
+      <div className="legend-block__h"><b>{t(title)}</b>{sub && <span>{t(sub)}</span>}</div>
+      <div className={'legend-grid' + (twoLabels ? ' legend-grid--two' : '')}>
+        {rows.map((r, k) => (
+          <div className={'legend-cell' + (twoLabels ? ' legend-cell--two' : '')} key={k}>
+            <span className="legend-dot" style={{ background: r[0], borderColor: r[0] === '#FFFFFF' ? 'var(--border-strong)' : 'transparent' }} />
+            <span className="legend-txt">
+              <span className="legend-lbl">{t(r[1])}</span>
+              {twoLabels && <span className="legend-meta">{t(r[2])}</span>}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── GLOSAR — ce face fiecare buton/setare ──
 const HELP_GLOSSARY: Array<{ sec: string; items: [string, string, string][] }> = [
   { sec: 'Navigare & general', items: [
     ['dashboard', 'Dashboard', 'Rapoarte: câți clienți, cum curge pâlnia, conversii, ce e urgent.'],
-    ['funnel', 'Pâlnie clienți', 'Lista ta de lucru cu toți clienții, în 3 moduri de afișare.'],
+    ['kanban', 'Pâlnie clienți', 'Lista ta de lucru cu toți clienții, în 3 moduri de afișare.'],
     ['search', 'Câmp de căutare', 'Scrie nume / oraș / ID — lista se filtrează pe loc.'],
+    ['plus', 'Client nou', 'Adaugă un client nou în pâlnie.'],
     ['help', 'Ajutor', 'Deschide acest ghid și turul. Disponibil pe orice pagină.'],
     ['user', 'Numele tău (jos)', 'Click → meniu cu Setări, comutare temă și Ieșire.'],
     ['chevL', 'Săgeata de lângă logo', 'Restrânge/extinde meniul din stânga (mai mult spațiu).'],
   ] },
   { sec: 'Pâlnie — moduri de afișare', items: [
     ['cards', 'Carduri', 'Rânduri mari, ușor de citit pe telefon. Acțiuni rapide fără să intri în fișă.'],
-    ['table', 'Tabel', 'Toate datele dense, ca în Excel — editabil în celulă.'],
-    ['kanban', 'Kanban', 'Coloane pe stadii; tragi cardul dintr-o coloană în alta ca să muți clientul.'],
-    ['filter', 'Filtre', 'Restrânge lista după stadiu, prioritate, vârstă, agent, CRM sau perioadă.'],
+    ['table', 'Tabel', 'Toate datele dense, ca în Excel — sortabil, editabil în celulă.'],
+    ['kanban', 'Kanban', 'Coloane pe stadii; tragi cardul dintr-o coloană în alta ca să muți clientul. Antetul coloanei arată câți clienți sunt în acel stadiu.'],
+    ['filter', 'Filtre', 'Restrânge lista după stadiu, prioritate, vârstă sau agent.'],
   ] },
   { sec: 'Indicatori pe client', items: [
-    ['star', 'Steluța colorată', 'Prioritatea: roșu=urgent, portocaliu=ridicată, albastru=normală, verde=scăzută, alb=nesetat. La fel pentru toți.'],
+    ['star', 'Steluța colorată', 'Prioritatea clientului — vezi codul de culori de mai sus. E la fel pentru toți agenții.'],
     ['clock', 'Vârsta (ex. „12z")', 'De câte zile stă clientul în stadiul curent. Galben/roșu = stă prea mult, sună-l.'],
-    ['alert', 'Triunghi de atenție', 'La nume = client fără înregistrare în CRM. Pe vârstă = a depășit timpul normal în stadiu.'],
+    ['headphones', 'Cască (audio)', 'Există o înregistrare audio atașată clientului (ex. apel salvat). Apare lângă nume în carduri și tabel.'],
+    ['note', 'Notepad (observații)', 'Clientul are observații scrise. Deschide fișa ca să le citești.'],
+    ['alert', 'Triunghi de atenție', 'Clientul a depășit timpul normal în stadiu — necesită acțiune.'],
     ['bell', 'Reminder', 'Data și tipul următoarei acțiuni programate (ex. TELEFON).'],
   ] },
+  { sec: 'Tabel — coloane', items: [
+    ['ruler', 'Suprafață', 'Mp de încălzit — baza calculului AMASS.'],
+    ['clock', 'Data intrare', 'Când a intrat clientul în CRM.'],
+    ['check', 'T1 (auto/manual)', 'Primul contact. Se completează automat din Data intrare; dacă scrii manual, rămâne manual.'],
+    ['target', 'Nevoia', 'Calificarea: Acoperită / Tentativă / Nu îl putem ajuta / Viitoare / Acoperită în anumite condiții.'],
+    ['note', 'Status', 'În lucru / Contractat / Anulat / Amânat. Dacă pui Anulat → Nevoia devine automat „Nu îl putem ajuta".'],
+    ['note', 'Observații manager', 'Notiță liberă pe rândul clientului.'],
+  ] },
   { sec: 'Fișă strategie', items: [
-    ['upload', 'Push CRM', 'Trimite fișa în CRM (gestcom.ro), între markeri — observațiile manuale rămân.'],
-    ['mail', 'Email', 'Compune emailul de deviz către client.'],
-    ['bell', 'Reminder', 'Programează o reamintire (cu listă de remindere existente).'],
-    ['download', 'PDF / Word', 'Exportă fișa ca PDF sau document Word.'],
-    ['check', 'Salvare automată', 'Orice modificare se salvează singură („Se salvează… / Salvat").'],
+    ['upload', 'Push CRM', 'Trimite fișa în sistemul CRM (gestcom.ro).'],
+    ['mail', 'Email', 'Compune un email către client.'],
+    ['bell', 'Reminder', 'Programează o reamintire.'],
+    ['download', 'PDF', 'Exportă fișa ca PDF.'],
+    ['note', 'Word', 'Exportă fișa ca document Word.'],
+    ['check', 'Salvare automată', 'Nu există buton „Salvează" — orice modificare se salvează singură („Se salvează… / Salvat").'],
     ['trending', 'Panourile verzi (auto-calc)', 'Se calculează singure din suprafață: putere, consum, investiție, eșalonare, profit, amortizare.'],
   ] },
   { sec: 'Setări', items: [
@@ -111,8 +157,9 @@ const HELP_GLOSSARY: Array<{ sec: string; items: [string, string, string][] }> =
     ['refresh', 'Auto-sync', 'Pornește/oprește sincronizarea automată și alege intervalul.'],
     ['mail', 'Outlook', 'Leagă emailul și calendarul.'],
     ['upload', 'Import date', 'Încarcă un fișier și mapează coloanele.'],
+    ['globe', 'Limbă', 'Schimbă limba interfeței.'],
     ['palette', 'Aspect aplicație', 'Temă (light/dark), accent, font și culorile stadiilor — cu previzualizare live.'],
-    ['type', 'Mărime & densitate', 'Mărește textul (până la 150%) și spațierea.'],
+    ['type', 'Mărime & densitate', 'Mărește textul (până la 150%) și spațierea — pentru orice ecran sau vedere.'],
   ] },
 ];
 
@@ -140,6 +187,13 @@ export function HelpPanel({ open, onClose, onStartTour }: { open: boolean; onClo
             <Icon name="search" size={15} />
             <input placeholder={t('Caută un buton sau o setare…')} value={q} onChange={e => setQ(e.target.value)} />
           </div>
+          {!ql && (
+            <section className="help-sec">
+              <h3 className="help-sec__t">{t('Cod de culori (la fel pentru toți)')}</h3>
+              <LegendGrid title="Prioritate — steluța colorată" rows={PRIORITY_LEGEND} />
+              <LegendGrid title="Vârstă în stadiu" sub="cât stă clientul fără mișcare" rows={AGE_LEGEND} twoLabels />
+            </section>
+          )}
           {filtered.map(g => (
             <section key={g.sec} className="help-sec">
               <h3 className="help-sec__t">{t(g.sec)}</h3>

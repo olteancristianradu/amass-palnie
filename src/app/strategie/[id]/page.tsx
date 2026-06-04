@@ -2,6 +2,8 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { Layout } from '@/components/Layout';
 import { Icon } from '@/components/Icon';
+import { PriorityStar } from '@/components/indicators';
+import { stelutaToPrio } from '@/lib/aspect-meta';
 import { calculate, type StrategieInput } from '@/lib/strategie-calc';
 import { parseObservatii } from '@/lib/strategie-autofill';
 import { buildEmail } from '@/lib/email-redactare';
@@ -662,6 +664,7 @@ export default function StrategiePage() {
 
         {/* ── titlu: ⚠ (dacă !inCRM) + nume + oraș + id + contact ── */}
         <div className="fisa__title">
+          <PriorityStar value={stelutaToPrio(Number((client as any).stelutaCat ?? 0))} size={18} />
           {!inCRM && <span className="cnm__warn" title={t('Fără înregistrare în CRM')}><Icon name="alert" size={16} /></span>}
           <h1>{client.nume}</h1>
           {client.localitate && <span className="fisa__city">· {client.localitate}</span>}

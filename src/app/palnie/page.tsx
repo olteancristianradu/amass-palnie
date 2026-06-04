@@ -4,11 +4,11 @@ import { useRouter } from 'next/navigation';
 import { Layout } from '@/components/Layout';
 import { SyncBadge, type SyncInfo, type AutoSyncInfo } from '@/components/ui';
 import { Icon } from '@/components/Icon';
-import { PriorityStar, StagePill, RotText, Segmented } from '@/components/indicators';
+import { PriorityStar, Segmented } from '@/components/indicators';
 import { KanbanBoard } from '@/components/KanbanBoard';
 import { useT } from '@/lib/i18n';
 import {
-  deriveStage, daysSince, stelutaToPrio, prioToSteluta,
+  deriveStage, daysSince, stelutaToPrio, prioToSteluta, rotLevel,
   ALL_STAGES, PRIORITIES, PRIORITY_MAP, STAGE_MAP,
 } from '@/lib/aspect-meta';
 
@@ -23,6 +23,7 @@ interface Client {
   suprafata: number | null;
   dataIntrare: string | null;
   t1: string | null;
+  t1Locked?: boolean | null;
   hasAudio: boolean;
   nevoia: string | null;
   schitaStatus: string | null;
@@ -80,6 +81,7 @@ interface FilterState {
   stadiu: string;       // valoare STADII sau ''
   nevoia: string;       // valoare NEVOI sau ''
   steluta: string;      // '' sau '0'..'4'
+  varsta: 'all' | 'fresh' | 'warn' | 'late';  // Vârstă (rotLevel pe etapă): Proaspete/Atenție/Întârziate
   audio: 'all' | 'yes' | 'no';
   inCRM: 'all' | 'yes' | 'no';   // Înregistrare CRM: Toate / În CRM / Fără CRM (null tratat ca în CRM)
   mpMin: string;
@@ -89,7 +91,7 @@ interface FilterState {
   stageFrom: string;    // yyyy-mm-dd — Perioadă schimbare stadiu (pe updatedAt)
   stageTo: string;      // yyyy-mm-dd
 }
-const DEFAULT_FILTERS: FilterState = { stage: '', stadiu: '', nevoia: '', steluta: '', audio: 'all', inCRM: 'all', mpMin: '', mpMax: '', dateFrom: '', dateTo: '', stageFrom: '', stageTo: '' };
+const DEFAULT_FILTERS: FilterState = { stage: '', stadiu: '', nevoia: '', steluta: '', varsta: 'all', audio: 'all', inCRM: 'all', mpMin: '', mpMax: '', dateFrom: '', dateTo: '', stageFrom: '', stageTo: '' };
 
 // Înregistrare CRM: null sau true = client real (în CRM); doar false = creat manual în webapp.
 const isInCRM = (c: { inCRM?: boolean | null }) => c.inCRM !== false;
@@ -103,6 +105,29 @@ function fmtDateRO(v: string | null | undefined): string {
   else { const t = new Date(v); if (!Number.isNaN(t.getTime())) d = t; }
   if (!d) return String(v);
   return d.toLocaleDateString('ro-RO', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+// dd.mm.yyyy <-> yyyy-mm-dd (pentru <input type="date"> nativ; T1 din CRM vine ca dd.mm.yyyy).
+function dateToISO(v: string | null | undefined): string {
+  if (!v) return '';
+  const m = String(v).match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+  const t = new Date(v);
+  if (!Number.isNaN(t.getTime())) return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+  return '';
+}
+function isoToDateRO(iso: string): string {
+  const p = iso.split('-');
+  return p.length === 3 ? `${p[2]}.${p[1]}.${p[0]}` : '';
+}
+// T1 auto = Data intrare + 1 zi (paritate cu handoff: window.DB iso(+1)), format dd.mm.yyyy.
+function t1Auto(dataIntrare: string | null | undefined): string {
+  const iso = dateToISO(dataIntrare);
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  if (Number.isNaN(d.getTime())) return '';
+  d.setDate(d.getDate() + 1);
+  return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
 }
 
 // Chip colors pe Nevoia (parity cu Palnie.js ~175-183): verde / gri / roșu / galben / portocaliu.
@@ -152,6 +177,30 @@ function StepToggle({ label, done, onClick }: { label: string; done: boolean; on
     <button className={'steptog' + (done ? ' is-done' : '')} onClick={e => { e.stopPropagation(); onClick(); }} title={label}>
       <Icon name={done ? 'check' : 'clock'} size={12} />{label}
     </button>
+  );
+}
+
+// Celulă de dată editabilă (paritate handoff .datecell): afișează data cu NUME DE LUNĂ
+// (ex. „8 mai 2026"); click → calendar nativ. `faint` = stil estompat (ex. T1 auto, nesetat manual).
+function DateCell({ value, onChange, faint, title }: {
+  value: string | null; onChange: (iso: string) => void; faint?: boolean; title?: string;
+}) {
+  const { t } = useT();
+  const ref = useRef<HTMLInputElement>(null);
+  const open = () => {
+    const el = ref.current; if (!el) return;
+    if ((el as any).showPicker) { try { (el as any).showPicker(); return; } catch {} }
+    el.focus(); el.click();
+  };
+  const iso = dateToISO(value);
+  return (
+    <span className={'datecell' + (faint ? ' is-faint' : '') + (!value ? ' is-empty' : '')}
+      onClick={open} title={title || (value ? t('Click pentru a schimba data') : t('Click pentru a seta data'))}>
+      <Icon name="clock" size={11} />
+      <span className="datecell__txt">{value ? fmtDateRO(value) : '—'}</span>
+      <input ref={ref} type="date" className="datecell__native" value={iso} tabIndex={-1}
+        onChange={e => onChange(e.target.value)} />
+    </span>
   );
 }
 
@@ -339,6 +388,43 @@ export default function PalniePage() {
     }
   }
 
+  // Update optimist cu MAI MULTE câmpuri într-un singur PATCH (ex. T1 + t1Locked, sau stadiu + nevoia).
+  // Aceeași logică de rollback ca updateInline, dar pe tot setul de câmpuri modificate.
+  async function updateInlineMulti(id: string, patch: Record<string, any>) {
+    const prev = clienti.find(c => c.id === id) as any;
+    const prevVals: Record<string, any> = {};
+    const newVals: Record<string, any> = {};
+    for (const [k, v] of Object.entries(patch)) {
+      prevVals[k] = prev ? (prev[k] ?? null) : null;
+      newVals[k] = (typeof v === 'string') ? (v || null) : v;
+    }
+    setClienti(p => p.map(c => c.id === id ? { ...c, ...newVals } : c));
+    const r = await fetch(`/api/clienti/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newVals)
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({} as any));
+      setMsg('❌ ' + (j.validationErrors?.join(' ') || j.error || t('Nu s-a putut salva')));
+      // Rollback per-câmp doar dacă valoarea afișată e încă cea pe care AM setat-o noi (anti-pierdere afișaj).
+      setClienti(p => p.map(c => {
+        if (c.id !== id) return c;
+        const restore: Record<string, any> = {};
+        for (const k of Object.keys(newVals)) if ((c as any)[k] === newVals[k]) restore[k] = prevVals[k];
+        return { ...c, ...restore };
+      }));
+    }
+  }
+
+  // T1: editare manuală din celulă (calendar). O dată introdusă manual → t1Locked=true (nu se mai
+  // suprascrie de import/auto). Setăm ambele câmpuri într-un singur PATCH.
+  const setT1Manual = (id: string, iso: string) => updateInlineMulti(id, { t1: iso ? isoToDateRO(iso) : '', t1Locked: true });
+  // „↺ auto": revine la completarea automată (T1 = Data intrare + 1 zi, t1Locked=false).
+  const setT1AutoRevert = (id: string) => {
+    const c = clienti.find(x => x.id === id);
+    updateInlineMulti(id, { t1: t1Auto(c?.dataIntrare), t1Locked: false });
+  };
+
   // Schimbarea Stadiu: 'Contractat'/'Anulat' = închidere → cere motiv (modal) și trimite
   // { stadiu, closureReason, closureReasonDetail } într-un singur PATCH; restul merg direct.
   function setStadiu(id: string, value: string) {
@@ -348,17 +434,22 @@ export default function PalniePage() {
   async function closeWithReason(id: string, stadiu: 'Contractat' | 'Anulat', detail: string) {
     const prev = clienti.find(c => c.id === id) as any;
     const closureReason = stadiu === 'Contractat' ? 'Won' : 'Lost';
-    setClienti(p => p.map(c => c.id === id ? { ...c, stadiu } : c)); // optimist
+    // BUSINESS RULE: la Anulat setăm și nevoia='Nu il putem ajuta' în ACELAȘI PATCH (paritate spreadsheet).
+    const body: Record<string, any> = { stadiu, closureReason, closureReasonDetail: detail };
+    if (stadiu === 'Anulat') body.nevoia = 'Nu il putem ajuta';
+    setClienti(p => p.map(c => c.id === id ? { ...c, stadiu, ...(stadiu === 'Anulat' ? { nevoia: 'Nu il putem ajuta' } : {}) } : c)); // optimist
     setMsg(`⏳ ${stadiu === 'Contractat' ? t('Contractare') : t('Anulare')} ${t('în CRM…')}`);
     const r = await fetch(`/api/clienti/${id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ stadiu, closureReason, closureReasonDetail: detail })
+      body: JSON.stringify(body)
     });
     if (r.ok) { setMsg(`✅ ${t('Marcat')} „${t(stadiu)}" ${t('(sincronizat în CRM)')}`); }
     else {
       const j = await r.json().catch(() => ({} as any));
       setMsg('❌ ' + (j.validationErrors?.join(' ') || j.error || t('Nu s-a putut salva')));
-      setClienti(p => p.map(c => (c.id === id && (c as any).stadiu === stadiu) ? { ...c, stadiu: prev ? (prev.stadiu ?? null) : null } : c));
+      setClienti(p => p.map(c => (c.id === id && (c as any).stadiu === stadiu)
+        ? { ...c, stadiu: prev ? (prev.stadiu ?? null) : null, ...(stadiu === 'Anulat' && (c as any).nevoia === 'Nu il putem ajuta' ? { nevoia: prev ? (prev.nevoia ?? null) : null } : {}) }
+        : c));
     }
   }
 
@@ -383,6 +474,8 @@ export default function PalniePage() {
       if (filters.nevoia && (c.nevoia ?? '') !== filters.nevoia) return false;
       // Steluță (prioritate culoare)
       if (filters.steluta !== '' && (c.stelutaCat ?? 0) !== Number(filters.steluta)) return false;
+      // Vârstă (rotLevel pe etapă: proaspăt / atenție / întârziat)
+      if (filters.varsta !== 'all' && rotLevel(deriveStage(c), daysSince(c.dataIntrare)) !== filters.varsta) return false;
       // Audio
       if (filters.audio === 'yes' && !c.hasAudio) return false;
       if (filters.audio === 'no' && c.hasAudio) return false;
@@ -433,7 +526,7 @@ export default function PalniePage() {
   // Nr. de filtre active (pt. badge) — search-ul nu intră, are propriul input.
   const activeFilterCount = (
     (filters.stage ? 1 : 0) + (filters.stadiu ? 1 : 0) + (filters.nevoia ? 1 : 0) +
-    (filters.steluta !== '' ? 1 : 0) + (filters.audio !== 'all' ? 1 : 0) +
+    (filters.steluta !== '' ? 1 : 0) + (filters.varsta !== 'all' ? 1 : 0) + (filters.audio !== 'all' ? 1 : 0) +
     (filters.inCRM !== 'all' ? 1 : 0) +
     (filters.mpMin !== '' || filters.mpMax !== '' ? 1 : 0) +
     (filters.dateFrom || filters.dateTo ? 1 : 0) +
@@ -447,6 +540,7 @@ export default function PalniePage() {
     filters.stadiu ? { k: 'stadiu', label: filters.stadiu, clear: () => setF('stadiu', '') } : null,
     filters.nevoia ? { k: 'nevoia', label: filters.nevoia, clear: () => setF('nevoia', '') } : null,
     filters.steluta !== '' ? { k: 'steluta', label: 'Prio: ' + (STELUTA_OPTIONS[Number(filters.steluta)] || filters.steluta), clear: () => setF('steluta', '') } : null,
+    filters.varsta !== 'all' ? { k: 'varsta', label: 'Vârstă: ' + ({ fresh: 'Proaspete', warn: 'Atenție', late: 'Întârziate' }[filters.varsta] || filters.varsta), clear: () => setF('varsta', 'all') } : null,
     filters.audio !== 'all' ? { k: 'audio', label: filters.audio === 'yes' ? 'Cu audio' : 'Fără audio', clear: () => setF('audio', 'all') } : null,
     filters.inCRM !== 'all' ? { k: 'inCRM', label: filters.inCRM === 'yes' ? 'În CRM' : 'Fără CRM', clear: () => setF('inCRM', 'all') } : null,
     (filters.mpMin !== '' || filters.mpMax !== '') ? { k: 'mp', label: `mp ${filters.mpMin || '0'}–${filters.mpMax || '∞'}`, clear: () => setFilters(p => ({ ...p, mpMin: '', mpMax: '' })) } : null,
@@ -460,7 +554,8 @@ export default function PalniePage() {
   };
   const stop = (e: React.MouseEvent) => e.stopPropagation();
 
-  // Topbar (switcher + search) — pasat Layout-ului prin prop `topbar`, ca în design.
+  // Topbar (switcher + search + filtre) — pasat Layout-ului prin prop `topbar`, ca în design.
+  // Ordinea handoff: switcher → spacer → search → buton Filtre (lipit de search) → Client nou.
   const topbar = (
     <>
       <div className="topbar__switch">
@@ -473,33 +568,35 @@ export default function PalniePage() {
           ]} />
       </div>
       <div className="topbar__sp" />
-      <button className="btn btn-primary btn-sm" onClick={() => setNewModal(true)} title={t('Adaugă un client manual (fără înregistrare CRM)')}>
-        <Icon name="plus" size={14} />{t('Client nou')}
-      </button>
-      <SyncBadge last={lastSync} syncing={!!sync} auto={autoSync} />
       <div className="topbar__search">
         <Icon name="search" size={15} />
         <input placeholder={t('Caută client, oraș, #id…')} value={filter} onChange={e => setFilter(e.target.value)} />
       </div>
+      <button className={'btn btn-secondary btn-sm filter-toggle' + (filtersOpen ? ' is-on' : '')}
+        onClick={() => setFiltersOpen(o => !o)} aria-expanded={filtersOpen}
+        title={t('Filtre ample (etapă, nevoie, suprafață, dată…)')}>
+        <Icon name="filter" size={15} /><span className="filter-toggle__lbl">{t('Filtre')}</span>
+        {activeFilterCount > 0 && <span className="filter-badge">{activeFilterCount}</span>}
+      </button>
+      <button className="btn btn-primary btn-sm" onClick={() => setNewModal(true)} title={t('Adaugă un client manual (fără înregistrare CRM)')}>
+        <Icon name="plus" size={14} />{t('Client nou')}
+      </button>
+      <SyncBadge last={lastSync} syncing={!!sync} auto={autoSync} />
     </>
   );
 
   return (
     <Layout topbar={topbar} contentMod={view === 'kanban' ? 'content--kanban' : undefined}>
-      {/* FILTERBAR — buton Filtre + chips active + contor (re-stilizat ca în design) */}
-      <div className="filterbar">
-        <button className={'btn btn-secondary btn-sm filter-toggle' + (filtersOpen ? ' is-on' : '')}
-          onClick={() => setFiltersOpen(o => !o)} aria-expanded={filtersOpen}
-          title={t('Filtre ample (etapă, nevoie, suprafață, dată…)')}>
-          <Icon name="filter" size={14} />{t('Filtre')}
-          {activeFilterCount > 0 && <span className="filter-badge">{activeFilterCount}</span>}
-        </button>
-        <div className="chips-row">
-          {activeChips.map(c => <Chip key={c.k} dot={c.dot} onRemove={c.clear}>{c.label}</Chip>)}
-          {activeFilterCount > 0 && <button className="btn btn-ghost btn-sm" onClick={resetFilters}>{t('Curăță')}</button>}
+      {/* FILTERBAR (rezumat) — apare DOAR când există filtre active (paritate handoff): chips + Curăță tot + contor */}
+      {activeFilterCount > 0 && (
+        <div className="filterbar">
+          <div className="chips-row">
+            {activeChips.map(c => <Chip key={c.k} dot={c.dot} onRemove={c.clear}>{c.label}</Chip>)}
+            <button className="btn btn-ghost btn-sm" onClick={resetFilters}>{t('Curăță tot')}</button>
+          </div>
+          <span className="filterbar__count muted tabular">{filtered.length} {t('din')} {clienti.length}</span>
         </div>
-        <span className="filterbar__count muted tabular">{filtered.length} {t('din')} {clienti.length}</span>
-      </div>
+      )}
 
       {/* PANOU FILTRE — colapsabil; chips (.fgroup) + inputuri numerice/dată + sincronizare */}
       {filtersOpen && (
@@ -519,6 +616,9 @@ export default function PalniePage() {
               const p = PRIORITY_MAP[stelutaToPrio(Number(k))];
               return p ? p.color : null;
             }} />
+          <FilterGroup label={t('Vârstă')} value={filters.varsta}
+            onChange={(k) => setF('varsta', k as FilterState['varsta'])}
+            options={[['all', t('Toate')], ['fresh', t('Proaspete')], ['warn', t('Atenție')], ['late', t('Întârziate')]]} />
           <FilterGroup label={t('Stadiu')} value={filters.stadiu || 'toate'}
             onChange={(k) => setF('stadiu', k === 'toate' ? '' : k)}
             options={[['toate', t('Toate')], ...STADII.filter(s => s).map(s => [s, s] as [string, string])]} />
@@ -599,17 +699,23 @@ export default function PalniePage() {
           {(() => {
             const cnt = (f: (c: Client) => any) => filtered.filter(c => { const v = f(c); return v != null && String(v).trim() !== ''; }).length;
             const tot = { supr: cnt(c => c.suprafata), intrare: cnt(c => c.dataIntrare), t1: cnt(c => c.t1), nevoia: cnt(c => c.nevoia), schita: cnt(c => c.schitaStatus), preof: cnt(c => c.preOfertat), ofertat: cnt(c => c.ofertat), status: cnt(c => c.stadiu) };
-            // dd.mm.yyyy <-> yyyy-mm-dd pentru <input type="date"> (calendar nativ, editabil, orice dată)
-            const toISO = (v: string | null) => { const m = (v || '').match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/); return m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : ''; };
-            const fromISO = (iso: string) => { const p = iso.split('-'); return p.length === 3 ? `${p[2]}.${p[1]}.${p[0]}` : ''; };
+            const faraCRM = filtered.filter(c => c.inCRM === false).length;
+            // Celulă de dată editabilă (DateCell): calendar nativ, format cu nume de lună (paritate handoff).
             const dcell = (c: Client, k: string, v: string | null) => (
-              <td onClick={stop} className="text-center">
-                <input type="date" value={toISO(v)} title={t('Alege data (calendar) — click pe celulă')} className="date-input"
-                  onChange={e => updateInline(c.id, k, e.target.value ? fromISO(e.target.value) : '')} />
+              <td onClick={stop} className="cell-date">
+                <DateCell value={v} onChange={iso => updateInline(c.id, k, iso ? isoToDateRO(iso) : '')} />
               </td>);
+            // Total / etapă centrat: valoare mare deasupra etichetei mici (paritate .tcell handoff).
+            const totCell = (val: React.ReactNode, lbl: string, cls?: string) => (
+              <td className={'tcell ' + (cls || '')}><span className="tcell__v mono">{val}</span><span className="tcell__l">{lbl}</span></td>);
             return (
               <div className="tbl-scroll scroll-thin">
                 <table className="tbl tbl--fisa">
+                  <colgroup>
+                    <col className="cg-name" /><col className="cg-mp" /><col className="cg-date" /><col className="cg-t1" />
+                    <col className="cg-nevoie" /><col className="cg-date" /><col className="cg-date" /><col className="cg-date" />
+                    <col className="cg-status" /><col className="cg-rem" /><col className="cg-obs" />
+                  </colgroup>
                   <thead>
                     <tr>
                       <th className="tbl__sticky tbl__name">{t('Client')}</th>
@@ -625,16 +731,17 @@ export default function PalniePage() {
                       <th>{t('Observații Manager')}</th>
                     </tr>
                     <tr className="tbl__total">
-                      <td className="tbl__sticky">{t('Total / etapă')}</td>
-                      <td className="num mono">{tot.supr}</td>
-                      <td className="num mono">{tot.intrare}</td>
-                      <td className="num mono">{tot.t1}</td>
-                      <td className="num mono col-nevoie">{tot.nevoia}</td>
-                      <td className="num mono">{tot.schita}</td>
-                      <td className="num mono">{tot.preof}</td>
-                      <td className="num mono">{tot.ofertat}</td>
-                      <td className="num mono">{tot.status}</td>
-                      <td></td><td></td>
+                      <td className="tbl__sticky tbl__total-lbl">{t('Total / etapă')} <span className="tbl__total-n">({filtered.length})</span></td>
+                      {totCell(tot.supr, t('suprafețe'), 'num')}
+                      {totCell(tot.intrare, t('intrate'))}
+                      {totCell(tot.t1, 'T1')}
+                      {totCell(tot.nevoia, t('calific.'), 'col-nevoie')}
+                      {totCell(tot.schita, t('schițe'))}
+                      {totCell(tot.preof, t('pre-of.'))}
+                      {totCell(tot.ofertat, t('oferte'))}
+                      {totCell(tot.status, t('cu status'))}
+                      {totCell(faraCRM, t('fără CRM'))}
+                      <td></td>
                     </tr>
                   </thead>
                   <tbody>
@@ -655,12 +762,22 @@ export default function PalniePage() {
                           </div>
                           <div className="cnm__sub mono">#{c.idLucrare} · ({c.categorie}{c.isDT ? 'DT' : ''}){c.localitate ? ' · ' + c.localitate : ''}{isManager && ownerFilter === 'all' && c.owner ? ' · ' + (c.owner.name || c.owner.email) : ''}</div>
                         </td>
-                        <td className="num mono">{c.suprafata != null ? c.suprafata + ' mp' : ''}</td>
-                        <td className="mono cell-date">{fmtDateRO(c.dataIntrare)}</td>
-                        <td>
+                        <td className="num mono cell-mp">{c.suprafata != null ? <><b>{c.suprafata}</b> <span className="cell-mp__u">mp</span></> : ''}</td>
+                        <td className="cell-date">
+                          {/* Data intrare = read-only (din CRM); stilizată ca .datecell, format cu nume de lună. */}
+                          <span className={'datecell' + (!c.dataIntrare ? ' is-empty' : '')} style={{ cursor: 'default' }} title={t('Data intrării (din CRM)')}>
+                            <Icon name="clock" size={11} />
+                            <span className="datecell__txt">{c.dataIntrare ? fmtDateRO(c.dataIntrare) : '—'}</span>
+                          </span>
+                        </td>
+                        <td onClick={stop}>
                           <div className="t1cell">
-                            <span className="mono" style={{ fontSize: '.75rem' }}>{c.t1 ? fmtDateRO(c.t1) : '—'}</span>
-                            {c.t1 && <span className="t1cell__badge t1cell__badge--auto" title={t('Termen 1 (din CRM)')}>T1</span>}
+                            <DateCell value={c.t1} faint={!c.t1Locked}
+                              onChange={iso => setT1Manual(c.id, iso)} />
+                            {c.t1 && (c.t1Locked
+                              ? <button className="t1revert" title={t('Setat manual — apasă pentru a reveni la completarea automată (Data intrare + 1 zi)')}
+                                  onClick={() => setT1AutoRevert(c.id)}><Icon name="refresh" size={9} /> {t('auto')}</button>
+                              : <span className="autodot" title={t('Completat automat din Data intrare (+1 zi). Scrie o dată ca să-l faci manual.')}><span className="autodot__pulse" /></span>)}
                           </div>
                         </td>
                         <td onClick={stop} className="col-nevoie">
@@ -703,8 +820,6 @@ export default function PalniePage() {
       ) : (
         <div className="funnel-list rise">
           {filtered.map(c => {
-            const stage = deriveStage(c);
-            const days = daysSince(c.dataIntrare);
             const prio = PRIORITY_MAP[stelutaToPrio(c.stelutaCat)];
             const stages = [
               { k: 'schitaStatus', l: t('Schiță'), v: c.schitaStatus },
@@ -718,22 +833,16 @@ export default function PalniePage() {
                 <span className="fr__band" />
                 <div className="fr__id">
                   <div className="fr__head">
-                    {!c.hasAudio && <Icon name="alert" size={14} style={{ color: 'var(--warning)' }} />}
                     <a href={`https://gestcom.ro/amass/index.php?m=lucrari&a=view&id_lucrare=${c.idLucrare}`}
                       target="_blank" rel="noopener" onClick={stop} className="fr__name crm-link">
                       {c.nume || t('(nume lipsă)')}
                     </a>
                     {c.localitate && <span className="fr__city">· {c.localitate}</span>}
-                    <StagePill stage={stage} size="sm" />
-                    {isManager && ownerFilter === 'all' && c.owner && (
-                      <span className="pill pill-lucru" style={{ padding: '0 6px', fontSize: '9px' }}>{c.owner.name || c.owner.email}</span>
-                    )}
                   </div>
                   <div className="fr__sub mono">
                     ({c.categorie}{c.isDT ? 'DT' : ''}) #{c.idLucrare}
                     {c.suprafata != null && <> · {c.suprafata} mp</>}
                     {c.dataIntrare && <> · {new Date(c.dataIntrare).toLocaleDateString('ro-RO')}</>}
-                    {c.t1 && <> · T1 {c.t1}</>}
                   </div>
                   {c.reminderText
                     ? <div className="fr__rem"><Icon name="clock" size={12} />{t('Reminder:')} {c.reminderText}</div>
@@ -741,7 +850,6 @@ export default function PalniePage() {
                 </div>
 
                 <div className="fr__ctl" onClick={stop}>
-                  <RotText stage={stage} days={days} />
                   <div className="fr__steps">
                     {stages.map(s => {
                       const on = !!(s.v && s.v.trim());

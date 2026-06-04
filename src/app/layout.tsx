@@ -25,11 +25,15 @@ const mono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: 'Pâlnie Clienți — AMASS',
-  description: 'AMASS Sales — pâlnie clienți & strategie, conectat la CRM'
+  description: 'AMASS Sales — pâlnie clienți & strategie, conectat la CRM',
+  // PWA (handoff): manifest + iconițe + „Add to Home Screen" pe iOS/Android.
+  manifest: '/manifest.webmanifest',
+  icons: { icon: '/icon-192.png', apple: '/icon-192.png' },
+  appleWebApp: { capable: true, title: 'AMASS Pâlnie', statusBarStyle: 'default' },
 };
 
-// Scalare corectă pe telefon/tabletă (responsive).
-export const viewport = { width: 'device-width', initialScale: 1, maximumScale: 5 };
+// Scalare corectă pe telefon/tabletă (responsive) + viewport-fit pentru notch. theme-color = roșu brand.
+export const viewport = { width: 'device-width', initialScale: 1, maximumScale: 5, viewportFit: 'cover' as const, themeColor: '#CC0000' };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   // Aplică preferințele de stil ÎNAINTE de paint (fără flash), din localStorage.
@@ -43,12 +47,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         {/* Fonturi suplimentare pentru selectorul „Aspect" (Montserrat/Inter/JetBrains vin din next/font). */}
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700&family=Nunito+Sans:wght@400;500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:wght@500;600;700;800&family=Fraunces:wght@500;600;700&display=swap" />
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700&family=Nunito+Sans:wght@400;500;600;700&family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:wght@500;600;700;800&family=Fraunces:wght@500;600;700&family=Roboto:wght@400;500;700&family=Open+Sans:wght@400;500;600;700&family=Lato:wght@400;700&family=Poppins:wght@400;500;600;700&family=Noto+Sans:wght@400;500;600;700&family=Nunito:wght@400;600;700&family=Raleway:wght@400;500;600;700&family=Oswald:wght@500;600;700&family=Playfair+Display:wght@500;600;700&family=Merriweather:wght@400;700&family=Roboto+Slab:wght@500;600;700&display=swap" />
         <script dangerouslySetInnerHTML={{ __html: langScript }} />
       </head>
       <body>
         {/* Motorul Aspect — aplică tokens pe <html> înainte de hidratare (fără FOUC). */}
         <Script src="/aspect.js" strategy="beforeInteractive" />
+        {/* PWA: înregistrează service worker-ul (offline + Add to Home Screen). */}
+        <Script id="sw-register" strategy="afterInteractive" dangerouslySetInnerHTML={{ __html: `if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});}` }} />
         <SessionProvider><LangProvider>{children}</LangProvider></SessionProvider>
       </body>
     </html>

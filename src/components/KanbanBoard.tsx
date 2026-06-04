@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/Icon';
 import { PriorityStar, RotText } from '@/components/indicators';
+import { AudioReminder } from '@/components/ui';
 import { stelutaToPrio } from '@/lib/aspect-meta';
 import { deriveStage } from '@/lib/stage-rules';
 import { useT } from '@/lib/i18n';
@@ -15,6 +16,7 @@ export interface KanbanClient {
   t1: string | null; schitaStatus: string | null; preOfertat: string | null;
   ofertat: string | null; stadiu: string | null; stelutaCat: number; reminderText: string | null;
   nextStepDue?: string | null; nextStepText?: string | null;
+  hasAudio?: boolean; observatii?: string | null;
   owner?: { id: string; name: string | null; email: string } | null;
 }
 
@@ -119,7 +121,6 @@ export function KanbanBoard({ clienti, isManager, ownerFilter, onPatch, setMsg, 
         <div className="kanban">
           {visibleCols.map(col => {
             const cards = byCol[col.key];
-            const mp = cards.reduce((s, c) => s + (c.suprafata || 0), 0);
             return (
               <section key={col.key}
                    onDragOver={e => { e.preventDefault(); setOver(col.key); }}
@@ -127,7 +128,7 @@ export function KanbanBoard({ clienti, isManager, ownerFilter, onPatch, setMsg, 
                    onDrop={e => { e.preventDefault(); const id = e.dataTransfer.getData('text/plain'); setOver(null); setDrag(null); if (id && stageOf(clienti.find(c => c.id === id)!) !== col.key) requestMove(id, col.key); }}
                    className={'kcol' + (over === col.key ? ' is-over' : '')}
                    style={{ '--sc': col.color } as React.CSSProperties}>
-                {/* Antet coloană (nume + count + suprafață totală) */}
+                {/* Antet coloană (nume + count) — paritate pa-kanban.jsx: un singur text „{n} clienți" */}
                 <header className="kcol__head">
                   <span className="kcol__bar" />
                   <div className="kcol__title">
@@ -139,8 +140,7 @@ export function KanbanBoard({ clienti, isManager, ownerFilter, onPatch, setMsg, 
                     </button>
                   </div>
                   <div className="kcol__stats">
-                    <span className="kcol__wip">{cards.length}</span>
-                    <span className="mono muted" title={t('Suprafață totală în coloană')}>{mp ? 'Σ ' + mp.toLocaleString('ro-RO') + ' mp' : ''}</span>
+                    <span className="kcol__count">{cards.length} {cards.length === 1 ? t('client') : t('clienți')}</span>
                   </div>
                   {editColor === col.key && <StageColorEdit stage={col.key} onClose={() => setEditColor(null)} />}
                 </header>
@@ -159,17 +159,17 @@ export function KanbanBoard({ clienti, isManager, ownerFilter, onPatch, setMsg, 
                           <span className="kc__name">{c.nume || t('(fără nume)')}</span>
                           <span onClick={stop} title={t('Prioritate (live în CRM)')}><PriorityStar value={stelutaToPrio(c.stelutaCat)} size={16} /></span>
                         </div>
+                        {/* Meta card — paritate pa-kanban.jsx: localitate (pin) + suprafață, necondiționat */}
                         <div className="kc__meta">
-                          {c.localitate && <span><Icon name="pin" size={11} />{c.localitate}</span>}
-                          {c.suprafata != null && <span className="mono">{c.suprafata} mp</span>}
-                          {isManager && ownerFilter === 'all' && c.owner && <span className="truncate" style={{ maxWidth: 80 }}>{c.owner.name || c.owner.email}</span>}
+                          <span><Icon name="pin" size={11} />{c.localitate}</span>
+                          <span className="mono">{c.suprafata} mp</span>
                         </div>
+                        {/* Footer card — paritate pa-kanban.jsx: AudioReminder → RotText → buton mutare, necondiționat */}
                         <div className="kc__foot">
-                          {c.reminderText && <span className="rot rot--fresh truncate" style={{ maxWidth: 120 }} title={c.reminderText}><Icon name="clock" size={11} />{c.reminderText}</span>}
-                          {!col.terminal && <span style={{ marginLeft: 'auto' }}><RotText stage={col.key} days={ageDays(c) ?? 0} /></span>}
+                          <span onClick={stop}><AudioReminder client={{ audio: !!c.hasAudio, obs: !!(c.observatii && String(c.observatii).trim()), reminder: c.reminderText, reminderWhen: null }} compact /></span>
+                          <span style={{ marginLeft: 'auto' }}><RotText stage={col.key} days={ageDays(c) ?? 0} /></span>
                           {/* FEATURE C: mutare fără drag — trece prin ACEEAȘI poartă requestMove (modale win/loss + pas următor) */}
                           <button className="kc__move" title={t('Mută în stadiu…')}
-                            style={col.terminal ? { marginLeft: 'auto' } : undefined}
                             onClick={e => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMoveFor({ id: c.id, x: r.right, y: r.bottom }); }}>
                             <Icon name="swap" size={13} />
                           </button>

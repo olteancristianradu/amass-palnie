@@ -1,6 +1,7 @@
 'use client';
+import { useEffect, useRef } from 'react';
 import { Icon } from './Icon';
-import { PRIORITY_MAP, STAGE_MAP, rotLevel } from '@/lib/aspect-meta';
+import { PRIORITY_MAP, PRIORITIES, STAGE_MAP, rotLevel } from '@/lib/aspect-meta';
 import { useT } from '@/lib/i18n';
 
 // 1) PRIORITATE — steluță pe CULOARE (5 fixe). Niciodată doar culoare: + etichetă opțională.
@@ -10,7 +11,7 @@ export function PriorityStar({ value, size = 16, withLabel, onClick }: { value: 
   const star = (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
       <path d="M12 2.5l2.9 6.1 6.6.9-4.8 4.6 1.2 6.6L12 18.6 6.1 21.3l1.2-6.6L2.5 9.5l6.6-.9z" fill={p.color}
-        stroke={p.outline ? 'var(--text-faint)' : 'rgba(0,0,0,.22)'} strokeWidth={p.outline ? 1.5 : 1} strokeLinejoin="round" />
+        stroke={p.outline ? 'var(--text-faint)' : 'color-mix(in oklab, ' + p.color + ', #000 18%)'} strokeWidth={p.outline ? 1.5 : 1} strokeLinejoin="round" />
     </svg>
   );
   if (onClick) return (
@@ -28,7 +29,7 @@ export function StagePill({ stage, size }: { stage: string; size?: 'sm' }) {
   const c = 'var(--st-' + stage + ')';
   return (
     <span className={'stage-pill' + (size === 'sm' ? ' stage-pill--sm' : '')}
-      style={{ color: c, background: 'color-mix(in oklab, ' + c + ', var(--surface) 86%)', borderColor: 'color-mix(in oklab, ' + c + ', var(--surface) 60%)' }}>
+      style={{ '--sc': c, color: c, background: 'color-mix(in oklab, ' + c + ', var(--surface) 86%)', borderColor: 'color-mix(in oklab, ' + c + ', var(--surface) 60%)' } as React.CSSProperties}>
       <span className="stage-pill__dot" style={{ background: c }} />{s.label}
     </span>
   );
@@ -47,15 +48,45 @@ export function RotText({ stage, days, showIcon = true }: { stage: string; days:
   );
 }
 
-// Segmented (switcher vizualizări).
-export function Segmented({ value, options, onChange, size }: { value: string; options: { value: string; label: string; icon?: string }[]; onChange: (v: string) => void; size?: 'sm' }) {
+// Segmented (switcher vizualizări). Acceptă opțiuni ca string-uri sau obiecte {value, label, icon}.
+export type SegmentedOption = string | { value: string; label: string; icon?: string };
+export function Segmented({ value, options, onChange, size }: { value: string; options: SegmentedOption[]; onChange: (v: string) => void; size?: 'sm' }) {
   const { t } = useT();
   return (
     <div className={'segmented' + (size === 'sm' ? ' segmented--sm' : '')} role="tablist">
-      {options.map(o => (
-        <button key={o.value} role="tab" aria-selected={o.value === value}
-          className={'segmented__btn' + (o.value === value ? ' is-on' : '')} onClick={() => onChange(o.value)}>
-          {o.icon && <Icon name={o.icon} size={15} />}{t(o.label)}
+      {options.map(o => {
+        const val = typeof o === 'string' ? o : o.value;
+        const lbl = typeof o === 'string' ? o : o.label;
+        const ic = typeof o === 'object' ? o.icon : undefined;
+        return (
+          <button key={val} role="tab" aria-selected={val === value}
+            className={'segmented__btn' + (val === value ? ' is-on' : '')} onClick={() => onChange(val)}>
+            {ic && <Icon name={ic} size={15} />}{t(lbl)}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Popover de alegere prioritate (5 culori) — port 1:1 din handoff ui.jsx PriorityPicker.
+export function PriorityPicker({ value, onChange, onClose }: { value: string; onChange: (v: string) => void; onClose: () => void }) {
+  const { t } = useT();
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    <div className="prio-pop" ref={ref}>
+      <div className="label" style={{ marginBottom: 6 }}>{t('Prioritate')}</div>
+      {PRIORITIES.map(p => (
+        <button key={p.key} className={'prio-opt' + (p.key === value ? ' is-on' : '')} onClick={() => { onChange(p.key); onClose(); }}>
+          <span className="prio-dot" style={{ background: p.color, borderColor: p.outline ? 'var(--border-strong)' : 'transparent' }} />
+          <span>{p.label}</span>
+          {p.key === value && <Icon name="check" size={14} style={{ marginLeft: 'auto', color: 'var(--accent)' }} />}
         </button>
       ))}
     </div>

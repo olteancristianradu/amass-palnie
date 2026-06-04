@@ -10,6 +10,7 @@ interface Stats {
   byStadiu: Record<string, number>;
   totalSuprafata: number;
   byCategorie: Record<string, number>;
+  byNevoie: Record<string, number>;
   byPrioritate: Record<string, number>;
   funnel: { intrari: number; t1: number; nevoie: number; schita: number; preofertat: number; ofertat: number; contractat: number };
   rataConversie: number;
@@ -44,9 +45,10 @@ export default function DashboardPage() {
   const [s, setS] = useState<Stats | null>(null);
   const [isManager, setIsManager] = useState(false);
   const [owner, setOwner] = useState('all');
-  const [start, setStart] = useState('');
-  const [end, setEnd] = useState('');
-  const [preset, setPreset] = useState('tot');
+  const [start, setStart] = useState(isoDay(30));
+  const [end, setEnd] = useState(isoDay(0));
+  const [preset, setPreset] = useState('30');
+  const [mod, setMod] = useState('Activitate'); // Mod afișare (paritate design pa-dashboard.jsx)
   const [err, setErr] = useState<string | null>(null);
   function applyPreset(k: string) {
     setPreset(k);
@@ -116,13 +118,19 @@ export default function DashboardPage() {
     [t('Contract / Ofertat'), pct(fn.contractat, fn.ofertat)],
   ];
 
-  // Raport de activitate — cifre reale din stats.
+  // Raport de activitate — cifre reale din stats (paritate design pa-dashboard.jsx:66-72).
+  //  - Calificați = nevoie acoperită (acoperită / în anumite condiții) = funnel.nevoie (aceeași definiție).
+  //  - Tentativă  = clienți cu nevoia 'Tentativa'.
+  //  - Anulați    = clienți cu stadiu 'Anulat'.
+  const cCalificat = fn.nevoie;
+  const cTentativa = s.byNevoie?.['Tentativa'] ?? 0;
+  const cAnulat = s.byStadiu['Anulat'] ?? 0;
   const raport: [string, number][] = [
     [t('Clienți Intrați'), fn.intrari],
     [t('Clienți Sunați (T1)'), fn.t1],
-    [t('Nevoie acoperită'), fn.nevoie],
-    [t('Contractați'), s.byStadiu['Contractat'] ?? 0],
-    [t('Suprafață totală (m²)'), s.totalSuprafata],
+    [t('Calificați (Nevoie Acoperită)'), cCalificat],
+    [t('Tentativă'), cTentativa],
+    [t('Anulați'), cAnulat],
   ];
 
   const stadiuEntries = Object.entries(s.byStadiu).sort((a, b) => b[1] - a[1]);
@@ -166,6 +174,12 @@ export default function DashboardPage() {
             <input className="input" type="date" value={start} max={end || undefined} onChange={e => { setStart(e.target.value); setPreset('custom'); }} /></label>
           <label className="d2ctrl"><span className="label">{t('până la')}</span>
             <input className="input" type="date" value={end} min={start || undefined} onChange={e => { setEnd(e.target.value); setPreset('custom'); }} /></label>
+          <label className="d2ctrl"><span className="label">{t('Mod afișare')}</span>
+            <select className="select" value={mod} onChange={e => setMod(e.target.value)}>
+              <option value="Activitate">{t('Activitate')}</option>
+              <option value="Valoare">{t('Valoare')}</option>
+              <option value="Suprafață">{t('Suprafață')}</option>
+            </select></label>
         </div>
 
         {/* Cifre cheie */}
@@ -227,6 +241,33 @@ export default function DashboardPage() {
             </a>
           </div>
         </div>
+
+        {/* Clienți cu schiță în lucru (paritate design pa-dashboard.jsx) — worklist acționabil */}
+        <div className="card">
+          <div className="card-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: 'var(--sp-4)' }}>
+            <h2>{t('Clienți cu schiță în lucru')}</h2>
+            <span className="muted" style={{ fontSize: '.8125rem' }}>{worklist.length} {t('clienți')}</span>
+          </div>
+          <div className="tbl-scroll">
+            <table className="tbl">
+              <thead><tr><th>{t('Client')}</th><th>{t('Data schiță')}</th><th className="num">{t('Zile așteptare')}</th><th /></tr></thead>
+              <tbody>
+                {worklist.map(c => (
+                  <tr key={c.id}>
+                    <td className="strong"><PriorityStars value={c.stelutaCat} readOnly size={13} /> {c.nume || t('(fără nume)')}</td>
+                    <td className="mono">{c.schitaStatus}</td>
+                    <td className="num"><span className={'rot rot--' + (c.zile >= 10 ? 'late' : c.zile >= 5 ? 'warn' : 'fresh')}><span className="mono">{c.zile}z</span></span></td>
+                    <td className="num"><a className="btn btn-ghost btn-sm" href={'/strategie/' + c.id}>{t('Fișă')}<Icon name="arrowR" size={13} /></a></td>
+                  </tr>
+                ))}
+                {!worklist.length && <tr><td colSpan={4} className="muted" style={{ textAlign: 'center', padding: 18 }}>{t('Nicio schiță în lucru.')}</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* ───────────── Analize suplimentare (peste handoff; mutate sub secțiunile prototipului) ───────────── */}
+        <div className="d2sec-lbl" style={{ marginTop: 'var(--sp-2)' }}>{t('Analize suplimentare')}</div>
 
         {/* Distribuție pe stadiu + pe prioritate */}
         <div className="d2-2col">
@@ -296,30 +337,6 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
-          </div>
-        </div>
-
-        {/* Clienți cu schiță în lucru (paritate design pa-dashboard.jsx) — worklist acționabil */}
-        <div className="card">
-          <div className="card-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: 'var(--sp-4)' }}>
-            <h2>{t('Clienți cu schiță în lucru')}</h2>
-            <span className="muted" style={{ fontSize: '.8125rem' }}>{worklist.length} {t('clienți')}</span>
-          </div>
-          <div className="tbl-scroll">
-            <table className="tbl">
-              <thead><tr><th>{t('Client')}</th><th>{t('Data schiță')}</th><th className="num">{t('Zile așteptare')}</th><th /></tr></thead>
-              <tbody>
-                {worklist.map(c => (
-                  <tr key={c.id}>
-                    <td className="strong"><PriorityStars value={c.stelutaCat} readOnly size={13} /> {c.nume || t('(fără nume)')}</td>
-                    <td className="mono">{c.schitaStatus}</td>
-                    <td className="num"><span className={'rot rot--' + (c.zile >= 10 ? 'late' : c.zile >= 5 ? 'warn' : 'fresh')}><span className="mono">{c.zile}z</span></span></td>
-                    <td className="num"><a className="btn btn-ghost btn-sm" href={'/strategie/' + c.id}>{t('Fișă')}<Icon name="arrowR" size={13} /></a></td>
-                  </tr>
-                ))}
-                {!worklist.length && <tr><td colSpan={4} className="muted" style={{ textAlign: 'center', padding: 18 }}>{t('Nicio schiță în lucru.')}</td></tr>}
-              </tbody>
-            </table>
           </div>
         </div>
       </div>

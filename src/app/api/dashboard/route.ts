@@ -39,6 +39,7 @@ export async function GET(req: NextRequest) {
   });
   const byStadiu: Record<string, number> = {};
   const byCategorie: Record<string, number> = {};
+  const byNevoie: Record<string, number> = {};
   const byPrioritate: Record<string, number> = { '0': 0, '1': 0, '2': 0, '3': 0, '4': 0 };
   let totalSuprafata = 0;
   const nz = (v: any) => v != null && String(v).trim() !== '';
@@ -57,6 +58,8 @@ export async function GET(req: NextRequest) {
     const k = c.stadiu ?? '';
     byStadiu[k] = (byStadiu[k] ?? 0) + 1;
     byCategorie[String(c.categorie)] = (byCategorie[String(c.categorie)] ?? 0) + 1;
+    const nk = String(c.nevoia ?? '').trim();
+    if (nk) byNevoie[nk] = (byNevoie[nk] ?? 0) + 1;
     byPrioritate[String(c.stelutaCat ?? 0)] = (byPrioritate[String(c.stelutaCat ?? 0)] ?? 0) + 1;
     if (c.suprafata) totalSuprafata += c.suprafata;
     if (nz(c.t1)) funnel.t1++;
@@ -105,6 +108,6 @@ export async function GET(req: NextRequest) {
     ok: true,
     isManager: scope.isManager,
     autoSync: getAutoSyncState(scope.userId),
-    stats: { total: clienti.length, byStadiu, byCategorie, byPrioritate, totalSuprafata, funnel, rataConversie, schitaFaraOferta, ofertatFaraContract, schitaInLucru, recentSyncs, agents }
+    stats: { total: clienti.length, byStadiu, byCategorie, byNevoie, byPrioritate, totalSuprafata, funnel, rataConversie, schitaFaraOferta, ofertatFaraContract, schitaInLucru, recentSyncs, agents }
   });
 }

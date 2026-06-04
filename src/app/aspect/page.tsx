@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Layout } from '@/components/Layout';
+import { toast } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 
 // Motorul de teme e încărcat global (public/aspect.js → window.Aspect, beforeInteractive).
@@ -23,6 +24,8 @@ const IP: Record<string, string> = {
   download: 'M12 3v12M7 10l5 5 5-5M5 21h14',
   upload: 'M12 21V9M7 14l5-5 5 5M5 3h14',
   target: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
+  clock: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 7v5l3.5 2',
+  x: 'M18 6L6 18M6 6l12 12',
 };
 function Icon({ name, size = 16, style }: { name: string; size?: number; style?: any }) {
   const d = IP[name] || '';
@@ -103,12 +106,14 @@ function LivePreview() {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, fontSize: '.8125rem', color: 'var(--text-muted)', alignItems: 'center' }}>
           <PriorityStar value="rosu" withLabel size={14} />
           <span className="mono">145 mp</span>
-          <span className="rot rot--warn"><Icon name="contrast" size={11} /><span className="mono">12z</span></span>
+          <span className="rot rot--warn"><Icon name="clock" size={11} /><span className="mono">12z</span></span>
         </div>
         <a href="#" onClick={e => e.preventDefault()}>{t('Link activ accent')}</a>
       </div>
       <div className="lp-row">
-        <span>{t('Rând tabel')}</span><span className="mono">240</span><StagePill stage="schita" size="sm" />
+        <span className="lp-row__cell">{t('Rând tabel')}</span>
+        <span className="lp-row__cell mono">240</span>
+        <span className="lp-row__cell"><StagePill stage="schita" size="sm" /></span>
       </div>
       <input className="input field" placeholder={t('Câmp de input…')} />
     </div>
@@ -116,6 +121,10 @@ function LivePreview() {
 }
 
 export default function AspectPage() {
+  return <AspectPanel />;
+}
+
+function AspectPanel({ focusText }: { focusText?: boolean } = {}) {
   const { t } = useT();
   const [s, setS] = useState<any>(null);
   useEffect(() => {
@@ -141,8 +150,9 @@ export default function AspectPage() {
       </p>
       <div className="aspect">
         <div className="aspect__main">
+          {!focusText && <>
           <Section title={t('Teme prestabilite')} icon="palette">
-            <p className="aspect__hint" style={{ marginTop: 0, marginBottom: 10 }}>{t('Un click setează tot aspectul (culoare, font, formă, densitate, fundal). Apoi poți ajusta orice mai jos.')}</p>
+            <p className="aspect__hint" style={{ marginTop: 0, marginBottom: 10 }}>{t('Un click setează tot aspectul (culoare, font, formă, densitate). Apoi poți ajusta orice mai jos.')}</p>
             <div className="theme-cards">
               {(a.THEMES || []).map((t: any) => (
                 <button key={t.id} className={'theme-card' + (s.theme === t.id ? ' is-on' : '')} onClick={() => a.setTheme(t.id)}>
@@ -182,7 +192,7 @@ export default function AspectPage() {
                   : <><Icon name="check" size={13} />{t('Contrast')} {rateSurface} ({ratioSurface.toFixed(1)}:1)</>}
               </span>
             </div>
-            <p className="aspect__hint">{t('Din accent se derivă hover, focus ring și suprafețele soft. Logo-ul AMASS rămâne mereu roșu. Text pe accent: contrast')} {ratioOn.toFixed(1)}:1.</p>
+            <p className="aspect__hint">{t('Din accent se derivă automat hover, focus ring și suprafețele soft (OKLCH). Textul pe accent: contrast')} {ratioOn.toFixed(1)}:1.</p>
           </Section>
 
           <Section title={t('Font')} icon="type">
@@ -208,8 +218,9 @@ export default function AspectPage() {
               </div>
             </div>
           </Section>
+          </>}
 
-          <Section title={t('Mărime text')} icon="type" highlight>
+          <Section title={t('Mărime text')} icon="type" highlight={focusText}>
             <StepSlider label={t('Scală:') + ' ' + a.TEXT_LABELS[s.textSize] + ' (' + Math.round(a.TEXT_STEPS[s.textSize] * 100) + '%)'}
               value={s.textSize} labels={a.TEXT_LABELS} onChange={v => set({ textSize: v })} />
             <p className="aspect__hint">{t('Scalează toată interfața. Vezi previzualizarea live →')}</p>
@@ -235,15 +246,46 @@ export default function AspectPage() {
               options={[{ value: 'left', label: t('Stânga') }, { value: 'right', label: t('Dreapta') }]} />
           </Section>
 
-          <Section title={t('Fundal')} icon="palette">
-            <p className="aspect__hint" style={{ marginTop: 0, marginBottom: 8 }}>{t('Temele de sus setează deja un fundal — aici îl poți schimba separat.')}</p>
+          <Section title={t('Fundal personalizat')} icon="palette">
+            <p className="aspect__hint" style={{ marginTop: 0, marginBottom: 8 }}>{t('Temele de sus setează deja un fundal — aici îl poți schimba sau încărca propria poză.')}</p>
             <div className="bg-row">
               {(a.BACKGROUNDS || []).map((b: any) => (
-                <button key={b.id} className={'bg-opt' + ((s.background || 'none') === b.id ? ' is-on' : '')} onClick={() => set({ background: b.id })}>
+                <button key={b.id} className={'bg-opt' + ((s.background || 'none') === b.id && !s.bgImage ? ' is-on' : '')} onClick={() => { a.setBgImage(''); set({ background: b.id }); }}>
                   <span className="bg-opt__prev" data-bg={b.id}></span>{t(b.name)}
                 </button>
               ))}
+              <label className={'bg-opt bg-opt--upload' + (s.bgImage ? ' is-on' : '')}>
+                <span className="bg-opt__prev bg-opt__prev--img" style={s.bgImage ? { backgroundImage: 'url(' + s.bgImage + ')' } : {}}>
+                  {!s.bgImage && <Icon name="upload" size={16} />}
+                </span>
+                {s.bgImage ? t('Poza mea') : t('Încarcă poză')}
+                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => {
+                  const f = e.target.files?.[0]; if (!f) return;
+                  const rd = new FileReader();
+                  rd.onload = () => {
+                    const img = new Image();
+                    img.onload = () => {
+                      const max = 1600, sc = Math.min(1, max / Math.max(img.width, img.height));
+                      const cv = document.createElement('canvas');
+                      cv.width = Math.round(img.width * sc); cv.height = Math.round(img.height * sc);
+                      cv.getContext('2d')?.drawImage(img, 0, 0, cv.width, cv.height);
+                      try {
+                        const url = cv.toDataURL('image/jpeg', 0.82);
+                        a.setBgImage(url); toast(t('Fundal personalizat aplicat'), 'success');
+                      } catch { toast(t('Imagine prea mare'), 'error'); }
+                    };
+                    img.src = String(rd.result);
+                  };
+                  rd.readAsDataURL(f); e.target.value = '';
+                }} />
+              </label>
             </div>
+            {s.bgImage && (
+              <div style={{ display: 'flex', gap: 10, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <button className="btn btn-ghost btn-sm" onClick={() => { a.setBgImage(''); toast(t('Poza eliminată'), 'info'); }}><Icon name="x" size={14} />{t('Elimină poza')}</button>
+                <span className="aspect__hint" style={{ margin: 0 }}>{t('Peste poză se aplică un voal automat ca textul să rămână lizibil.')}</span>
+              </div>
+            )}
           </Section>
 
           <Section title={t('Prioritate (fix — limbaj comun)')} icon="alert">
@@ -254,28 +296,19 @@ export default function AspectPage() {
           </Section>
 
           <Section title={t('Profilul meu de aspect')} icon="user">
-            <p className="aspect__hint" style={{ marginTop: 0 }}>{t('Setările de aspect sunt salvate doar pe acest dispozitiv — nu afectează ceilalți agenți. Le poți exporta și trimite altcuiva.')}</p>
+            <p className="aspect__hint" style={{ marginTop: 0 }}>{t('Setările de aspect sunt salvate doar pe contul tău')} ({a.currentUser() === 'default' ? 'M. Ionescu' : a.currentUser()}) — {t('nu afectează ceilalți agenți. Le poți exporta și trimite altcuiva.')}</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
               <button className="btn btn-secondary btn-sm" onClick={() => {
-                const blob = new Blob([JSON.stringify(a.get(), null, 2)], { type: 'application/json' });
+                const blob = new Blob([a.exportJSON()], { type: 'application/json' });
                 const url = URL.createObjectURL(blob); const el = document.createElement('a');
                 el.href = url; el.download = 'aspect-amass.json'; el.click(); URL.revokeObjectURL(url);
+                toast(t('Aspect exportat'), 'success');
               }}><Icon name="download" size={14} />{t('Exportă aspectul meu')}</button>
               <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer' }}>
                 <Icon name="upload" size={14} />{t('Importă aspect')}
                 <input type="file" accept="application/json" style={{ display: 'none' }} onChange={e => {
                   const f = e.target.files?.[0]; if (!f) return; const r = new FileReader();
-                  r.onload = () => {
-                    try {
-                      const data = JSON.parse(String(r.result));
-                      if (!data || typeof data !== 'object') { alert(t('Fișier invalid')); return; }
-                      const allowed = Object.keys(a.DEFAULTS);
-                      const patch: any = {};
-                      allowed.forEach((k: string) => { if (data[k] !== undefined) patch[k] = data[k]; });
-                      if (data.theme !== undefined) patch.theme = data.theme;
-                      set(patch);
-                    } catch { alert(t('Fișier invalid')); }
-                  };
+                  r.onload = () => { a.importJSON(String(r.result)) ? toast(t('Aspect importat'), 'success') : toast(t('Fișier invalid'), 'error'); };
                   r.readAsText(f); e.target.value = '';
                 }} />
               </label>
@@ -291,7 +324,7 @@ export default function AspectPage() {
           </div>
 
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => a.reset()}><Icon name="reset" size={14} />{t('Resetează tot')}</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => { a.reset(); toast(t('Aspect resetat la implicit'), 'info'); }}><Icon name="reset" size={14} />{t('Resetează tot')}</button>
           </div>
         </div>
 

@@ -6,22 +6,40 @@
    NOTĂ: culorile steluței de prioritate NU sunt personalizabile (limbaj comun).
    ========================================================================== */
 (function () {
-  const LS_KEY = 'amass.aspect.v2';
+  const LS_BASE = 'amass.aspect.v2';
+  let USER = (function () { try { return localStorage.getItem('amass.currentUser') || 'default'; } catch (e) { return 'default'; } })();
+  function lsKey() { return LS_BASE + '.' + USER; }
 
   /* ---- Fonturi disponibile (UI + titlu) ---- */
   const FONTS = {
     ui: {
+      'San Francisco (Apple)': "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif",
       'Inter':        "'Inter', system-ui, sans-serif",
+      'Roboto':       "'Roboto', system-ui, sans-serif",
+      'Open Sans':    "'Open Sans', system-ui, sans-serif",
+      'Lato':         "'Lato', system-ui, sans-serif",
+      'Poppins':      "'Poppins', system-ui, sans-serif",
+      'Montserrat':   "'Montserrat', system-ui, sans-serif",
+      'Noto Sans':    "'Noto Sans', system-ui, sans-serif",
+      'Nunito':       "'Nunito', system-ui, sans-serif",
+      'Raleway':      "'Raleway', system-ui, sans-serif",
       'IBM Plex Sans':"'IBM Plex Sans', system-ui, sans-serif",
       'Source Sans 3':"'Source Sans 3', system-ui, sans-serif",
       'Work Sans':    "'Work Sans', system-ui, sans-serif",
       'Nunito Sans':  "'Nunito Sans', system-ui, sans-serif",
       'Atkinson (dislexie)': "'Atkinson Hyperlegible', system-ui, sans-serif",
       'System':       "system-ui, -apple-system, sans-serif",
-      'System (SF/Segoe)': "system-ui, -apple-system, sans-serif",
     },
     display: {
+      'San Francisco (Apple)': "-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif",
       'Montserrat':   "'Montserrat', sans-serif",
+      'Poppins':      "'Poppins', sans-serif",
+      'Oswald':       "'Oswald', sans-serif",
+      'Raleway':      "'Raleway', sans-serif",
+      'Roboto':       "'Roboto', sans-serif",
+      'Playfair Display': "'Playfair Display', serif",
+      'Merriweather': "'Merriweather', serif",
+      'Roboto Slab':  "'Roboto Slab', serif",
       'Sora':         "'Sora', sans-serif",
       'Space Grotesk':"'Space Grotesk', sans-serif",
       'Bricolage':    "'Bricolage Grotesque', sans-serif",
@@ -35,16 +53,16 @@
   const THEMES = [
     { id: 'business', name: 'Business', tag: 'stil Salesforce / HubSpot',
       desc: 'Dens, corporativ, albastru — pentru lucru intens cu multe date.',
-      s: { mode: 'light', accent: '#0B66C3', fontUi: 'IBM Plex Sans', fontDisplay: 'Sora', radius: 1, density: 'compact', background: 'grid', layoutSide: 'left', preset: 'custom' },
-      sw: ['#0B66C3', '#F4F5F7', '#1B1F24'] },
+      s: { mode: 'light', accent: '#1A56C4', fontUi: 'IBM Plex Sans', fontDisplay: 'Sora', radius: 0, density: 'compact', background: 'grid', layoutSide: 'left', preset: 'custom' },
+      sw: ['#1A56C4', '#EEF1F6', '#10243F'] },
     { id: 'standard', name: 'Standard AMASS', tag: 'cum e acum',
       desc: 'Echilibrat, roșul de brand AMASS — recomandat pentru majoritatea.',
       s: { mode: 'light', accent: '#CC0000', fontUi: 'Inter', fontDisplay: 'Montserrat', radius: 2, density: 'normal', background: 'none', layoutSide: 'left', preset: 'amass' },
       sw: ['#CC0000', '#FAFAF8', '#1A1D1F'] },
     { id: 'apple', name: 'Refined', tag: 'stil Apple',
-      desc: 'Aerisit, rotunjit, minimalist — font de sistem, mult spațiu alb.',
-      s: { mode: 'light', accent: '#0071E3', fontUi: 'System (SF/Segoe)', fontDisplay: 'System (SF/Segoe)', radius: 3, density: 'comfortable', background: 'warm', layoutSide: 'left', preset: 'custom' },
-      sw: ['#0071E3', '#FFFFFF', '#1D1D1F'] },
+      desc: 'Monocrom grafit, aerisit, rotunjit — font de sistem, mult spațiu alb.',
+      s: { mode: 'light', accent: '#1D1D1F', fontUi: 'System (SF/Segoe)', fontDisplay: 'System (SF/Segoe)', radius: 4, density: 'comfortable', background: 'none', layoutSide: 'left', preset: 'custom' },
+      sw: ['#1D1D1F', '#FFFFFF', '#86868B'] },
   ];
 
   /* ---- Trepte ---- */
@@ -88,6 +106,12 @@
     { id: 'cobalt', name: 'Cobalt',     accent: '#2456C4' },
     { id: 'plum',   name: 'Prună',      accent: '#7C3AED' },
     { id: 'slate',  name: 'Ardezie',    accent: '#475569' },
+    { id: 'teal',   name: 'Teal',       accent: '#0D9488' },
+    { id: 'ocean',  name: 'Ocean',      accent: '#0369A1' },
+    { id: 'magenta',name: 'Magenta',    accent: '#BE185D' },
+    { id: 'forest', name: 'Pădure',     accent: '#15803D' },
+    { id: 'amber',  name: 'Chihlimbar', accent: '#B45309' },
+    { id: 'indigo', name: 'Indigo',     accent: '#4338CA' },
   ];
   /* fundaluri personalizate */
   const BACKGROUNDS = [
@@ -109,7 +133,8 @@
     stages: {},               // override-uri de culoare per stadiu {key: hex}
     preset: 'amass',
     layoutSide: 'left',       // left | right — poziția meniului + barei de unelte
-    background: 'none',       // fundal personalizat
+    background: 'none',       // fundal personalizat (preset)
+    bgImage: '',              // fundal: imagine proprie (dataURL, opțional)
   };
 
   /* ---- Color math (WCAG) ---- */
@@ -139,11 +164,11 @@
   let state = load();
 
   function load() {
-    try { const s = JSON.parse(localStorage.getItem(LS_KEY)); if (s) return { ...DEFAULTS, ...s, stages: { ...s.stages } }; }
+    try { const s = JSON.parse(localStorage.getItem(lsKey())); if (s) return { ...DEFAULTS, ...s, stages: { ...s.stages } }; }
     catch (e) {}
     return { ...DEFAULTS };
   }
-  function save() { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) {} }
+  function save() { try { localStorage.setItem(lsKey(), JSON.stringify(state)); localStorage.setItem('amass.currentUser', USER); } catch (e) {} }
 
   const subs = new Set();
 
@@ -177,10 +202,15 @@
 
     // Poziție layout (meniu + unelte stânga/dreapta)
     root.setAttribute('data-side', state.layoutSide || 'left');
-    // Fundal personalizat — token pe <html>, aplicat efectiv pe body (vezi globals.css)
-    const bg = BACKGROUNDS.find(b => b.id === state.background) || BACKGROUNDS[0];
-    root.style.setProperty('--bg-pattern', bg.css || 'none');
-    root.style.setProperty('--bg-pattern-size', bg.size || 'auto');
+    // Fundal personalizat (preset SAU imagine proprie)
+    if (state.bgImage) {
+      root.style.setProperty('--bg-pattern', 'linear-gradient(var(--bg-scrim), var(--bg-scrim)), url(' + state.bgImage + ')');
+      root.style.setProperty('--bg-pattern-size', 'cover, cover');
+    } else {
+      const bg = BACKGROUNDS.find(b => b.id === state.background) || BACKGROUNDS[0];
+      root.style.setProperty('--bg-pattern', bg.css || 'none');
+      root.style.setProperty('--bg-pattern-size', bg.size || 'auto');
+    }
 
     subs.forEach(fn => fn(state));
   }
@@ -196,6 +226,7 @@
     get: () => state,
     set: (patch) => { state = { ...state, ...patch }; save(); apply(); },
     setStage: (key, hex) => { state = { ...state, stages: { ...state.stages, [key]: hex } }; save(); apply(); },
+    setBgImage: (dataUrl) => { state = { ...state, bgImage: dataUrl || '', background: dataUrl ? 'image' : 'none' }; save(); apply(); },
     resetStage: (key) => { const st = { ...state.stages }; delete st[key]; state = { ...state, stages: st }; save(); apply(); },
     reset: () => { state = { ...DEFAULTS, stages: {} }; save(); apply(); },
     THEMES,
@@ -204,6 +235,17 @@
     contrast, onColor, rate, resolveMode,
     stageColor: (key) => state.stages[key] || (resolveMode(state.mode) === 'dark' ? STAGE_MAP[key].dark : STAGE_MAP[key].light),
     subscribe: (fn) => { subs.add(fn); return () => subs.delete(fn); },
+    // ---- Per-user: fiecare cont are propriul aspect (cheie LS dedicată) ----
+    currentUser: () => USER,
+    setUser: (u) => { USER = u || 'default'; state = load(); apply(); },
+    // ---- Export / import preset de aspect (joc între agenți) ----
+    exportJSON: () => JSON.stringify({ _amass_aspect: 1, user: USER, ...state }, null, 2),
+    importJSON: (txt) => {
+      try { const o = JSON.parse(txt); if (!o || typeof o !== 'object') return false;
+        delete o._amass_aspect; delete o.user;
+        state = { ...DEFAULTS, ...state, ...o, stages: { ...(o.stages || {}) } }; save(); apply(); return true;
+      } catch (e) { return false; }
+    },
   };
 
   apply(); // prima aplicare, înainte de body paint

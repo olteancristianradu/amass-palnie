@@ -1,6 +1,7 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useT } from '@/lib/i18n';
+import { Icon } from './Icon';
 
 // ── Stea de prioritate = CULOARE-etichetă din gestcom (NU scală de urgență) ───
 // categorie_favorit: 0=fără · 1=🔴 Roșu · 2=🟠 Portocaliu · 3=🔵 Albastru · 4=🟢 Verde
@@ -103,3 +104,77 @@ export function SyncBadge({ last, syncing, auto }: { last?: SyncInfo | null; syn
     </span>
   );
 }
+
+// ── Audio + Reminder (iconițe cu stare) — port 1:1 din handoff ui.jsx ─────────
+export interface AudioReminderClient {
+  audio?: boolean;
+  obs?: boolean;
+  reminder?: string | null;
+  reminderWhen?: string | null;
+}
+export function AudioReminder({ client, compact }: { client: AudioReminderClient; compact?: boolean }) {
+  const { t } = useT();
+  return (
+    <span className="ar">
+      {client.audio && <span className="ar__ic ar__ic--on" title={t('Înregistrare audio disponibilă')}><Icon name="headphones" size={14} /></span>}
+      {client.obs && <span className="ar__ic" title={t('Are observații')}><Icon name="note" size={14} /></span>}
+      {client.reminder && !compact && (
+        <span className={'ar__rem ar__rem--' + (client.reminderWhen || '')} title={t('Reminder: ') + client.reminder}>
+          <Icon name="bell" size={12} />{client.reminder}
+        </span>
+      )}
+    </span>
+  );
+}
+
+// ── KPI — port 1:1 din handoff ui.jsx ─────────────────────────────────────────
+export function Kpi({ label, value, suffix, delta, dir, accent }: {
+  label: React.ReactNode;
+  value: React.ReactNode;
+  suffix?: React.ReactNode;
+  delta?: React.ReactNode;
+  dir?: 'up' | 'down';
+  accent?: boolean;
+}) {
+  return (
+    <div className="kpi">
+      <span className="kpi__label">{label}</span>
+      <span className="kpi__value mono" style={accent ? { color: 'var(--accent)' } : {}}>
+        {value}{suffix && <span className="kpi__suffix">{suffix}</span>}
+      </span>
+      {delta != null && <span className={'kpi__delta ' + (dir || 'up')}><Icon name={dir === 'down' ? 'down' : 'up'} size={12} />{delta}</span>}
+    </div>
+  );
+}
+
+// ── Toast — host global + funcția toast(). Port 1:1 din handoff ui.jsx ─────────
+export type ToastType = 'success' | 'error' | 'info' | 'warning';
+interface ToastItem { id: string; msg: string; type: ToastType; }
+let _push: ((msg: string, type?: ToastType) => void) | null = null;
+export function ToastHost() {
+  const [items, setItems] = useState<ToastItem[]>([]);
+  useEffect(() => {
+    _push = (msg, type = 'success') => {
+      const id = Math.random().toString(36).slice(2);
+      setItems(x => [...x, { id, msg, type }]);
+      setTimeout(() => setItems(x => x.filter(i => i.id !== id)), 2600);
+    };
+    return () => { _push = null; };
+  }, []);
+  const ic = (t: ToastType) => t === 'success' ? 'check' : t === 'error' ? 'alert' : t === 'info' ? 'bell' : 'check';
+  const cl = (t: ToastType) => 'var(--' + (t === 'success' ? 'success' : t === 'error' ? 'danger' : t === 'warning' ? 'warning' : 'accent') + ')';
+  return (
+    <div className="toast-wrap">
+      {items.map(i => (
+        <div key={i.id} className={'toast toast--' + i.type}>
+          <Icon name={ic(i.type)} size={17} style={{ color: cl(i.type) }} />{i.msg}
+        </div>
+      ))}
+    </div>
+  );
+}
+export function toast(msg: string, type?: ToastType) { if (_push) _push(msg, type); }
+
+// ── Formatare RO — port 1:1 din handoff ui.jsx ────────────────────────────────
+export const num = (n: number) => Number(n).toLocaleString('ro-RO');
+export const mp = (n: number) => num(n) + ' mp';
