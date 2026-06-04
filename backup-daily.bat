@@ -3,8 +3,8 @@ REM ============================================================
 REM  AMASS Palnie - BACKUP ZILNIC al bazei de date
 REM  ------------------------------------------------------------
 REM  Ce face:
-REM    1. Copiaza  prisma\dev.db  in  backups\dev-AAAALLZZ-HHMM.db
-REM       (cu data si ora in nume, ca sa nu se suprascrie).
+REM    1. EXTRAGE baza din containerul Docker (amass:/app/prisma/dev.db = volumul amass-data)
+REM       in  backups\dev-AAAALLZZ-HHMM.db (cu data si ora in nume, ca sa nu se suprascrie).
 REM    2. Pastreaza doar ultimele 30 de copii; pe cele mai vechi
 REM       le sterge automat.
 REM
@@ -15,14 +15,13 @@ REM ============================================================
 setlocal EnableExtensions
 cd /d "%~dp0"
 
-set "SRC=prisma\dev.db"
 set "DEST=backups"
 set "KEEP=30"
 
-REM --- Verific ca exista baza de date sursa ---
-if not exist "%SRC%" (
-  echo [EROARE] Nu gasesc baza de date: %SRC%
-  echo          Rulezi acest fisier din folderul aplicatiei?
+REM --- Verific ca Docker raspunde (baza traieste in VOLUMUL containerului, nu pe disc local) ---
+docker info >nul 2>&1
+if errorlevel 1 (
+  echo [EROARE] Docker nu raspunde. Porneste Docker Desktop si reincearca.
   exit /b 1
 )
 
@@ -39,12 +38,12 @@ set "STAMP=%STAMP: =0%"
 
 set "TARGET=%DEST%\dev-%STAMP%.db"
 
-REM --- Fac copia ---
+REM --- Fac copia: EXTRAG baza din containerul Docker (volumul amass-data), nu de pe disc local ---
 echo.
-echo === Fac backup: %SRC%  ->  %TARGET%
-copy /Y "%SRC%" "%TARGET%" >nul
+echo === Fac backup: amass:/app/prisma/dev.db  ->  %TARGET%
+docker compose cp amass:/app/prisma/dev.db "%TARGET%" >nul 2>&1
 if errorlevel 1 (
-  echo [EROARE] Copierea a esuat.
+  echo [EROARE] Nu am putut extrage baza din container. Containerul 'amass-console' ruleaza? (docker compose ps)
   exit /b 1
 )
 echo [OK] Backup creat: %TARGET%
