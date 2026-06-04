@@ -1,0 +1,54 @@
+/* Login AMASS — design self-contained (independent de tokenii aplicației, ca să nu reapară alb-pe-alb). */
+.aml{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;overflow:hidden;
+  background:radial-gradient(120% 120% at 50% -10%,#1a1f26 0%,#0c0e12 55%,#08090c 100%);
+  font-family:'Inter',system-ui,-apple-system,sans-serif;padding:20px;}
+/* aurora: 3 pete colorate care plutesc */
+.aml__aurora{position:absolute;inset:-20%;filter:blur(70px);opacity:.55;pointer-events:none;}
+.aml__aurora span{position:absolute;width:46vw;height:46vw;border-radius:50%;mix-blend-mode:screen;}
+.aml__aurora span:nth-child(1){background:#CC0000;top:-6%;left:-4%;animation:aml-f1 16s ease-in-out infinite;}
+.aml__aurora span:nth-child(2){background:#2563EB;bottom:-10%;right:-6%;animation:aml-f2 19s ease-in-out infinite;}
+.aml__aurora span:nth-child(3){background:#0D9488;top:30%;left:40%;width:34vw;height:34vw;animation:aml-f3 22s ease-in-out infinite;}
+@keyframes aml-f1{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(8vw,6vh) scale(1.15)}}
+@keyframes aml-f2{0%,100%{transform:translate(0,0) scale(1.1)}50%{transform:translate(-7vw,-5vh) scale(.9)}}
+@keyframes aml-f3{0%,100%{transform:translate(0,0)}50%{transform:translate(-6vw,7vh) scale(1.1)}}
+/* grilă fină peste fundal */
+.aml__grid{position:absolute;inset:0;pointer-events:none;opacity:.06;
+  background-image:linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px);
+  background-size:46px 46px;-webkit-mask-image:radial-gradient(80% 80% at 50% 40%,#000,transparent);mask-image:radial-gradient(80% 80% at 50% 40%,#000,transparent);}
+/* card frosted */
+.aml__card{position:relative;z-index:2;width:100%;max-width:400px;padding:38px 34px 26px;border-radius:20px;
+  background:rgba(20,24,30,.62);backdrop-filter:blur(18px) saturate(140%);-webkit-backdrop-filter:blur(18px) saturate(140%);
+  border:1px solid rgba(255,255,255,.10);box-shadow:0 30px 80px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.06);
+  animation:aml-rise .6s cubic-bezier(.2,.7,.2,1) both;}
+@keyframes aml-rise{from{opacity:0;transform:translateY(16px) scale(.985)}to{opacity:1;transform:none}}
+.aml__brand{display:flex;align-items:center;gap:10px;margin-bottom:22px;}
+.aml__mark{color:#FF4B4B;filter:drop-shadow(0 0 10px rgba(204,0,0,.5));}
+.aml__word{font-family:'Montserrat',sans-serif;font-weight:800;font-size:20px;letter-spacing:.04em;color:#fff;}
+.aml__word sup{font-size:10px;opacity:.7;}
+/* titlu cu highlight de culoare care se DEPLASEAZĂ prin text */
+.aml__title{font-family:'Montserrat',sans-serif;font-weight:800;font-size:30px;line-height:1.1;margin:0 0 8px;
+  background:linear-gradient(100deg,#fff 0%,#fff 30%,#FF4B4B 45%,#ffd0d0 52%,#fff 62%,#fff 100%);
+  background-size:280% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;
+  animation:aml-sweep 4.5s linear infinite;}
+@keyframes aml-sweep{0%{background-position:140% 0}100%{background-position:-40% 0}}
+.aml__tag{min-height:38px;margin:0 0 22px;color:#aeb6c2;font-size:13.5px;line-height:1.4;animation:aml-fade .6s ease both;}
+@keyframes aml-fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.aml__form{display:flex;flex-direction:column;}
+.aml__lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#8b94a3;margin:12px 0 6px;}
+.aml__in{width:100%;height:44px;padding:0 14px;border-radius:11px;font-size:14px;color:#f3f5f8;
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);outline:none;transition:border-color .15s,box-shadow .15s,background .15s;}
+.aml__in::placeholder{color:#6b7280;}
+.aml__in:focus{border-color:#FF4B4B;background:rgba(255,255,255,.09);box-shadow:0 0 0 4px rgba(204,0,0,.18);}
+.aml__err{margin-top:12px;padding:9px 12px;border-radius:9px;font-size:13px;color:#ffd5d5;background:rgba(204,0,0,.16);border:1px solid rgba(255,90,90,.4);}
+.aml__btn{position:relative;overflow:hidden;margin-top:20px;height:46px;border:none;border-radius:11px;cursor:pointer;
+  font-family:'Montserrat',sans-serif;font-weight:700;font-size:14.5px;letter-spacing:.02em;color:#fff;
+  background:linear-gradient(135deg,#E11D2A 0%,#CC0000 55%,#A00203 100%);box-shadow:0 10px 26px rgba(204,0,0,.4);transition:transform .12s,box-shadow .2s,filter .2s;}
+.aml__btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 14px 32px rgba(204,0,0,.5);filter:brightness(1.05);}
+.aml__btn:active:not(:disabled){transform:translateY(0);}
+.aml__btn:disabled{opacity:.7;cursor:default;}
+.aml__btn::after{content:'';position:absolute;top:0;left:-60%;width:50%;height:100%;
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.35),transparent);transform:skewX(-18deg);animation:aml-shine 3.2s ease-in-out infinite;}
+@keyframes aml-shine{0%,60%{left:-60%}100%{left:160%}}
+.aml__foot{margin-top:22px;text-align:center;font-size:11px;letter-spacing:.04em;color:#6b7280;}
+@media (max-width:420px){.aml__card{padding:30px 22px 22px}.aml__title{font-size:26px}}
+@media (prefers-reduced-motion:reduce){.aml__aurora span,.aml__title,.aml__btn::after,.aml__tag{animation:none}}
