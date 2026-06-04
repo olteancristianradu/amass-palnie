@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useLayoutEffect } from 'react';
 import { Icon } from './Icon';
+import { useT } from '@/lib/i18n';
 
 // ── TUR GHIDAT (coachmarks cu spotlight) — port din handoff help.jsx ──
 // Adaptat pt Next: turul funcționează CROSS-RUTĂ. Pașii cu `route` declanșează navigarea (nav)
@@ -17,6 +18,7 @@ const TOUR_STEPS: Array<{ sel: string; title: string; body: string[]; place?: st
 ];
 
 export function Tour({ run, onClose, nav }: { run: boolean; onClose: () => void; nav?: (route: string) => void }) {
+  const { t } = useT();
   const [i, setI] = useState(0);
   const [rect, setRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   const step = TOUR_STEPS[i];
@@ -57,16 +59,16 @@ export function Tour({ run, onClose, nav }: { run: boolean; onClose: () => void;
     <div className="tour">
       {hole ? <div className="tour__spot" style={{ top: hole.top, left: hole.left, width: hole.width, height: hole.height }} /> : <div className="tour__dim" />}
       <div className="tour__tip" style={tip}>
-        <div className="tour__step">Pasul {i + 1} / {TOUR_STEPS.length}</div>
-        <h3 className="tour__title">{step.title}</h3>
-        <ul className="tour__list">{step.body.map((b, k) => <li key={k}>{b}</li>)}</ul>
+        <div className="tour__step">{t('Pasul')} {i + 1} / {TOUR_STEPS.length}</div>
+        <h3 className="tour__title">{t(step.title)}</h3>
+        <ul className="tour__list">{step.body.map((b, k) => <li key={k}>{t(b)}</li>)}</ul>
         <div className="tour__nav">
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>Sari peste</button>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>{t('Sari peste')}</button>
           <div className="row" style={{ display: 'flex', gap: 6 }}>
-            {i > 0 && <button className="btn btn-secondary btn-sm" onClick={() => setI(i - 1)}><Icon name="chevL" size={14} />Înapoi</button>}
+            {i > 0 && <button className="btn btn-secondary btn-sm" onClick={() => setI(i - 1)}><Icon name="chevL" size={14} />{t('Înapoi')}</button>}
             {i < TOUR_STEPS.length - 1
-              ? <button className="btn btn-primary btn-sm" onClick={() => setI(i + 1)}>Următorul<Icon name="chevR" size={14} /></button>
-              : <button className="btn btn-primary btn-sm" onClick={onClose}><Icon name="check" size={14} />Am înțeles</button>}
+              ? <button className="btn btn-primary btn-sm" onClick={() => setI(i + 1)}>{t('Următorul')}<Icon name="chevR" size={14} /></button>
+              : <button className="btn btn-primary btn-sm" onClick={onClose}><Icon name="check" size={14} />{t('Am înțeles')}</button>}
           </div>
         </div>
       </div>
@@ -115,6 +117,7 @@ const HELP_GLOSSARY: Array<{ sec: string; items: [string, string, string][] }> =
 ];
 
 export function HelpPanel({ open, onClose, onStartTour }: { open: boolean; onClose: () => void; onStartTour: () => void }) {
+  const { t } = useT();
   const [q, setQ] = useState('');
   if (!open) return null;
   const ql = q.trim().toLowerCase();
@@ -122,34 +125,34 @@ export function HelpPanel({ open, onClose, onStartTour }: { open: boolean; onClo
   return (
     <>
       <div className="help-backdrop" onClick={onClose} />
-      <aside className="help-drawer" role="dialog" aria-label="Ajutor">
+      <aside className="help-drawer" role="dialog" aria-label={t('Ajutor')}>
         <header className="help-drawer__head">
-          <div className="row" style={{ display: 'flex', alignItems: 'center', gap: 9 }}><Icon name="help" size={20} style={{ color: 'var(--accent)' }} /><h2>Ajutor & ghid</h2></div>
-          <button className="btn btn-ghost btn-icon btn-sm" onClick={onClose} aria-label="Închide"><Icon name="x" size={18} /></button>
+          <div className="row" style={{ display: 'flex', alignItems: 'center', gap: 9 }}><Icon name="help" size={20} style={{ color: 'var(--accent)' }} /><h2>{t('Ajutor & ghid')}</h2></div>
+          <button className="btn btn-ghost btn-icon btn-sm" onClick={onClose} aria-label={t('Închide')}><Icon name="x" size={18} /></button>
         </header>
         <div className="help-drawer__body scroll-thin">
           <button className="help-tourcta" onClick={onStartTour}>
             <span className="help-tourcta__ic"><Icon name="play" size={18} /></span>
-            <span style={{ display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'left' }}><b>Pornește turul ghidat</b><small>Plimbare pas-cu-pas prin aplicație (1 minut)</small></span>
+            <span style={{ display: 'flex', flexDirection: 'column', gap: 2, textAlign: 'left' }}><b>{t('Pornește turul ghidat')}</b><small>{t('Plimbare pas-cu-pas prin aplicație (1 minut)')}</small></span>
             <Icon name="chevR" size={18} />
           </button>
           <div className="help-search">
             <Icon name="search" size={15} />
-            <input placeholder="Caută un buton sau o setare…" value={q} onChange={e => setQ(e.target.value)} />
+            <input placeholder={t('Caută un buton sau o setare…')} value={q} onChange={e => setQ(e.target.value)} />
           </div>
           {filtered.map(g => (
             <section key={g.sec} className="help-sec">
-              <h3 className="help-sec__t">{g.sec}</h3>
+              <h3 className="help-sec__t">{t(g.sec)}</h3>
               {g.items.map((it, k) => (
                 <div key={k} className="help-item">
                   <span className="help-item__ic"><Icon name={it[0]} size={16} /></span>
-                  <div><b>{it[1]}</b><p>{it[2]}</p></div>
+                  <div><b>{t(it[1])}</b><p>{t(it[2])}</p></div>
                 </div>
               ))}
             </section>
           ))}
-          {!filtered.length && <p className="muted" style={{ padding: 16 }}>Nimic găsit pentru „{q}".</p>}
-          <div className="help-tip"><Icon name="lightbulb" size={16} /><span>Sfat: treci cu mouse-ul peste orice buton ca să-i vezi numele.</span></div>
+          {!filtered.length && <p className="muted" style={{ padding: 16 }}>{t('Nimic găsit pentru')} „{q}".</p>}
+          <div className="help-tip"><Icon name="lightbulb" size={16} /><span>{t('Sfat: treci cu mouse-ul peste orice buton ca să-i vezi numele.')}</span></div>
         </div>
       </aside>
     </>

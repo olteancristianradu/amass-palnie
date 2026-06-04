@@ -1,10 +1,12 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Layout } from '@/components/Layout';
+import { useT } from '@/lib/i18n';
 
 interface Rep { file: string; title: string; }
 
 export default function RapoartePage() {
+  const { t } = useT();
   const [reports, setReports] = useState<Rep[]>([]);
   const [active, setActive] = useState<string>('');
   const [content, setContent] = useState<string>('');
@@ -24,8 +26,8 @@ export default function RapoartePage() {
     <Layout>
       <div className="card card--pad text-center rise max-w-md mx-auto mt-10" style={{ padding: 40 }}>
         <div className="text-[32px] mb-2">🔒</div>
-        <h2 className="text-[20px] mb-1">Acces restricționat</h2>
-        <p className="text-[var(--fg-soft)] text-[13px]">Rapoartele conțin date ale clienților și sunt vizibile doar pentru manager/admin.</p>
+        <h2 className="text-[20px] mb-1">{t('Acces restricționat')}</h2>
+        <p className="text-[var(--fg-soft)] text-[13px]">{t('Rapoartele conțin date ale clienților și sunt vizibile doar pentru manager/admin.')}</p>
       </div>
     </Layout>
   );
@@ -34,18 +36,18 @@ export default function RapoartePage() {
     setActive(file); setLoading(true);
     const r = await fetch('/api/rapoarte?file=' + encodeURIComponent(file));
     const j = await r.json();
-    setContent(j.ok ? j.content : '⚠️ ' + (j.error || 'eroare'));
+    setContent(j.ok ? j.content : '⚠️ ' + (j.error || t('eroare')));
     setLoading(false);
   }
 
   return (
     <Layout>
       <p className="text-[var(--fg-soft)] text-[13px] mb-5 rise">
-        Toate analizele și livrabilele într-un singur loc — audit clienți, stare sincronizare, recapitulare, modificări fișă.
+        {t('Toate analizele și livrabilele într-un singur loc — audit clienți, stare sincronizare, recapitulare, modificări fișă.')}
       </p>
       <div className="grid grid-cols-1 lg:grid-cols-[230px_1fr] gap-4">
         <div className="card p-2 rise rise-1 self-start">
-          {reports.length === 0 && <div className="p-3 text-[12.5px] text-[var(--fg-faint)]">Niciun raport.</div>}
+          {reports.length === 0 && <div className="p-3 text-[12.5px] text-[var(--fg-faint)]">{t('Niciun raport.')}</div>}
           {reports.map(r => (
             <button key={r.file} onClick={() => open(r.file)}
               className={'w-full text-left px-3 py-2.5 rounded-[var(--r-sm)] text-[13px] transition-colors '
@@ -55,7 +57,7 @@ export default function RapoartePage() {
           ))}
         </div>
         <div className="card card--pad rise rise-2 overflow-x-auto scroll-area">
-          {loading ? <div className="text-[var(--fg-soft)]">Se încarcă…</div> : <Markdown src={content} />}
+          {loading ? <div className="text-[var(--fg-soft)]">{t('Se încarcă…')}</div> : <Markdown src={content} />}
         </div>
       </div>
     </Layout>

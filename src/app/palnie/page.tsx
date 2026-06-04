@@ -137,10 +137,11 @@ function FilterGroup({ label, value, options, onChange, dotFn }: {
 
 // Chip activ (în filterbar) cu buton de eliminare.
 function Chip({ children, dot, onRemove }: { children: React.ReactNode; dot?: string | null; onRemove: () => void }) {
+  const { t } = useT();
   return (
     <span className="chip is-on">
       {dot && <span className="chip__dot" style={{ background: dot }} />}{children}
-      <button className="chip__x" onClick={onRemove} title="Elimină filtrul"><Icon name="x" size={12} /></button>
+      <button className="chip__x" onClick={onRemove} title={t('Elimină filtrul')}><Icon name="x" size={12} /></button>
     </span>
   );
 }
@@ -157,6 +158,7 @@ function StepToggle({ label, done, onClick }: { label: string; done: boolean; on
 // Mini-buton info ⓘ (dreapta-sus a tabelului) → popover cu legenda celor 2 simboluri.
 // Închide la click în afară (mousedown). Explicațiile stau sub trigger, nu permanent pe ecran.
 function TableInfo() {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLSpanElement>(null);
   useEffect(() => {
@@ -167,20 +169,20 @@ function TableInfo() {
   }, [open]);
   return (
     <span className="tbl-info" ref={ref}>
-      <button className={'tbl-info__btn' + (open ? ' is-on' : '')} title="Legendă simboluri"
-        onClick={() => setOpen(o => !o)} aria-label="Legendă simboluri">
+      <button className={'tbl-info__btn' + (open ? ' is-on' : '')} title={t('Legendă simboluri')}
+        onClick={() => setOpen(o => !o)} aria-label={t('Legendă simboluri')}>
         <Icon name="info" size={15} />
       </button>
       {open && (
         <div className="tbl-info__pop">
-          <div className="tbl-info__t">Legendă simboluri</div>
+          <div className="tbl-info__t">{t('Legendă simboluri')}</div>
           <div className="tbl-info__row">
             <span className="autodot__pulse" />
-            <span>Punct albastru = <b>completat automat</b> (din Data intrare). Scrii peste → devine manual și nu se mai suprascrie.</span>
+            <span>{t('Punct albastru =')} <b>{t('completat automat')}</b> {t('(din Data intrare). Scrii peste → devine manual și nu se mai suprascrie.')}</span>
           </div>
           <div className="tbl-info__row">
             <span className="cnm__warn"><Icon name="alert" size={13} /></span>
-            <span>Triunghi roșu la nume = client <b>fără înregistrare în CRM</b>.</span>
+            <span>{t('Triunghi roșu la nume = client')} <b>{t('fără înregistrare în CRM')}</b>.</span>
           </div>
         </div>
       )}
@@ -244,9 +246,9 @@ export default function PalniePage() {
       if (r.status === 401) { window.location.href = '/login'; return; }
       const j = await r.json().catch(() => ({} as any));
       if (r.ok && j.ok) { setClienti(j.clienti); setIsManager(j.isManager); }
-      else if (!silent) setMsg('❌ ' + (j.error || `Eroare server (${r.status})`));
+      else if (!silent) setMsg('❌ ' + (j.error || `${t('Eroare server')} (${r.status})`));
     } catch (e: any) {
-      if (!silent) setMsg('❌ ' + (e?.message || 'Nu s-a putut încărca pâlnia'));
+      if (!silent) setMsg('❌ ' + (e?.message || t('Nu s-a putut încărca pâlnia')));
     } finally {
       // finally garantează că spinnerul „Se încarcă pâlnia…" nu rămâne agățat la o eroare/HTML neașteptat.
       if (!silent) setLoading(false);
@@ -274,7 +276,7 @@ export default function PalniePage() {
 
   async function runSync(endpoint: string, label: string) {
     setSync({ type: label });
-    setMsg(`⏳ ${label} pornit… (nu închide tab-ul)`);
+    setMsg(`⏳ ${label} ${t('pornit… (nu închide tab-ul)')}`);
     try {
       const r = await fetch(endpoint, { method: 'POST' });
       const j = await r.json();
@@ -287,7 +289,7 @@ export default function PalniePage() {
   // Creare client manual (inCRM=false) → POST /api/clienti. La succes: reîncarcă pâlnia și
   // navighează la fișa noului client (paritate cu fluxul „vezi fișa").
   async function createClient(payload: { nume: string; localitate: string; judet: string; telefon: string; idLucrare: string; suprafata: string }) {
-    setMsg('⏳ Creez clientul…');
+    setMsg('⏳ ' + t('Creez clientul…'));
     try {
       const r = await fetch('/api/clienti', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -295,27 +297,27 @@ export default function PalniePage() {
       });
       const j = await r.json().catch(() => ({} as any));
       if (r.ok && j.ok) {
-        setMsg('✅ Client creat (⚠ fără înregistrare CRM)');
+        setMsg('✅ ' + t('Client creat (⚠ fără înregistrare CRM)'));
         setNewModal(false);
         await load();
         if (j.id) router.push('/strategie/' + j.id);
       } else {
-        setMsg('❌ ' + (j.error || `Eroare server (${r.status})`));
+        setMsg('❌ ' + (j.error || `${t('Eroare server')} (${r.status})`));
       }
     } catch (e: any) {
-      setMsg('❌ ' + (e?.message || 'Nu s-a putut crea clientul'));
+      setMsg('❌ ' + (e?.message || t('Nu s-a putut crea clientul')));
     }
   }
 
   async function setSteluta(clientId: string, idLucrare: string, cat: number) {
     setClienti(prev => prev.map(c => c.id === clientId ? { ...c, stelutaCat: cat } : c)); // optimist
-    setMsg(`⏳ Trimit steluța în CRM…`);
+    setMsg('⏳ ' + t('Trimit steluța în CRM…'));
     const r = await fetch('/api/crm/steluta', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ clientId, idLucrare, cat })
     });
     const j = await r.json();
-    setMsg(j.ok ? `✅ Prioritate setată în CRM` : '❌ ' + j.error);
+    setMsg(j.ok ? '✅ ' + t('Prioritate setată în CRM') : '❌ ' + j.error);
     if (!j.ok) await load();
   }
 
@@ -330,7 +332,7 @@ export default function PalniePage() {
     });
     if (!r.ok) {
       const j = await r.json().catch(() => ({} as any));
-      setMsg('❌ ' + (j.validationErrors?.join(' ') || j.error || 'Nu s-a putut salva'));
+      setMsg('❌ ' + (j.validationErrors?.join(' ') || j.error || t('Nu s-a putut salva')));
       // Rollback DOAR dacă valoarea afișată e încă cea pe care AM setat-o noi. Dacă între timp a apărut o
       // a doua editare (alt val) pe același câmp, NU o suprascriem cu valoarea veche (anti-pierdere afișaj).
       setClienti(p => p.map(c => (c.id === id && (c as any)[field] === newVal) ? { ...c, [field]: prevVal } : c));
@@ -347,15 +349,15 @@ export default function PalniePage() {
     const prev = clienti.find(c => c.id === id) as any;
     const closureReason = stadiu === 'Contractat' ? 'Won' : 'Lost';
     setClienti(p => p.map(c => c.id === id ? { ...c, stadiu } : c)); // optimist
-    setMsg(`⏳ ${stadiu === 'Contractat' ? 'Contractare' : 'Anulare'} în CRM…`);
+    setMsg(`⏳ ${stadiu === 'Contractat' ? t('Contractare') : t('Anulare')} ${t('în CRM…')}`);
     const r = await fetch(`/api/clienti/${id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ stadiu, closureReason, closureReasonDetail: detail })
     });
-    if (r.ok) { setMsg(`✅ Marcat „${stadiu}" (sincronizat în CRM)`); }
+    if (r.ok) { setMsg(`✅ ${t('Marcat')} „${t(stadiu)}" ${t('(sincronizat în CRM)')}`); }
     else {
       const j = await r.json().catch(() => ({} as any));
-      setMsg('❌ ' + (j.validationErrors?.join(' ') || j.error || 'Nu s-a putut salva'));
+      setMsg('❌ ' + (j.validationErrors?.join(' ') || j.error || t('Nu s-a putut salva')));
       setClienti(p => p.map(c => (c.id === id && (c as any).stadiu === stadiu) ? { ...c, stadiu: prev ? (prev.stadiu ?? null) : null } : c));
     }
   }
@@ -488,7 +490,7 @@ export default function PalniePage() {
       <div className="filterbar">
         <button className={'btn btn-secondary btn-sm filter-toggle' + (filtersOpen ? ' is-on' : '')}
           onClick={() => setFiltersOpen(o => !o)} aria-expanded={filtersOpen}
-          title="Filtre ample (etapă, nevoie, suprafață, dată…)">
+          title={t('Filtre ample (etapă, nevoie, suprafață, dată…)')}>
           <Icon name="filter" size={14} />{t('Filtre')}
           {activeFilterCount > 0 && <span className="filter-badge">{activeFilterCount}</span>}
         </button>
@@ -571,9 +573,9 @@ export default function PalniePage() {
           <div className="fgroup" style={{ gridColumn: '1 / -1' }}>
             <span className="label">{t('Sincronizare CRM')}</span>
             <div className="flex items-center gap-2 flex-wrap">
-              <button onClick={() => runSync('/api/crm/sync-clienti', 'Sync clienți')} disabled={!!sync} className="btn btn-secondary btn-sm" title="Importă clienți noi din CRM"><Icon name="refresh" size={13} />{t('Clienți')}</button>
-              <button onClick={() => runSync('/api/crm/sync-detalii', 'Sync detalii')} disabled={!!sync} className="btn btn-secondary btn-sm" title="Reîmprospătează detalii (steluțe, audio, suprafață, observații→strategie)"><Icon name="refresh" size={13} />{t('Detalii')}</button>
-              <button onClick={() => runSync('/api/crm/sync-remindere', 'Sync remindere')} disabled={!!sync} className="btn btn-secondary btn-sm" title="Reîmprospătează ultimul reminder"><Icon name="refresh" size={13} />{t('Remindere')}</button>
+              <button onClick={() => runSync('/api/crm/sync-clienti', 'Sync clienți')} disabled={!!sync} className="btn btn-secondary btn-sm" title={t('Importă clienți noi din CRM')}><Icon name="refresh" size={13} />{t('Clienți')}</button>
+              <button onClick={() => runSync('/api/crm/sync-detalii', 'Sync detalii')} disabled={!!sync} className="btn btn-secondary btn-sm" title={t('Reîmprospătează detalii (steluțe, audio, suprafață, observații→strategie)')}><Icon name="refresh" size={13} />{t('Detalii')}</button>
+              <button onClick={() => runSync('/api/crm/sync-remindere', 'Sync remindere')} disabled={!!sync} className="btn btn-secondary btn-sm" title={t('Reîmprospătează ultimul reminder')}><Icon name="refresh" size={13} />{t('Remindere')}</button>
               <span className="muted" style={{ fontSize: '.6875rem' }}>{t('(auto la 90s/10min în fundal)')}</span>
               <span className="topbar__sp" />
               <button onClick={resetFilters} disabled={activeFilterCount === 0} className="btn btn-secondary btn-sm"><Icon name="reset" size={13} />{t('Resetează filtrele')}</button>
@@ -586,10 +588,10 @@ export default function PalniePage() {
       {msg && <div className={'toast mb-4 whitespace-pre-wrap ' + (msg.startsWith('✅') ? 'toast--success' : msg.startsWith('❌') ? 'toast--error' : 'toast--info')}>{msg}</div>}
 
       {loading ? (
-        <div className="empty-state">Se încarcă pâlnia…</div>
+        <div className="empty-state">{t('Se încarcă pâlnia…')}</div>
       ) : filtered.length === 0 ? (
         <div className="empty-state">
-          {clienti.length === 0 ? 'Niciun client încă. Apasă „Sync clienți" pentru import din CRM.' : 'Niciun rezultat pentru filtrul curent.'}
+          {clienti.length === 0 ? t('Niciun client încă. Apasă „Sync clienți" pentru import din CRM.') : t('Niciun rezultat pentru filtrul curent.')}
         </div>
       ) : view === 'tabel' ? (
         <div className="table-wrap card rise">
@@ -602,7 +604,7 @@ export default function PalniePage() {
             const fromISO = (iso: string) => { const p = iso.split('-'); return p.length === 3 ? `${p[2]}.${p[1]}.${p[0]}` : ''; };
             const dcell = (c: Client, k: string, v: string | null) => (
               <td onClick={stop} className="text-center">
-                <input type="date" value={toISO(v)} title="Alege data (calendar) — click pe celulă" className="date-input"
+                <input type="date" value={toISO(v)} title={t('Alege data (calendar) — click pe celulă')} className="date-input"
                   onChange={e => updateInline(c.id, k, e.target.value ? fromISO(e.target.value) : '')} />
               </td>);
             return (
@@ -610,20 +612,20 @@ export default function PalniePage() {
                 <table className="tbl tbl--fisa">
                   <thead>
                     <tr>
-                      <th className="tbl__sticky tbl__name">Client</th>
-                      <th className="num">Suprafață</th>
-                      <th>Data Intrare</th>
-                      <th>T1</th>
-                      <th className="col-nevoie">Nevoia</th>
-                      <th>Schiță</th>
-                      <th>Pre-Ofertat</th>
-                      <th>Ofertat</th>
-                      <th>Status</th>
-                      <th>Reminder</th>
-                      <th>Observații Manager</th>
+                      <th className="tbl__sticky tbl__name">{t('Client')}</th>
+                      <th className="num">{t('Suprafață')}</th>
+                      <th>{t('Data Intrare')}</th>
+                      <th>{t('T1')}</th>
+                      <th className="col-nevoie">{t('Nevoia')}</th>
+                      <th>{t('Schiță')}</th>
+                      <th>{t('Pre-Ofertat')}</th>
+                      <th>{t('Ofertat')}</th>
+                      <th>{t('Status')}</th>
+                      <th>{t('Reminder')}</th>
+                      <th>{t('Observații Manager')}</th>
                     </tr>
                     <tr className="tbl__total">
-                      <td className="tbl__sticky">Total / etapă</td>
+                      <td className="tbl__sticky">{t('Total / etapă')}</td>
                       <td className="num mono">{tot.supr}</td>
                       <td className="num mono">{tot.intrare}</td>
                       <td className="num mono">{tot.t1}</td>
@@ -647,9 +649,9 @@ export default function PalniePage() {
                             {!c.hasAudio && <Icon name="alert" size={13} style={{ color: 'var(--warning)', flex: '0 0 13px' }} />}
                             {/* ⚠ client fără înregistrare în CRM. Modelul webapp NU are câmp inCRM → tratăm ca TRUE (deci nu apare acum); logica e gata. */}
                             {(c as any).inCRM === false && (
-                              <span className="cnm__warn" title="Fără înregistrare în CRM — de sincronizat"><Icon name="alert" size={13} /></span>
+                              <span className="cnm__warn" title={t('Fără înregistrare în CRM — de sincronizat')}><Icon name="alert" size={13} /></span>
                             )}
-                            <a href={`https://gestcom.ro/amass/index.php?m=lucrari&a=view&id_lucrare=${c.idLucrare}`} target="_blank" rel="noopener" onClick={stop} className="cnm__name">{c.nume || '(nume)'}</a>
+                            <a href={`https://gestcom.ro/amass/index.php?m=lucrari&a=view&id_lucrare=${c.idLucrare}`} target="_blank" rel="noopener" onClick={stop} className="cnm__name">{c.nume || t('(nume)')}</a>
                           </div>
                           <div className="cnm__sub mono">#{c.idLucrare} · ({c.categorie}{c.isDT ? 'DT' : ''}){c.localitate ? ' · ' + c.localitate : ''}{isManager && ownerFilter === 'all' && c.owner ? ' · ' + (c.owner.name || c.owner.email) : ''}</div>
                         </td>
@@ -658,13 +660,13 @@ export default function PalniePage() {
                         <td>
                           <div className="t1cell">
                             <span className="mono" style={{ fontSize: '.75rem' }}>{c.t1 ? fmtDateRO(c.t1) : '—'}</span>
-                            {c.t1 && <span className="t1cell__badge t1cell__badge--auto" title="Termen 1 (din CRM)">T1</span>}
+                            {c.t1 && <span className="t1cell__badge t1cell__badge--auto" title={t('Termen 1 (din CRM)')}>T1</span>}
                           </div>
                         </td>
                         <td onClick={stop} className="col-nevoie">
                           <select className="cell-select" style={c.nevoia ? { ...nevoiaChip(c.nevoia), fontWeight: 600 } : undefined}
                             value={c.nevoia ?? ''} onChange={e => updateInline(c.id, 'nevoia', e.target.value)}>
-                            {NEVOI.map(n => <option key={n} value={n}>{n || '—'}</option>)}
+                            {NEVOI.map(n => <option key={n} value={n}>{n ? t(n) : '—'}</option>)}
                           </select>
                         </td>
                         {dcell(c, 'schitaStatus', c.schitaStatus)}
@@ -672,19 +674,19 @@ export default function PalniePage() {
                         {dcell(c, 'ofertat', c.ofertat)}
                         <td onClick={stop}>
                           <select className={'cell-select status-sel ' + pillClass(c.stadiu)} value={c.stadiu ?? ''} onChange={e => setStadiu(c.id, e.target.value)}>
-                            {STADII.map(s => <option key={s} value={s}>{s || 'în lucru'}</option>)}
+                            {STADII.map(s => <option key={s} value={s}>{s ? t(s) : t('în lucru')}</option>)}
                           </select>
                         </td>
                         <td className="cell-rem">
                           {c.reminderText
                             ? <span className="rem-cell" title={c.reminderText}><Icon name="clock" size={11} />{c.reminderText.slice(0, 120)}</span>
-                            : <span className="muted">— fără</span>}
+                            : <span className="muted">{t('— fără')}</span>}
                         </td>
                         <td onClick={stop} className="cell-obs">
                           <textarea className="cell-obs__ta" rows={2}
                             defaultValue={c.notaManager ?? ''}
-                            placeholder="Notă manager…"
-                            title="Notă privată a managerului (separată de observații CRM)"
+                            placeholder={t('Notă manager…')}
+                            title={t('Notă privată a managerului (separată de observații CRM)')}
                             onBlur={e => { if ((e.target.value || '') !== (c.notaManager ?? '')) updateInline(c.id, 'notaManager', e.target.value); }} />
                         </td>
                       </tr>
@@ -705,21 +707,21 @@ export default function PalniePage() {
             const days = daysSince(c.dataIntrare);
             const prio = PRIORITY_MAP[stelutaToPrio(c.stelutaCat)];
             const stages = [
-              { k: 'schitaStatus', l: 'Schiță', v: c.schitaStatus },
-              { k: 'preOfertat', l: 'Pre-of.', v: c.preOfertat },
-              { k: 'ofertat', l: 'Ofertat', v: c.ofertat }
+              { k: 'schitaStatus', l: t('Schiță'), v: c.schitaStatus },
+              { k: 'preOfertat', l: t('Pre-of.'), v: c.preOfertat },
+              { k: 'ofertat', l: t('Ofertat'), v: c.ofertat }
             ];
             return (
               <article key={c.id} className="fr" style={{ '--rot': prio.color } as React.CSSProperties}
                 onClick={() => router.push('/strategie/' + c.id)}
-                title="Click oriunde → fișa de strategie">
+                title={t('Click oriunde → fișa de strategie')}>
                 <span className="fr__band" />
                 <div className="fr__id">
                   <div className="fr__head">
                     {!c.hasAudio && <Icon name="alert" size={14} style={{ color: 'var(--warning)' }} />}
                     <a href={`https://gestcom.ro/amass/index.php?m=lucrari&a=view&id_lucrare=${c.idLucrare}`}
                       target="_blank" rel="noopener" onClick={stop} className="fr__name crm-link">
-                      {c.nume || '(nume lipsă)'}
+                      {c.nume || t('(nume lipsă)')}
                     </a>
                     {c.localitate && <span className="fr__city">· {c.localitate}</span>}
                     <StagePill stage={stage} size="sm" />
@@ -734,8 +736,8 @@ export default function PalniePage() {
                     {c.t1 && <> · T1 {c.t1}</>}
                   </div>
                   {c.reminderText
-                    ? <div className="fr__rem"><Icon name="clock" size={12} />Reminder: {c.reminderText}</div>
-                    : <div className="fr__rem fr__rem--none"><Icon name="clock" size={12} />Fără reminder</div>}
+                    ? <div className="fr__rem"><Icon name="clock" size={12} />{t('Reminder:')} {c.reminderText}</div>
+                    : <div className="fr__rem fr__rem--none"><Icon name="clock" size={12} />{t('Fără reminder')}</div>}
                 </div>
 
                 <div className="fr__ctl" onClick={stop}>
@@ -749,16 +751,16 @@ export default function PalniePage() {
                   </div>
                   <select className="cell-select fr__nevoie" style={c.nevoia ? { ...nevoiaChip(c.nevoia), fontWeight: 600 } : undefined}
                     value={c.nevoia ?? ''} onChange={e => updateInline(c.id, 'nevoia', e.target.value)}>
-                    {NEVOI.map(n => <option key={n} value={n}>{n || 'Nevoia —'}</option>)}
+                    {NEVOI.map(n => <option key={n} value={n}>{n ? t(n) : t('Nevoia —')}</option>)}
                   </select>
                   <select className={'cell-select status-sel ' + pillClass(c.stadiu)}
                     value={c.stadiu ?? ''} onChange={e => setStadiu(c.id, e.target.value)}>
-                    {STADII.map(s => <option key={s} value={s}>{s || 'în lucru'}</option>)}
+                    {STADII.map(s => <option key={s} value={s}>{s ? t(s) : t('în lucru')}</option>)}
                   </select>
                   <PriorityStar value={stelutaToPrio(c.stelutaCat)} withLabel size={16}
                     onClick={() => setSteluta(c.id, c.idLucrare, prioToSteluta(stelutaToPrio((c.stelutaCat + 1) % 5)))} />
                   <button className="btn btn-pine btn-sm fr__fisa" onClick={e => { stop(e); router.push('/strategie/' + c.id); }}>
-                    VEZI FIȘA<Icon name="arrowR" size={14} />
+                    {t('VEZI FIȘA')}<Icon name="arrowR" size={14} />
                   </button>
                 </div>
               </article>
@@ -786,6 +788,7 @@ const LOST_REASONS = ['Preț prea mare', 'A ales concurența', 'Fără decizie /
 // Modal de motiv la închidere (Contractat = câștigat / Anulat = pierdut). Trimite un motiv real
 // (la „Altul" cere text liber) → ajunge în closureReasonDetail pentru raportul de win/loss.
 function CloseReasonModal({ stadiu, onConfirm, onClose }: { stadiu: 'Contractat' | 'Anulat'; onConfirm: (detail: string) => void; onClose: () => void }) {
+  const { t } = useT();
   const won = stadiu === 'Contractat';
   const reasons = won ? WON_REASONS : LOST_REASONS;
   const [sel, setSel] = useState(reasons[0]);
@@ -795,22 +798,22 @@ function CloseReasonModal({ stadiu, onConfirm, onClose }: { stadiu: 'Contractat'
   return (
     <div className="fixed inset-0 bg-[rgba(20,32,28,.5)] backdrop-blur-sm flex items-center justify-center z-50 p-6" onClick={onClose}>
       <div className="card !shadow-[var(--shadow-lg)] max-w-sm w-full p-6 rise" onClick={e => e.stopPropagation()}>
-        <h2 className="text-lg mb-1">{won ? '✅ Contractat — de ce a câștigat?' : '❌ Anulat — de ce s-a pierdut?'}</h2>
-        <p className="text-[12px] text-[var(--fg-soft)] mb-4">Motivul intră în raportul de win/loss (coaching).</p>
+        <h2 className="text-lg mb-1">{won ? t('✅ Contractat — de ce a câștigat?') : t('❌ Anulat — de ce s-a pierdut?')}</h2>
+        <p className="text-[12px] text-[var(--fg-soft)] mb-4">{t('Motivul intră în raportul de win/loss (coaching).')}</p>
         <div className="space-y-1.5 mb-3">
           {reasons.map(r => (
             <label key={r} className={'flex items-center gap-2 px-3 py-2 rounded-[var(--r-sm)] border cursor-pointer text-[13px] ' + (sel === r ? 'border-[var(--ember)] bg-[var(--ember-soft)] font-semibold' : 'border-[var(--border-strong)]')}>
-              <input type="radio" name="closeReason" checked={sel === r} onChange={() => setSel(r)} />{r}
+              <input type="radio" name="closeReason" checked={sel === r} onChange={() => setSel(r)} />{t(r)}
             </label>
           ))}
         </div>
         {sel === 'Altul' && (
-          <textarea className="field mb-4" rows={2} autoFocus placeholder="Scrie motivul concret…"
+          <textarea className="field mb-4" rows={2} autoFocus placeholder={t('Scrie motivul concret…')}
             value={free} onChange={e => setFree(e.target.value)} />
         )}
         <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="btn btn-secondary">Anulează</button>
-          <button onClick={() => onConfirm(detail)} disabled={blocked} className={'btn ' + (won ? 'btn-pine' : 'btn-primary')}>Confirmă</button>
+          <button onClick={onClose} className="btn btn-secondary">{t('Anulează')}</button>
+          <button onClick={() => onConfirm(detail)} disabled={blocked} className={'btn ' + (won ? 'btn-pine' : 'btn-primary')}>{t('Confirmă')}</button>
         </div>
       </div>
     </div>
@@ -828,6 +831,7 @@ function NewClientModal({ onCreate, onClose }: {
   onCreate: (p: { nume: string; localitate: string; judet: string; telefon: string; idLucrare: string; suprafata: string }) => void;
   onClose: () => void;
 }) {
+  const { t } = useT();
   const [nume, setNume] = useState('');
   const [localitate, setLocalitate] = useState('');
   const [judet, setJudet] = useState('');
@@ -844,43 +848,43 @@ function NewClientModal({ onCreate, onClose }: {
   return (
     <div className="fixed inset-0 bg-[rgba(20,32,28,.5)] backdrop-blur-sm flex items-center justify-center z-50 p-6" onClick={onClose}>
       <div className="card !shadow-[var(--shadow-lg)] max-w-sm w-full p-6 rise" onClick={e => e.stopPropagation()}>
-        <h2 className="text-lg mb-1">+ Client nou</h2>
-        <p className="text-[12px] text-[var(--fg-soft)] mb-4">Creat manual în webapp — apare cu ⚠ (fără înregistrare CRM) până la sincronizare.</p>
+        <h2 className="text-lg mb-1">{t('+ Client nou')}</h2>
+        <p className="text-[12px] text-[var(--fg-soft)] mb-4">{t('Creat manual în webapp — apare cu ⚠ (fără înregistrare CRM) până la sincronizare.')}</p>
         <div className="space-y-3 mb-4">
           <label className="block">
-            <span className="label">Nume *</span>
+            <span className="label">{t('Nume *')}</span>
             <input className="field w-full" autoFocus value={nume} onChange={e => setNume(e.target.value)}
-              placeholder="Numele clientului" onKeyDown={e => { if (e.key === 'Enter') submit(); }} />
+              placeholder={t('Numele clientului')} onKeyDown={e => { if (e.key === 'Enter') submit(); }} />
           </label>
           <div className="flex gap-2">
             <label className="block flex-1">
-              <span className="label">Localitate</span>
-              <input className="field w-full" value={localitate} onChange={e => setLocalitate(e.target.value)} placeholder="Oraș/comună" />
+              <span className="label">{t('Localitate')}</span>
+              <input className="field w-full" value={localitate} onChange={e => setLocalitate(e.target.value)} placeholder={t('Oraș/comună')} />
             </label>
             <label className="block flex-1">
-              <span className="label">Județ</span>
-              <input className="field w-full" value={judet} onChange={e => setJudet(e.target.value)} placeholder="Județ" />
+              <span className="label">{t('Județ')}</span>
+              <input className="field w-full" value={judet} onChange={e => setJudet(e.target.value)} placeholder={t('Județ')} />
             </label>
           </div>
           <label className="block">
-            <span className="label">Telefon</span>
-            <input className="field w-full" value={telefon} onChange={e => setTelefon(e.target.value)} placeholder="Telefon" />
+            <span className="label">{t('Telefon')}</span>
+            <input className="field w-full" value={telefon} onChange={e => setTelefon(e.target.value)} placeholder={t('Telefon')} />
           </label>
           <div className="flex gap-2">
             <label className="block flex-1">
-              <span className="label">idLucrare (opțional)</span>
-              <input className="field w-full" value={idLucrare} onChange={e => setIdLucrare(e.target.value)} placeholder="lasă gol → automat" />
+              <span className="label">{t('idLucrare (opțional)')}</span>
+              <input className="field w-full" value={idLucrare} onChange={e => setIdLucrare(e.target.value)} placeholder={t('lasă gol → automat')} />
             </label>
             <label className="block flex-1">
-              <span className="label">Suprafață (mp)</span>
+              <span className="label">{t('Suprafață (mp)')}</span>
               <input className="field w-full" type="number" min={0} inputMode="numeric"
-                value={suprafata} onChange={e => setSuprafata(e.target.value)} placeholder="mp" />
+                value={suprafata} onChange={e => setSuprafata(e.target.value)} placeholder={t('mp')} />
             </label>
           </div>
         </div>
         <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="btn btn-secondary">Anulează</button>
-          <button onClick={submit} disabled={blocked} className="btn btn-pine">Creează</button>
+          <button onClick={onClose} className="btn btn-secondary">{t('Anulează')}</button>
+          <button onClick={submit} disabled={blocked} className="btn btn-pine">{t('Creează')}</button>
         </div>
       </div>
     </div>

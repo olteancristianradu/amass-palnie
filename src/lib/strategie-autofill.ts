@@ -91,27 +91,34 @@ export function extractSuma(raw: string | null | undefined): number | null {
 }
 
 /**
- * Mapeaza textul liber "sistem de incalzire" la o valoare din dropdown-ul V2.
- * Portat 1:1 din StrategieEngine.js::_mapSistemActualV2_ (cele 10 sisteme).
- * Valorile întoarse sunt RECONCILIATE cu SISTEM_OPTS din page.tsx
- * (['CT gaz','CT lemne','CT peleti','CT electrica','Pompa caldura','Calorifere electrice',
- *   'Aer conditionat','Soba','Nu are sistem']) ca autofill-ul să cadă pe o opțiune validă a select-ului.
+ * Mapeaza textul liber "sistem de incalzire" la o valoare din dropdown-ul SURSĂ DE CĂLDURĂ.
+ * FIX 2026-06-03: valorile întoarse sunt ALINIATE EXACT la lista nouă `SURSA_CALDURA` din
+ * fisa-template-seed.ts (redesign B), unificată pentru V1 + V2:
+ *   ['CT gaz','CT lemne','CT peleți','CT electrică','CT combustibil solid (mixt)','Pompă de căldură',
+ *    'Sobă','Semineu','Convectoare electrice','Incalzire electrica in pardoseala','Nu are / construcție nouă','Nu știu'].
+ * CRITIC: 'Pompă de căldură' cu diacritice EXACTE — declanșează cascada „Tip pompă" (cond pe această valoare).
+ * Înainte întorcea etichete vechi ('Pompa caldura','CT peleti','Soba'...) care NU se potriveau cu dropdown-ul
+ * nou → valori orfane + cascada pompă nu pornea niciodată pe clienții autofill-ați.
+ * IDEMPOTENT: regex-urile (pe text normalizat) prind atât textul brut din CRM, cât și etichetele vechi ȘI
+ * noi (re-migrarea aplică funcția peste propriul output, vezi fisa-migrate.ts).
  */
 export function mapSistemActualV2(raw: string | null | undefined): string {
   if (!raw) return '';
   const s = normalizeRo(String(raw)).toLowerCase();
-  // ordinea verificărilor = identică cu Apps Script (specific → generic)
-  if (/pompa\s*(de\s*)?caldura/.test(s)) return 'Pompa caldura';
-  if (/peleti/.test(s)) return 'CT peleti';                                  // AS: 'Centrala peleti'
+  // ordine: specific → generic. Etichetele = EXACT cele din SURSA_CALDURA.
+  if (/pompa\s*(de\s*)?caldura/.test(s)) return 'Pompă de căldură';
+  if (/peleti/.test(s)) return 'CT peleți';
   if (/centrala?\s*(pe\s*)?(gaz|gazoasa)/.test(s) || /\bgaz\b/.test(s)) return 'CT gaz';
   if (/centrala?\s*(pe\s*)?(lemne|lemn)/.test(s) || /lemne/.test(s)) return 'CT lemne';
-  if (/centrala?\s*(pe\s*)?electric/.test(s)) return 'CT electrica';
-  if (/sobe|\bsoba\b/.test(s)) return 'Soba';                                // AS: 'Sobe'
-  if (/radiator.*ulei|\bulei\b/.test(s)) return 'Calorifere electrice';      // AS: 'Radiatoare ulei' (cea mai apropiată opțiune din dropdown)
-  if (/aer\s*conditionat|\bac\b/.test(s)) return 'Aer conditionat';          // AS: 'AC'
-  if (/plasm|infraros/.test(s)) return 'Calorifere electrice';              // AS: 'Plasme infrarosu'
-  if (/\biep\b|pardoseal/.test(s)) return 'Calorifere electrice';           // AS: 'IEP'
-  return ''; // necunoscut -> lasam gol, completeaza agentul
+  if (/centrala?\s*(pe\s*)?electric/.test(s)) return 'CT electrică';
+  if (/semineu/.test(s)) return 'Semineu';
+  if (/sobe|\bsoba\b/.test(s)) return 'Sobă';
+  // IEP / încălzire în pardoseală ÎNAINTE de genericul electric (altfel ar cădea pe convectoare).
+  if (/\biep\b|pardoseal/.test(s)) return 'Incalzire electrica in pardoseala';
+  if (/radiator.*ulei|\bulei\b|plasm|infraros|convector|calorifer/.test(s)) return 'Convectoare electrice';
+  // Aer condiționat NU există ca sursă în lista nouă (≈ pompă aer-aer, dar nu forțăm cascada pompă) →
+  // gol, alege agentul manual. Necunoscut → la fel gol.
+  return '';
 }
 
 /**

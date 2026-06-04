@@ -11,6 +11,7 @@ import { SEED_V1, SEED_V2 } from '@/lib/fisa-template-seed';
 import { migrateFisaBlob } from '@/lib/fisa-migrate';
 import { useParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import { useT } from '@/lib/i18n';
 import Link from 'next/link';
 
 interface Client {
@@ -49,6 +50,7 @@ function nfmt(n: number, d = 0): string {
 }
 
 export default function StrategiePage() {
+  const { t } = useT();
   const params = useParams<{ id: string }>();
   const [client, setClient] = useState<Client | null>(null);
   const [form, setForm] = useState<Record<string, any>>({});
@@ -232,7 +234,7 @@ export default function StrategiePage() {
     } else {
       setSaveState('idle');
     }
-    setMsg(j.ok ? '✅ Salvat (+ snapshot arhivă)' : '❌ ' + j.error);
+    setMsg(j.ok ? t('✅ Salvat (+ snapshot arhivă)') : '❌ ' + j.error);
   }
 
   // INFO CRM: generează textul COMPLET din toată fișa (toate câmpurile + auto-calc, ca în spreadsheet)
@@ -250,9 +252,9 @@ export default function StrategiePage() {
 
   async function downloadPDF() {
     if (!client) return;
-    setMsg('⏳ Generez PDF...');
+    setMsg(t('⏳ Generez PDF...'));
     const r = await fetch('/api/export/pdf?id=' + client.id);
-    if (r.status !== 200) { setMsg('❌ Eroare PDF'); return; }
+    if (r.status !== 200) { setMsg(t('❌ Eroare PDF')); return; }
     const blob = await r.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -260,14 +262,14 @@ export default function StrategiePage() {
     a.download = 'strategie-' + client.idLucrare + '.pdf';
     a.click();
     URL.revokeObjectURL(url);
-    setMsg('✅ PDF descărcat');
+    setMsg(t('✅ PDF descărcat'));
   }
 
   async function downloadWord() {
     if (!client) return;
-    setMsg('⏳ Generez Word...');
+    setMsg(t('⏳ Generez Word...'));
     const r = await fetch('/api/export/docx?id=' + client.id);
-    if (r.status !== 200) { setMsg('❌ Eroare DOCX'); return; }
+    if (r.status !== 200) { setMsg(t('❌ Eroare DOCX')); return; }
     const blob = await r.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -275,13 +277,13 @@ export default function StrategiePage() {
     a.download = 'strategie-' + client.idLucrare + '.docx';
     a.click();
     URL.revokeObjectURL(url);
-    setMsg('✅ Word descărcat');
+    setMsg(t('✅ Word descărcat'));
   }
 
   if (!client || !template) {
     return (
       <Layout contentMod="content--fisa">
-        <div className="fisa"><div className="empty-state">Se încarcă fișa…</div></div>
+        <div className="fisa"><div className="empty-state">{t('Se încarcă fișa…')}</div></div>
       </Layout>
     );
   }
@@ -327,7 +329,7 @@ export default function StrategiePage() {
       const value = typeof raw === 'number'
         ? nfmt(raw, Number.isInteger(raw) ? 0 : 2)
         : (raw == null || raw === '' ? '—' : String(raw));
-      return <CalcRow key={f.key} label={label} value={value} formula={f.formula} note={f.note} fam={f.fam} />;
+      return <CalcRow key={f.key} label={t(label)} value={value} formula={f.formula ? t(f.formula) : f.formula} note={f.note ? t(f.note) : f.note} fam={f.fam} />;
     }
 
     const control = renderControl(f);
@@ -338,9 +340,9 @@ export default function StrategiePage() {
       return (
         <div className="inrow inrow--col" key={f.key}>
           <div className="inrow__lbl">
-            <Icon name="note" size={13} style={{ color: 'var(--text-muted)' }} />{label}
+            <Icon name="note" size={13} style={{ color: 'var(--text-muted)' }} />{t(label)}
             {src && <Src t={src} />}
-            {isObs && <span className="after-call">opțional · după apel</span>}
+            {isObs && <span className="after-call">{t('opțional · după apel')}</span>}
           </div>
           {control}
         </div>
@@ -350,7 +352,7 @@ export default function StrategiePage() {
     // Câmp „bare" (fără wrapper InRow) — folosit în blocul construcție unde eticheta e colorată separat.
     if (opts?.bare) return <div key={f.key}>{control}</div>;
 
-    return <InRow key={f.key} label={label} src={src} fam={opts?.famLabel ? f.fam : undefined}>{control}</InRow>;
+    return <InRow key={f.key} label={t(label)} src={src} fam={opts?.famLabel ? f.fam : undefined}>{control}</InRow>;
   };
 
   // Randează DOAR controlul (input/select/chips/pills/textarea), fără etichetă.
@@ -376,7 +378,7 @@ export default function StrategiePage() {
         return (
           <select className={cls} value={cur} onChange={e => set(f.key, e.target.value)}>
             <option value="">—</option>
-            {all.map(o => <option key={o} value={o}>{o}</option>)}
+            {all.map(o => <option key={o} value={o}>{t(o)}</option>)}
           </select>
         );
       }
@@ -391,7 +393,7 @@ export default function StrategiePage() {
       }
       case 'textarea':
         return <textarea className="input" rows={3} value={v ?? ''} onChange={e => set(f.key, e.target.value)}
-          placeholder="Ce a spus clientul, context, facturi, istoric…" />;
+          placeholder={t('Ce a spus clientul, context, facturi, istoric…')} />;
       case 'text':
       default:
         return <input className="input" value={v ?? ''} onChange={e => set(f.key, e.target.value)} />;
@@ -414,24 +416,24 @@ export default function StrategiePage() {
     if (!fMaterial && !fIzol && !fGrosime && !fLoc) return null;
     return (
       <div className="constr">
-        <div className="constr__t">Construcție / izolație / locuință <Src t="list" /></div>
+        <div className="constr__t">{t('Construcție / izolație / locuință')} <Src t="list" /></div>
         <div className="constr__grid">
-          {fMaterial && <label className="constr__f"><span className="fam-coral">Material pereți</span>{renderControl(fMaterial)}</label>}
-          {fIzol && <label className="constr__f"><span className="fam-teal">Tip izolație</span>{renderControl(fIzol)}</label>}
+          {fMaterial && <label className="constr__f"><span className="fam-coral">{t('Material pereți')}</span>{renderControl(fMaterial)}</label>}
+          {fIzol && <label className="constr__f"><span className="fam-teal">{t('Tip izolație')}</span>{renderControl(fIzol)}</label>}
         </div>
-        {fMaterialAlt && condOk(fMaterialAlt) && <label className="constr__f cond"><span>Din ce e construită?</span>{renderControl(fMaterialAlt)}</label>}
-        {fIzolAlt && condOk(fIzolAlt) && <label className="constr__f cond"><span>Ce izolație?</span>{renderControl(fIzolAlt)}</label>}
-        {fGrosime && <div className="constr__niv"><span className="fam-gri">Grosime izolație</span>{renderControl(fGrosime)}</div>}
-        {fLoc && <div className="constr__niv"><span className="fam-roz">Tip locuință</span>{renderControl(fLoc)}</div>}
-        {fNiv && condOk(fNiv) && <div className="constr__niv cond"><span>Niveluri</span>{renderControl(fNiv)}</div>}
+        {fMaterialAlt && condOk(fMaterialAlt) && <label className="constr__f cond"><span>{t('Din ce e construită?')}</span>{renderControl(fMaterialAlt)}</label>}
+        {fIzolAlt && condOk(fIzolAlt) && <label className="constr__f cond"><span>{t('Ce izolație?')}</span>{renderControl(fIzolAlt)}</label>}
+        {fGrosime && <div className="constr__niv"><span className="fam-gri">{t('Grosime izolație')}</span>{renderControl(fGrosime)}</div>}
+        {fLoc && <div className="constr__niv"><span className="fam-roz">{t('Tip locuință')}</span>{renderControl(fLoc)}</div>}
+        {fNiv && condOk(fNiv) && <div className="constr__niv cond"><span>{t('Niveluri')}</span>{renderControl(fNiv)}</div>}
         {fAptEtaj && condOk(fAptEtaj) && (
           <div className="apt-grid cond">
-            <label className="constr__f"><span>Etaj</span>{renderControl(fAptEtaj)}</label>
-            {fAptDin && <label className="constr__f"><span>din</span>{renderControl(fAptDin)}</label>}
-            {fAptPoz && <label className="constr__f"><span>Poziție</span>{renderControl(fAptPoz)}</label>}
+            <label className="constr__f"><span>{t('Etaj')}</span>{renderControl(fAptEtaj)}</label>
+            {fAptDin && <label className="constr__f"><span>{t('din')}</span>{renderControl(fAptDin)}</label>}
+            {fAptPoz && <label className="constr__f"><span>{t('Poziție')}</span>{renderControl(fAptPoz)}</label>}
           </div>
         )}
-        {fLocAlt && condOk(fLocAlt) && <label className="constr__f cond"><span>Ce tip de locuință?</span>{renderControl(fLocAlt)}</label>}
+        {fLocAlt && condOk(fLocAlt) && <label className="constr__f cond"><span>{t('Ce tip de locuință?')}</span>{renderControl(fLocAlt)}</label>}
       </div>
     );
   }
@@ -447,7 +449,7 @@ export default function StrategiePage() {
     if (!z) return null;
     return (
       <section className="fz card">
-        <header className="fz__head"><span className="fz__num">01</span><h3>Situația actuală</h3></header>
+        <header className="fz__head"><span className="fz__num">01</span><h3>{t('Situația actuală')}</h3></header>
         <div className="fz__body">
           {z.fields.filter(f => !CONSTR_KEYS.has(f.key)).map(f => renderField(f))}
           {renderConstr('z01')}
@@ -461,7 +463,7 @@ export default function StrategiePage() {
     const z = zone('z02');
     if (!z) return null;
     const num = '02';
-    const title = isV1 ? 'Info casă actuală (obișnuința clientului)' : 'Sistemul actual & observații';
+    const title = isV1 ? t('Info casă actuală (obișnuința clientului)') : t('Sistemul actual & observații');
     const linkedKeys = new Set(['ca_cost_lunar', 'ca_cost_sezon']);
     const fLunar = fld('z02', 'ca_cost_lunar');
     const fSezon = fld('z02', 'ca_cost_sezon');
@@ -474,16 +476,16 @@ export default function StrategiePage() {
           {/* Cost lunar ↔ sezon (×6 / ÷6) — doar V1, în bloc .linked */}
           {isV1 && fLunar && fSezon && (
             <div className="linked">
-              <InRow label="Cost lunar actual" src="man">
+              <InRow label={t('Cost lunar actual')} src="man">
                 <div className="unitfield">
-                  <input className="input mono" value={form.ca_cost_lunar ?? ''} onChange={e => setLunar(e.target.value)} placeholder="lei/lună" />
+                  <input className="input mono" value={form.ca_cost_lunar ?? ''} onChange={e => setLunar(e.target.value)} placeholder={t('lei/lună')} />
                   <span className="unitfield__u">lei</span>
                 </div>
               </InRow>
-              <span className="linked__x" title="Legat: ×6 / ÷6"><Icon name="swap" size={14} /></span>
-              <InRow label="Cost sezon (×6)" src="man">
+              <span className="linked__x" title={t('Legat: ×6 / ÷6')}><Icon name="swap" size={14} /></span>
+              <InRow label={t('Cost sezon (×6)')} src="man">
                 <div className="unitfield">
-                  <input className="input mono" value={form.ca_cost_sezon ?? ''} onChange={e => setSezon(e.target.value)} placeholder="lei/sezon" />
+                  <input className="input mono" value={form.ca_cost_sezon ?? ''} onChange={e => setSezon(e.target.value)} placeholder={t('lei/sezon')} />
                   <span className="unitfield__u">lei</span>
                 </div>
               </InRow>
@@ -500,7 +502,7 @@ export default function StrategiePage() {
     if (!z) return null;
     return (
       <section className="fz card fz--amass">
-        <header className="fz__head fz__head--amass"><Icon name="trending" size={16} /><h3>Cu sistemul AMASS</h3><span className="fz__autobadge">∑ auto-calc</span></header>
+        <header className="fz__head fz__head--amass"><Icon name="trending" size={16} /><h3>{t('Cu sistemul AMASS')}</h3><span className="fz__autobadge">{t('∑ auto-calc')}</span></header>
         <div className="fz__body">{z.fields.map(f => renderField(f))}</div>
       </section>
     );
@@ -523,14 +525,14 @@ export default function StrategiePage() {
             return (
               <div className="qrow" key={f.key}>
                 <div className="qrow__left">
-                  <div className="qrow__lbl">{f.label.replace(/:\s*$/, '')}{srcFor(f) && <Src t={srcFor(f)!} />}</div>
+                  <div className="qrow__lbl">{t(f.label.replace(/:\s*$/, ''))}{srcFor(f) && <Src t={srcFor(f)!} />}</div>
                   <div className="qrow__ctl">{f.control === 'calc' ? renderCalcInline(f) : renderControl(f)}</div>
                 </div>
                 <div className="qrow__right">
                   {obs ? (
                     <textarea className="qrow__quote" rows={2} value={form[obs.key] ?? ''}
                       onChange={e => set(obs.key, e.target.value)}
-                      placeholder="Ce a spus clientul, cuvânt-cu-cuvânt…" />
+                      placeholder={t('Ce a spus clientul, cuvânt-cu-cuvânt…')} />
                   ) : <span />}
                 </div>
               </div>
@@ -539,8 +541,8 @@ export default function StrategiePage() {
           {/* Câmpuri obs rămase (mai multe decât câmpurile principale) — randate ca rânduri pe coloană. */}
           {obsFields.slice(mainFields.length).map(f => (
             <div className="inrow inrow--col" key={f.key}>
-              <div className="inrow__lbl"><Icon name="note" size={13} style={{ color: 'var(--text-muted)' }} />{f.label.replace(/:\s*$/, '')} <span className="after-call">opțional · după apel</span></div>
-              <textarea className="input" rows={2} value={form[f.key] ?? ''} onChange={e => set(f.key, e.target.value)} placeholder="Ce a spus clientul…" />
+              <div className="inrow__lbl"><Icon name="note" size={13} style={{ color: 'var(--text-muted)' }} />{t(f.label.replace(/:\s*$/, ''))} <span className="after-call">{t('opțional · după apel')}</span></div>
+              <textarea className="input" rows={2} value={form[f.key] ?? ''} onChange={e => set(f.key, e.target.value)} placeholder={t('Ce a spus clientul…')} />
             </div>
           ))}
         </div>
@@ -555,7 +557,7 @@ export default function StrategiePage() {
     return (
       <div className="calcinline">
         <b className="mono">{value}</b>
-        {(f.formula || f.note) && <InfoDot formula={f.formula} note={f.note} />}
+        {(f.formula || f.note) && <InfoDot formula={f.formula ? t(f.formula) : f.formula} note={f.note ? t(f.note) : f.note} />}
       </div>
     );
   }
@@ -574,17 +576,17 @@ export default function StrategiePage() {
       const txt = num == null ? '—' : (signed && num > 0 ? '+' : '') + nfmt(num, Number.isInteger(num) ? 0 : (key === '_c_dif_pftv' || key === '_c_amortizare' ? (Number.isInteger(num) ? 0 : (key === '_c_amortizare' ? 1 : 2)) : 0));
       return (
         <div className={'concl__cell' + (accent ? ' concl__cell--accent' : '')}>
-          <span className="concl__l">{f.label.replace(/:\s*$/, '')}
-            {(f.formula || f.note) && <InfoDot formula={f.formula} note={f.note} />}
+          <span className="concl__l">{t(f.label.replace(/:\s*$/, ''))}
+            {(f.formula || f.note) && <InfoDot formula={f.formula ? t(f.formula) : f.formula} note={f.note ? t(f.note) : f.note} />}
           </span>
-          <span className={'concl__v ' + tone}>{txt}<i>{unit}</i></span>
+          <span className={'concl__v ' + tone}>{txt}<i>{t(unit)}</i></span>
         </div>
       );
     };
     const ready = calc.diferenta_consum_lei != null || calc.profit_anual_lei != null || calc.diferenta_pftv_kw != null;
     return (
       <section className="fz card fz--concl">
-        <header className="fz__head"><span className="fz__num">05</span><h3>Diferențe & concluzii</h3><span className="fz__hint-r">comparație client ↔ AMASS</span></header>
+        <header className="fz__head"><span className="fz__num">05</span><h3>{t('Diferențe & concluzii')}</h3><span className="fz__hint-r">{t('comparație client ↔ AMASS')}</span></header>
         <div className="fz__body">
           <div className="concl">
             {cell('_c_dif_consum', 'lei/lună', false, true)}
@@ -592,7 +594,7 @@ export default function StrategiePage() {
             {cell('_c_dif_pftv', 'kW', false, false)}
             {cell('_c_amortizare', 'ani', true, false)}
           </div>
-          {!ready && <p className="aspect__hint" style={{ marginTop: 12 }}><Icon name="alert" size={13} style={{ color: 'var(--warning)' }} /> Completează Suprafață + Suma (cost actual) + Putere PFTV ca să apară cifrele.</p>}
+          {!ready && <p className="aspect__hint" style={{ marginTop: 12 }}><Icon name="alert" size={13} style={{ color: 'var(--warning)' }} /> {t('Completează Suprafață + Suma (cost actual) + Putere PFTV ca să apară cifrele.')}</p>}
         </div>
       </section>
     );
@@ -603,11 +605,11 @@ export default function StrategiePage() {
     const num = isV1 ? '05' : '06';
     return (
       <section className="fz card">
-        <header className="fz__head"><span className="fz__num">{num}</span><h3>Strategie & rezistențe & nevoi identificate</h3></header>
+        <header className="fz__head"><span className="fz__num">{num}</span><h3>{t('Strategie & rezistențe & nevoi identificate')}</h3></header>
         <div className="fz__body">
           <textarea className="input fisa__notes" rows={5} value={form.strategie_nevoi ?? ''}
             onChange={e => set('strategie_nevoi', e.target.value)}
-            placeholder="Notează nevoi, strategie, obiecții, rezistențe, butoane de apăsat…" />
+            placeholder={t('Notează nevoi, strategie, obiecții, rezistențe, butoane de apăsat…')} />
         </div>
       </section>
     );
@@ -619,13 +621,13 @@ export default function StrategiePage() {
         {/* ── breadcrumb (Pâlnie + cat-tag) + Stadiu + bară de acțiuni (autosave + butoane colorate) ── */}
         <header className="fisa__top">
           <div className="fisa__crumbs">
-            <Link href="/palnie" className="crumb"><Icon name="chevL" size={14} />Pâlnie</Link>
+            <Link href="/palnie" className="crumb"><Icon name="chevL" size={14} />{t('Pâlnie')}</Link>
             <span className="crumb-sep">·</span>
             <span className={'cat-tag cat-tag--' + (isV1 ? 'v1' : 'v2')}>
-              {isV1 ? 'V1 — casă în construcție' : 'V2 — casă locuită'} (cat {client.categorie}{client.isDT ? ' DT' : ''})
+              {isV1 ? t('V1 — casă în construcție') : t('V2 — casă locuită')} ({t('cat')} {client.categorie}{client.isDT ? ' DT' : ''})
             </span>
             <span className="crumb-sep">·</span>
-            <span className="crumb-muted">Stadiu:</span>
+            <span className="crumb-muted">{t('Stadiu:')}</span>
             <select
               className="cell-select"
               style={{ width: 'auto' }}
@@ -634,33 +636,33 @@ export default function StrategiePage() {
                 const v = e.target.value;
                 setClient({ ...client, stadiu: v || null });
                 await fetch(`/api/clienti/${client.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stadiu: v || null }) });
-                setMsg('✅ Stadiu actualizat: ' + (v || 'în lucru'));
+                setMsg('✅ ' + t('Stadiu actualizat:') + ' ' + (v ? t(v) : t('în lucru')));
               }}>
-              {['', 'Anulat', 'Contractat', 'Amanat', 'Finalizat'].map(s => <option key={s} value={s}>{s || 'în lucru'}</option>)}
+              {['', 'Anulat', 'Contractat', 'Amanat', 'Finalizat'].map(s => <option key={s} value={s}>{s ? t(s) : t('în lucru')}</option>)}
             </select>
           </div>
           {/* Bară de acțiuni — salvare automată + butoane colorate ca în design. */}
           <div className="fisa__actions">
             {/* Indicator salvare automată (înlocuiește butonul „✔ Salvează"). */}
-            <span className={'autosave autosave--' + saveState} title="Modificările se salvează automat">
+            <span className={'autosave autosave--' + saveState} title={t('Modificările se salvează automat')}>
               {saveState === 'saving'
-                ? <><Icon name="refresh" size={13} className="spin" />Se salvează…</>
-                : <><Icon name="check" size={13} />{saveState === 'saved' ? 'Salvat' : 'Salvare automată'}</>}
+                ? <><Icon name="refresh" size={13} className="spin" />{t('Se salvează…')}</>
+                : <><Icon name="check" size={13} />{saveState === 'saved' ? t('Salvat') : t('Salvare automată')}</>}
             </span>
             {/* „Push CRM" deschide modalul INFO CRM (preview), NU pushează orbește. */}
-            <button onClick={openInfoCrm} className="btn btn-pine btn-sm"><Icon name="upload" size={14} />Push CRM</button>
-            <button onClick={() => setEmailOpen(true)} className="btn btn-info btn-sm"><Icon name="mail" size={14} />Email</button>
-            <button onClick={() => setReminderOpen(true)} className="btn btn-amber btn-sm"><Icon name="bell" size={14} />Reminder</button>
-            <button onClick={downloadPDF} className="btn btn-pdf btn-sm"><Icon name="download" size={14} />PDF</button>
-            <button onClick={downloadWord} className="btn btn-word btn-sm"><Icon name="note" size={14} />Word</button>
+            <button onClick={openInfoCrm} className="btn btn-pine btn-sm"><Icon name="upload" size={14} />{t('Push CRM')}</button>
+            <button onClick={() => setEmailOpen(true)} className="btn btn-info btn-sm"><Icon name="mail" size={14} />{t('Email')}</button>
+            <button onClick={() => setReminderOpen(true)} className="btn btn-amber btn-sm"><Icon name="bell" size={14} />{t('Reminder')}</button>
+            <button onClick={downloadPDF} className="btn btn-pdf btn-sm"><Icon name="download" size={14} />{t('PDF')}</button>
+            <button onClick={downloadWord} className="btn btn-word btn-sm"><Icon name="note" size={14} />{t('Word')}</button>
             <a href={`https://gestcom.ro/amass/index.php?m=lucrari&a=view&id_lucrare=${client.idLucrare}`}
-               target="_blank" rel="noopener" className="btn btn-secondary btn-sm">CRM ↗</a>
+               target="_blank" rel="noopener" className="btn btn-secondary btn-sm">{t('CRM ↗')}</a>
           </div>
         </header>
 
         {/* ── titlu: ⚠ (dacă !inCRM) + nume + oraș + id + contact ── */}
         <div className="fisa__title">
-          {!inCRM && <span className="cnm__warn" title="Fără înregistrare în CRM"><Icon name="alert" size={16} /></span>}
+          {!inCRM && <span className="cnm__warn" title={t('Fără înregistrare în CRM')}><Icon name="alert" size={16} /></span>}
           <h1>{client.nume}</h1>
           {client.localitate && <span className="fisa__city">· {client.localitate}</span>}
           <span className="fisa__id mono">#{client.idLucrare}{client.judet ? ' · ' + client.judet : ''}</span>
@@ -679,9 +681,9 @@ export default function StrategiePage() {
         </div>
 
         {/* ── bară de progres (min 15%) ── */}
-        <div className="fisa__progress" title={filledCount + ' din ' + progressFields.length + ' câmpuri cheie completate'}>
+        <div className="fisa__progress" title={filledCount + ' ' + t('din') + ' ' + progressFields.length + ' ' + t('câmpuri cheie completate')}>
           <div className="fisa__progress-bar"><span style={{ width: pct + '%' }} /></div>
-          <span className="fisa__progress-lbl mono">{pct}% completată</span>
+          <span className="fisa__progress-lbl mono">{pct}{t('% completată')}</span>
         </div>
 
         {msg && <div className={'toast mb-4 ' + (msg.startsWith('✅') ? 'toast--success' : msg.startsWith('❌') ? 'toast--error' : 'toast--info')}>{msg}</div>}
@@ -698,10 +700,10 @@ export default function StrategiePage() {
         </div>
 
         {/* ── 03 · Reacții financiare ── */}
-        {renderQuoteZone('z03', '03', 'Reacții financiare', 'valoare calculată ← → ce a spus clientul')}
+        {renderQuoteZone('z03', '03', t('Reacții financiare'), t('valoare calculată ← → ce a spus clientul'))}
 
         {/* ── 04 · Cum gândește clientul ── */}
-        {renderQuoteZone('z04', '04', 'Cum gândește clientul', 'profil ← → ce a spus clientul')}
+        {renderQuoteZone('z04', '04', t('Cum gândește clientul'), t('profil ← → ce a spus clientul'))}
 
         {/* ── 05 · Diferențe & concluzii (DOAR V2) ── */}
         {renderConcl()}
@@ -712,7 +714,7 @@ export default function StrategiePage() {
         {client.observatii && (
           <div style={{ marginTop: 'var(--sp-4)' }}>
             <section className="fz card">
-              <header className="fz__head"><span className="fz__num">CRM</span><h3>Observații CRM (read-only)</h3></header>
+              <header className="fz__head"><span className="fz__num">CRM</span><h3>{t('Observații CRM (read-only)')}</h3></header>
               <div className="fz__body">
                 <pre className="mono" style={{ fontSize: '11px', lineHeight: 1.55, whiteSpace: 'pre-wrap', background: 'var(--surface-sunk)', padding: 12, borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', maxHeight: 176, overflowY: 'auto', color: 'var(--text-secondary)', margin: 0 }}>{client.observatii}</pre>
               </div>
@@ -738,9 +740,10 @@ const SRC_META: Record<SrcKind, { ic: string; t: string }> = {
   chip: { ic: 'grip', t: 'Selecție multiplă' },
 };
 function Src({ t }: { t: SrcKind }) {
+  const { t: tr } = useT();
   const s = SRC_META[t];
   if (!s) return null;
-  return <span className={'srcb srcb--' + t} title={s.t}><Icon name={s.ic} size={10} /></span>;
+  return <span className={'srcb srcb--' + t} title={tr(s.t)}><Icon name={s.ic} size={10} /></span>;
 }
 // Mapă f.source + control → tipul de badge afișat lângă etichetă.
 function srcFor(f: FisaField): SrcKind | null {
@@ -768,6 +771,7 @@ function InRow({ label, src, fam, children }: { label: string; src?: SrcKind | n
 
 // ── Buton info CLICKABIL (formula + nota din spreadsheet) — închidere la click în afară ──
 function InfoDot({ formula, note }: { formula?: string; note?: string }) {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLSpanElement | null>(null);
   useEffect(() => {
@@ -778,12 +782,12 @@ function InfoDot({ formula, note }: { formula?: string; note?: string }) {
   }, [open]);
   return (
     <span className="infodot" ref={ref}>
-      <button type="button" className={'infodot__btn' + (open ? ' is-on' : '')} onClick={e => { e.stopPropagation(); setOpen(o => !o); }} aria-label="Cum se calculează">
+      <button type="button" className={'infodot__btn' + (open ? ' is-on' : '')} onClick={e => { e.stopPropagation(); setOpen(o => !o); }} aria-label={t('Cum se calculează')}>
         <Icon name="info" size={12} />
       </button>
       {open && (
         <span className="infodot__pop" onClick={e => e.stopPropagation()}>
-          <span className="infodot__t">Din fișa AMASS (spreadsheet)</span>
+          <span className="infodot__t">{t('Din fișa AMASS (spreadsheet)')}</span>
           {formula && <code className="infodot__f">{formula}</code>}
           {note && <span className="infodot__n">{note}</span>}
         </span>
@@ -809,6 +813,7 @@ function CalcRow({ label, value, formula, note, fam }: { label: string; value: s
 function ChipSet({ options, value, onToggle, fam, defs }: {
   options: string[]; value: string[]; onToggle: (o: string) => void; fam?: FisaColorFam; defs?: Record<string, string>;
 }) {
+  const { t } = useT();
   const cls = fam ? ' chipfam--' + fam : '';
   // Valori vechi care nu mai sunt în options rămân vizibile (selectate) ca să nu se piardă.
   const extra = value.filter(v => !options.includes(v));
@@ -816,9 +821,9 @@ function ChipSet({ options, value, onToggle, fam, defs }: {
   return (
     <div className="chipset">
       {all.map(o => (
-        <button key={o} type="button" title={defs?.[o]}
+        <button key={o} type="button" title={defs?.[o] ? t(defs[o]) : undefined}
           className={'chipset__c' + cls + (value.includes(o) ? ' is-on' : '')}
-          onClick={() => onToggle(o)}>{o}</button>
+          onClick={() => onToggle(o)}>{t(o)}</button>
       ))}
     </div>
   );
@@ -828,20 +833,22 @@ function ChipSet({ options, value, onToggle, fam, defs }: {
 function Pills({ options, value, onChange, fam, defs }: {
   options: string[]; value: string; onChange: (v: string) => void; fam?: FisaColorFam; defs?: Record<string, string>;
 }) {
+  const { t } = useT();
   const cls = fam ? ' chipfam--' + fam : '';
   const all = (value && !options.includes(value)) ? [...options, value] : options;
   return (
     <div className="chipset">
       {all.map(o => (
-        <button key={o} type="button" title={defs?.[o]}
+        <button key={o} type="button" title={defs?.[o] ? t(defs[o]) : undefined}
           className={'chipset__c' + cls + (value === o ? ' is-on' : '')}
-          onClick={() => onChange(value === o ? '' : o)}>{o}</button>
+          onClick={() => onChange(value === o ? '' : o)}>{t(o)}</button>
       ))}
     </div>
   );
 }
 
 function EmailModal({ email, clientId, onClose }: { email: any; clientId?: string; onClose: () => void }) {
+  const { t } = useT();
   const [body, setBody] = useState(email.body);
   const [subject, setSubject] = useState(email.subject || '');
   const [to, setTo] = useState(email.to || '');
@@ -851,22 +858,22 @@ function EmailModal({ email, clientId, onClose }: { email: any; clientId?: strin
   const [sending, setSending] = useState(false);
   useEffect(() => { fetch('/api/outlook/status').then(r => r.json()).then(o => setOutlookOn(!!(o.ok && o.connected))).catch(() => {}); }, []);
   async function sendViaOutlook() {
-    setSending(true); setStatus('⏳ Trimit prin Outlook…');
+    setSending(true); setStatus(t('⏳ Trimit prin Outlook…'));
     const r = await fetch('/api/outlook/send', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ to, cc, subject, html: body, clientId, attachPdf: true }) });
     const j = await r.json();
     setSending(false);
-    setStatus(j.ok ? '✅ Email trimis prin Outlook (cu PDF atașat).' : '❌ ' + (j.error || 'eroare'));
+    setStatus(j.ok ? t('✅ Email trimis prin Outlook (cu PDF atașat).') : '❌ ' + (j.error || t('eroare')));
   }
   const plain = () => body.replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|h\d)>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim();
   async function copyBody() {
     try {
       const blob = new Blob([body], { type: 'text/html' });
       await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob, 'text/plain': new Blob([plain()], { type: 'text/plain' }) })]);
-      setStatus('✅ Body copiat cu format (bold păstrat la paste).');
+      setStatus(t('✅ Body copiat cu format (bold păstrat la paste).'));
     } catch {
       await navigator.clipboard.writeText(plain());
-      setStatus('✅ Body copiat (plain text).');
+      setStatus(t('✅ Body copiat (plain text).'));
     }
     setTimeout(() => setStatus(''), 3500);
   }
@@ -878,23 +885,23 @@ function EmailModal({ email, clientId, onClose }: { email: any; clientId?: strin
       : 'https://outlook.live.com/mail/0/deeplink/compose';
     const qs = new URLSearchParams({ to, cc, subject, body: plain() }).toString();
     window.open(base + '?' + qs, '_blank', 'noopener');
-    setStatus('✅ Outlook deschis cu emailul pre-completat. Verifică și apasă Trimite în Outlook.');
+    setStatus(t('✅ Outlook deschis cu emailul pre-completat. Verifică și apasă Trimite în Outlook.'));
     setTimeout(() => setStatus(''), 5000);
   }
   return (
     <div className="fixed inset-0 bg-[rgba(20,32,28,.5)] backdrop-blur-sm flex items-center justify-center z-50 p-6">
       <div className="card !shadow-[var(--shadow-lg)] max-w-4xl w-full max-h-[90vh] overflow-y-auto scroll-area p-6 rise">
         <div className="flex justify-between items-center mb-3">
-          <h2 className="text-lg">Email redactare deviz</h2>
+          <h2 className="text-lg">{t('Email redactare deviz')}</h2>
           <button onClick={onClose} className="btn btn-ghost btn-xs text-base">✕</button>
         </div>
         <div className="toast toast--info mb-3 text-[12px]">
-          Câmpurile <b>bold</b> le completezi manual. „Deschide în Outlook" pre-completează un email nou (firmă sau personal).
+          {t('Câmpurile')} <b>{t('bold')}</b> {t('le completezi manual. „Deschide în Outlook" pre-completează un email nou (firmă sau personal).')}
         </div>
         <div className="grid grid-cols-[64px_1fr] gap-2 mb-3 text-[12.5px] items-center">
-          <label className="kpi-label">Subject</label><input className="field" value={subject} onChange={e => setSubject(e.target.value)} />
-          <label className="kpi-label">To</label><input className="field" value={to} onChange={e => setTo(e.target.value)} />
-          <label className="kpi-label">Cc</label><input className="field" value={cc} onChange={e => setCc(e.target.value)} />
+          <label className="kpi-label">{t('Subject')}</label><input className="field" value={subject} onChange={e => setSubject(e.target.value)} />
+          <label className="kpi-label">{t('To')}</label><input className="field" value={to} onChange={e => setTo(e.target.value)} />
+          <label className="kpi-label">{t('Cc')}</label><input className="field" value={cc} onChange={e => setCc(e.target.value)} />
         </div>
         <div contentEditable className="field min-h-[360px] !text-[13px] leading-relaxed overflow-y-auto scroll-area"
              style={{ whiteSpace: 'pre-wrap' }}
@@ -903,11 +910,11 @@ function EmailModal({ email, clientId, onClose }: { email: any; clientId?: strin
         <div className="flex justify-between items-center mt-3 flex-wrap gap-2">
           <span className="text-[12px] text-[var(--ok)] font-medium">{status}</span>
           <div className="flex gap-2 flex-wrap">
-            {outlookOn && <button onClick={sendViaOutlook} disabled={sending} className="btn btn-primary">{sending ? '…' : '✈ Trimite prin Outlook (+PDF)'}</button>}
-            <button onClick={() => openOutlook('office')} className="btn btn-pine">↗ Outlook firmă</button>
-            <button onClick={() => openOutlook('live')} className="btn btn-secondary">↗ Outlook personal</button>
-            <button onClick={copyBody} className="btn btn-secondary">Copiază body</button>
-            <button onClick={onClose} className="btn btn-secondary">Închide</button>
+            {outlookOn && <button onClick={sendViaOutlook} disabled={sending} className="btn btn-primary">{sending ? '…' : t('✈ Trimite prin Outlook (+PDF)')}</button>}
+            <button onClick={() => openOutlook('office')} className="btn btn-pine">{t('↗ Outlook firmă')}</button>
+            <button onClick={() => openOutlook('live')} className="btn btn-secondary">{t('↗ Outlook personal')}</button>
+            <button onClick={copyBody} className="btn btn-secondary">{t('Copiază body')}</button>
+            <button onClick={onClose} className="btn btn-secondary">{t('Închide')}</button>
           </div>
         </div>
       </div>
@@ -919,45 +926,46 @@ function EmailModal({ email, clientId, onClose }: { email: any; clientId?: strin
 function InfoCrmModal({ client, text, setText, onClose, onDone }: {
   client: Client; text: string; setText: (s: string) => void; onClose: () => void; onDone: (msg: string) => void;
 }) {
+  const { t } = useT();
   const [status, setStatus] = useState('');
   const [pushing, setPushing] = useState(false);
   async function pushNow() {
-    setPushing(true); setStatus('⏳ Push în CRM…');
+    setPushing(true); setStatus(t('⏳ Push în CRM…'));
     try {
       const r = await fetch('/api/crm/push-info', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idLucrare: client.idLucrare, observatii: text })
       });
       const j = await r.json();
-      if (j.ok) { setStatus('✅ Împins în CRM (' + (j.action || 'ok') + ').'); onDone('✅ Info împins în CRM'); }
-      else { setStatus('❌ ' + (j.error || 'eroare')); }
+      if (j.ok) { setStatus(t('✅ Împins în CRM (') + (j.action || 'ok') + ').'); onDone(t('✅ Info împins în CRM')); }
+      else { setStatus('❌ ' + (j.error || t('eroare'))); }
     } catch (e: any) { setStatus('❌ ' + e.message); }
     setPushing(false);
   }
   async function copyText() {
-    try { await navigator.clipboard.writeText(text); setStatus('✅ Text copiat.'); }
-    catch { setStatus('❌ Nu am putut copia.'); }
+    try { await navigator.clipboard.writeText(text); setStatus(t('✅ Text copiat.')); }
+    catch { setStatus(t('❌ Nu am putut copia.')); }
     setTimeout(() => setStatus(''), 3000);
   }
   return (
     <div className="fixed inset-0 bg-[rgba(20,32,28,.5)] backdrop-blur-sm flex items-center justify-center z-50 p-6">
       <div className="card !shadow-[var(--shadow-lg)] max-w-3xl w-full max-h-[90vh] overflow-y-auto scroll-area p-6 rise">
         <div className="flex justify-between items-center mb-2">
-          <h2 className="text-lg">📋 Info CRM — {client.nume}</h2>
+          <h2 className="text-lg">{t('📋 Info CRM —')} {client.nume}</h2>
           <button onClick={onClose} className="btn btn-ghost btn-xs text-base">✕</button>
         </div>
         <p className="text-[11px] text-[var(--fg-faint)] mb-2 font-mono">id_lucrare = {client.idLucrare}</p>
         <div className="toast toast--info mb-3 text-[12px]">
-          Push automat în Observații CRM (marker <b>══ STRATEGIE FISA ══</b> — observațiile manuale ale agentului rămân intacte). Poți edita textul înainte de push.
+          {t('Push automat în Observații CRM (marker')} <b>══ STRATEGIE FISA ══</b> {t('— observațiile manuale ale agentului rămân intacte). Poți edita textul înainte de push.')}
         </div>
         <textarea className="field w-full font-mono text-[11px] leading-relaxed min-h-[340px]" value={text} onChange={e => setText(e.target.value)} />
         <div className="flex justify-between items-center mt-3 flex-wrap gap-2">
           <span className={'text-[12px] font-medium ' + (status.startsWith('✅') ? 'text-[var(--ok)]' : status.startsWith('❌') ? 'text-[var(--danger)]' : 'text-[var(--fg-soft)]')}>{status}</span>
           <div className="flex gap-2 flex-wrap">
-            <a href={`https://gestcom.ro/amass/index.php?m=lucrari&a=view&id_lucrare=${client.idLucrare}`} target="_blank" rel="noopener" className="btn btn-secondary">↗ Deschide CRM</a>
-            <button onClick={copyText} className="btn btn-secondary">📋 Copy text</button>
-            <button onClick={pushNow} disabled={pushing} className="btn text-white" style={{ background: '#1e7a3c' }}>{pushing ? '…' : '↗ Push în CRM'}</button>
-            <button onClick={onClose} className="btn btn-secondary">Închide</button>
+            <a href={`https://gestcom.ro/amass/index.php?m=lucrari&a=view&id_lucrare=${client.idLucrare}`} target="_blank" rel="noopener" className="btn btn-secondary">{t('↗ Deschide CRM')}</a>
+            <button onClick={copyText} className="btn btn-secondary">{t('📋 Copy text')}</button>
+            <button onClick={pushNow} disabled={pushing} className="btn text-white" style={{ background: '#1e7a3c' }}>{pushing ? '…' : t('↗ Push în CRM')}</button>
+            <button onClick={onClose} className="btn btn-secondary">{t('Închide')}</button>
           </div>
         </div>
       </div>
@@ -985,6 +993,7 @@ function suggestReminder(stadiu: string | null): { titlu: string; info: string }
 }
 
 function ReminderModal({ client, onClose, onDone }: { client: Client; onClose: () => void; onDone: (msg: string) => void }) {
+  const { t } = useT();
   const today = new Date().toISOString().slice(0, 10);
   const [data, setData] = useState(today);
   const [ora, setOra] = useState('10:00');
@@ -1017,7 +1026,7 @@ function ReminderModal({ client, onClose, onDone }: { client: Client; onClose: (
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (needsSubtip && (!subtip || subtip === '0')) { onDone('❌ Pentru ÎNTÂLNIRE/DELEGAȚIE alege subtipul'); return; }
+    if (needsSubtip && (!subtip || subtip === '0')) { onDone(t('❌ Pentru ÎNTÂLNIRE/DELEGAȚIE alege subtipul')); return; }
     setLoading(true);
     const r = await fetch('/api/crm/reminder', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1029,7 +1038,7 @@ function ReminderModal({ client, onClose, onDone }: { client: Client; onClose: (
       const suf = (markOthersDone && typeof j.markedDone === 'number' && j.markedDone > 0)
         ? ` (+ ${j.markedDone} reminder${j.markedDone === 1 ? '' : 'e'} deschis${j.markedDone === 1 ? '' : 'e'} marcat${j.markedDone === 1 ? '' : 'e'} ca efectuat${j.markedDone === 1 ? '' : 'e'})`
         : '';
-      onDone('✅ Reminder salvat în CRM' + suf);
+      onDone(t('✅ Reminder salvat în CRM') + suf);
     } else {
       onDone('❌ ' + j.error);
     }
@@ -1039,74 +1048,74 @@ function ReminderModal({ client, onClose, onDone }: { client: Client; onClose: (
     <div className="fixed inset-0 bg-[rgba(20,32,28,.5)] backdrop-blur-sm flex items-center justify-center z-50 p-6">
       <div className="card !shadow-[var(--shadow-lg)] max-w-4xl w-full max-h-[90vh] overflow-y-auto scroll-area p-6 rise">
         <div className="flex justify-between items-center mb-1">
-          <h2 className="text-lg">⏰ Reminder — {client.nume}</h2>
+          <h2 className="text-lg">{t('⏰ Reminder —')} {client.nume}</h2>
           <button onClick={onClose} className="btn btn-ghost btn-xs text-base">✕</button>
         </div>
-        <p className="text-[11px] text-[var(--fg-faint)] mb-4 font-mono">id_lucrare = {client.idLucrare} · merge live în CRM gestcom</p>
+        <p className="text-[11px] text-[var(--fg-faint)] mb-4 font-mono">id_lucrare = {client.idLucrare} {t('· merge live în CRM gestcom')}</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {/* STÂNGA: reminder nou */}
           <form onSubmit={submit}>
-            <div className="panel-head"><span className="dot" />Reminder nou</div>
+            <div className="panel-head"><span className="dot" />{t('Reminder nou')}</div>
             <div className="grid grid-cols-[92px_1fr] gap-2.5 text-[12.5px] items-center">
-              <label className="text-[var(--fg-soft)]">Contact</label>
+              <label className="text-[var(--fg-soft)]">{t('Contact')}</label>
               <select className="field" value={idContact} onChange={e => setIdContact(e.target.value)}>
-                {loadingContacte && <option value="">se încarcă…</option>}
-                {!loadingContacte && contacte.length === 0 && <option value="">(fără contacte)</option>}
+                {loadingContacte && <option value="">{t('se încarcă…')}</option>}
+                {!loadingContacte && contacte.length === 0 && <option value="">{t('(fără contacte)')}</option>}
                 {contacte.map(c => <option key={c.idContact} value={c.idContact}>{c.nume}{c.telefon ? ' · ' + c.telefon : ''}{c.rol ? ' · ' + c.rol : ''}</option>)}
               </select>
-              <label className="text-[var(--fg-soft)]">Tip</label>
+              <label className="text-[var(--fg-soft)]">{t('Tip')}</label>
               <select className="field" value={tip} onChange={e => setTip(e.target.value)}>
-                {TIP_OPTIONS.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+                {TIP_OPTIONS.map(o => <option key={o.v} value={o.v}>{t(o.l)}</option>)}
               </select>
               {needsSubtip && (<>
-                <label className="text-[var(--fg-soft)]">Subtip</label>
+                <label className="text-[var(--fg-soft)]">{t('Subtip')}</label>
                 <select className="field" value={subtip} onChange={e => setSubtip(e.target.value)} required>
-                  <option value="0">— alege —</option>
-                  <option value="1">Prima întâlnire</option>
-                  <option value="2">Revenire</option>
-                  <option value="3">Semnare contract</option>
-                  <option value="4">Tehnic / măsurători</option>
+                  <option value="0">{t('— alege —')}</option>
+                  <option value="1">{t('Prima întâlnire')}</option>
+                  <option value="2">{t('Revenire')}</option>
+                  <option value="3">{t('Semnare contract')}</option>
+                  <option value="4">{t('Tehnic / măsurători')}</option>
                 </select>
               </>)}
-              <label className="text-[var(--fg-soft)]">Data</label><input type="date" className="field" value={data} onChange={e => setData(e.target.value)} required />
-              <label className="text-[var(--fg-soft)]">Ora</label><input type="time" className="field" value={ora} onChange={e => setOra(e.target.value)} />
-              <label className="text-[var(--fg-soft)]">Durată (min)</label><input type="number" className="field" value={durata} onChange={e => setDurata(e.target.value)} />
-              <label className="text-[var(--fg-soft)]">Notificare</label>
+              <label className="text-[var(--fg-soft)]">{t('Data')}</label><input type="date" className="field" value={data} onChange={e => setData(e.target.value)} required />
+              <label className="text-[var(--fg-soft)]">{t('Ora')}</label><input type="time" className="field" value={ora} onChange={e => setOra(e.target.value)} />
+              <label className="text-[var(--fg-soft)]">{t('Durată (min)')}</label><input type="number" className="field" value={durata} onChange={e => setDurata(e.target.value)} />
+              <label className="text-[var(--fg-soft)]">{t('Notificare')}</label>
               <select className="field" value={notificare} onChange={e => setNotificare(e.target.value)}>
-                <option value="0">fără</option>
-                <option value="1">la timp</option>
-                <option value="2">cu 1 oră înainte</option>
-                <option value="3">cu 1 zi înainte</option>
+                <option value="0">{t('fără')}</option>
+                <option value="1">{t('la timp')}</option>
+                <option value="2">{t('cu 1 oră înainte')}</option>
+                <option value="3">{t('cu 1 zi înainte')}</option>
               </select>
-              <label className="text-[var(--fg-soft)] self-start pt-1.5">Info</label><textarea className="field min-h-[100px]" value={info} onChange={e => setInfo(e.target.value)} placeholder="Detalii reminder (obligatoriu)…" required />
+              <label className="text-[var(--fg-soft)] self-start pt-1.5">{t('Info')}</label><textarea className="field min-h-[100px]" value={info} onChange={e => setInfo(e.target.value)} placeholder={t('Detalii reminder (obligatoriu)…')} required />
             </div>
             <div className="toast toast--info mt-3 text-[12px]">
               <div className="flex items-center justify-between gap-2 mb-1">
-                <b>💡 Propunere: {suggestion.titlu}</b>
-                <button type="button" onClick={() => setInfo(suggestion.info)} className="btn btn-secondary btn-xs">Populează info</button>
+                <b>{t('💡 Propunere:')} {t(suggestion.titlu)}</b>
+                <button type="button" onClick={() => setInfo(suggestion.info)} className="btn btn-secondary btn-xs">{t('Populează info')}</button>
               </div>
               <pre className="whitespace-pre-wrap font-mono text-[11px] text-[var(--fg-soft)] m-0">{suggestion.info}</pre>
             </div>
             <label className="flex items-start gap-2 mt-3 text-[12px] text-[var(--fg-soft)] cursor-pointer select-none">
               <input type="checkbox" className="mt-0.5" checked={markOthersDone} onChange={e => setMarkOthersDone(e.target.checked)} />
-              <span>La salvare: marchează <b>TOATE</b> reminderele deschise ca efectuate <span className="text-[var(--fg-faint)]">(paritate spreadsheet)</span></span>
+              <span>{t('La salvare: marchează')} <b>{t('TOATE')}</b> {t('reminderele deschise ca efectuate')} <span className="text-[var(--fg-faint)]">{t('(paritate spreadsheet)')}</span></span>
             </label>
             <div className="flex justify-end gap-2 mt-4">
-              <button type="button" onClick={onClose} className="btn btn-secondary">Anulează</button>
-              <button type="submit" disabled={loading} className="btn btn-primary">{loading ? '…' : 'Salvează în CRM'}</button>
+              <button type="button" onClick={onClose} className="btn btn-secondary">{t('Anulează')}</button>
+              <button type="submit" disabled={loading} className="btn btn-primary">{loading ? '…' : t('Salvează în CRM')}</button>
             </div>
           </form>
           {/* DREAPTA: remindere existente */}
           <div>
-            <div className="panel-head"><span className="dot" />Remindere existente</div>
+            <div className="panel-head"><span className="dot" />{t('Remindere existente')}</div>
             <div className="space-y-2 max-h-[480px] overflow-y-auto scroll-area pr-1">
-              {existing === null && <div className="text-[12px] text-[var(--fg-faint)]">se încarcă…</div>}
-              {existing !== null && existing.length === 0 && <div className="text-[12px] text-[var(--fg-faint)]">(niciun reminder în CRM)</div>}
+              {existing === null && <div className="text-[12px] text-[var(--fg-faint)]">{t('se încarcă…')}</div>}
+              {existing !== null && existing.length === 0 && <div className="text-[12px] text-[var(--fg-faint)]">{t('(niciun reminder în CRM)')}</div>}
               {existing?.map((rem, i) => (
                 <div key={i} className="border border-[var(--line)] rounded-[var(--radius-sm)] p-2.5 bg-[var(--paper)]">
                   <div className="flex items-center justify-between gap-2 mb-0.5">
                     <span className="text-[12px] font-semibold tabular">{rem.data}{rem.ora ? ' · ' + rem.ora : ''}</span>
-                    <span className={'pill text-[10px] ' + (rem.status === 'executat' ? 'pill-contractat' : 'pill-lucru')}>{rem.status === 'executat' ? '✓ executat' : '○ deschis'}</span>
+                    <span className={'pill text-[10px] ' + (rem.status === 'executat' ? 'pill-contractat' : 'pill-lucru')}>{rem.status === 'executat' ? t('✓ executat') : t('○ deschis')}</span>
                   </div>
                   {rem.tip && <div className="text-[10px] text-[var(--fg-faint)] uppercase tracking-wide">{rem.tip}</div>}
                   {rem.info && <div className="text-[11.5px] text-[var(--fg-soft)] mt-0.5 whitespace-pre-wrap">{rem.info}</div>}

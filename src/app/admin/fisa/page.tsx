@@ -4,6 +4,7 @@ import { Layout } from '@/components/Layout';
 import { asMulti, type FisaControl, type FisaField, type FisaZone, type FisaTemplateData } from '@/lib/fisa-template';
 import { calculate } from '@/lib/strategie-calc';
 import { SEED_V1, SEED_V2 } from '@/lib/fisa-template-seed';
+import { useT } from '@/lib/i18n';
 
 // ── Editor de admin pentru FORMATUL fișei (template V1/V2), cu PREVIZUALIZARE LIVE (WYSIWYG) ──
 // STÂNGA: controalele de editare (etichetă, tip câmp, opțiuni, ordine, șterge).
@@ -88,6 +89,7 @@ interface DeleteState {
 }
 
 export default function AdminFisaPage() {
+  const { t } = useT();
   const [forbidden, setForbidden] = useState(false);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Variant>('V1');
@@ -131,7 +133,7 @@ export default function AdminFisaPage() {
     setZones(zs => [...zs, { id: newZoneId(), titlu: 'Zonă nouă', fields: [] }]);
   }
   function removeZone(zi: number) {
-    if (!window.confirm('Ștergi zona și toate câmpurile ei din format?')) return;
+    if (!window.confirm(t('Ștergi zona și toate câmpurile ei din format?'))) return;
     setZones(zs => zs.filter((_, i) => i !== zi));
   }
   function moveZone(zi: number, dir: -1 | 1) {
@@ -201,20 +203,20 @@ export default function AdminFisaPage() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ variant: cur.variant, key: f.key, action: 'count' }),
       });
-      if (r.status === 403) { setMsg('❌ Doar admin poate șterge câmpuri.'); return; }
+      if (r.status === 403) { setMsg('❌ ' + t('Doar admin poate șterge câmpuri.')); return; }
       const j = await r.json().catch(() => ({ ok: false }));
       const count = j.ok ? (j.count as number) : 0;
       if (!count || count <= 0) {
         // Fără date completate la niciun client → scoatere directă + persistă (curățarea nu e necesară).
         removeFieldLocal(zi, fi);
         await persistRemoval(cur.variant, f.key);
-        setMsg('✅ Câmp „' + f.label.replace(/:\s*$/, '') + '" șters (nu avea date completate).');
+        setMsg('✅ ' + t('Câmp „') + f.label.replace(/:\s*$/, '') + t('" șters (nu avea date completate).'));
         return;
       }
       // Are date → modal cu opțiuni.
       setDel({ zi, fi, field: f, count, obsKey: findObsKeyInZone(zone, f.key), busy: false });
     } catch {
-      setMsg('❌ Eroare la verificarea datelor câmpului.');
+      setMsg('❌ ' + t('Eroare la verificarea datelor câmpului.'));
     }
   }
 
@@ -249,19 +251,19 @@ export default function AdminFisaPage() {
           label: f.label,
         }),
       });
-      if (r.status === 403) { setMsg('❌ Doar admin poate șterge câmpuri.'); setDel(null); return; }
-      const j = await r.json().catch(() => ({ ok: false, error: 'Răspuns invalid' }));
-      if (!j.ok) { setMsg('❌ ' + (j.error || 'Eroare la ștergere')); setDel(d => d ? { ...d, busy: false } : d); return; }
+      if (r.status === 403) { setMsg('❌ ' + t('Doar admin poate șterge câmpuri.')); setDel(null); return; }
+      const j = await r.json().catch(() => ({ ok: false, error: t('Răspuns invalid') }));
+      if (!j.ok) { setMsg('❌ ' + (j.error || t('Eroare la ștergere'))); setDel(d => d ? { ...d, busy: false } : d); return; }
       // Date curățate → scoate câmpul din template + persistă.
       removeFieldLocal(del.zi, del.fi);
       await persistRemoval(cur.variant, f.key);
       const lbl = f.label.replace(/:\s*$/, '');
       setMsg(action === 'delete-hard'
-        ? '✅ Câmp „' + lbl + '" șters definitiv (' + j.affected + ' lucrări curățate, inclusiv arhiva).'
-        : '✅ Câmp „' + lbl + '" șters; datele a ' + j.affected + ' lucrări salvate în Observații.');
+        ? '✅ ' + t('Câmp „') + lbl + t('" șters definitiv (') + j.affected + t(' lucrări curățate, inclusiv arhiva).')
+        : '✅ ' + t('Câmp „') + lbl + t('" șters; datele a ') + j.affected + t(' lucrări salvate în Observații.'));
       setDel(null);
     } catch {
-      setMsg('❌ Eroare la ștergere.');
+      setMsg('❌ ' + t('Eroare la ștergere.'));
       setDel(d => d ? { ...d, busy: false } : d);
     }
   }
@@ -274,10 +276,10 @@ export default function AdminFisaPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ variant: cur.variant, titlu: cur.titlu, zones: cur.zones }),
     });
-    if (r.status === 403) { setMsg('❌ Doar admin poate salva formatul fișei.'); setSaving(false); return; }
-    const j = await r.json().catch(() => ({ ok: false, error: 'Răspuns invalid' }));
+    if (r.status === 403) { setMsg('❌ ' + t('Doar admin poate salva formatul fișei.')); setSaving(false); return; }
+    const j = await r.json().catch(() => ({ ok: false, error: t('Răspuns invalid') }));
     if (j.ok) setNewKeys(new Set());
-    setMsg(j.ok ? '✅ Format ' + cur.variant + ' salvat.' : '❌ ' + (j.error || 'Eroare la salvare'));
+    setMsg(j.ok ? '✅ ' + t('Format ') + cur.variant + t(' salvat.') : '❌ ' + (j.error || t('Eroare la salvare')));
     setSaving(false);
   }
 
@@ -287,9 +289,9 @@ export default function AdminFisaPage() {
   async function resetToSeed() {
     if (!cur) return;
     if (!window.confirm(
-      'Resetezi formatul ' + cur.variant + ' la structura IMPLICITĂ?\n\n' +
-      'Câmpurile pe care le-ai adăugat manual și nu există în structura standard vor fi SCOASE din fișă ' +
-      '(datele lor rămân în baza de date, dar câmpul nu va mai fi afișat). Acțiunea suprascrie aranjarea curentă.'
+      t('Resetezi formatul ') + cur.variant + t(' la structura IMPLICITĂ?\n\n') +
+      t('Câmpurile pe care le-ai adăugat manual și nu există în structura standard vor fi SCOASE din fișă ') +
+      t('(datele lor rămân în baza de date, dar câmpul nu va mai fi afișat). Acțiunea suprascrie aranjarea curentă.')
     )) return;
     const seed = SEEDS[cur.variant];
     const curKeys = new Set<string>();
@@ -303,15 +305,15 @@ export default function AdminFisaPage() {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ variant: seed.variant, titlu: seed.titlu, zones: seed.zones, allowRemoveKeys }),
     });
-    if (r.status === 403) { setMsg('❌ Doar admin poate reseta formatul.'); setSaving(false); return; }
-    const j = await r.json().catch(() => ({ ok: false, error: 'Răspuns invalid' }));
+    if (r.status === 403) { setMsg('❌ ' + t('Doar admin poate reseta formatul.')); setSaving(false); return; }
+    const j = await r.json().catch(() => ({ ok: false, error: t('Răspuns invalid') }));
     if (j.ok) {
       // Reflectă seed-ul în UI (copie nouă imutabilă).
       setTpl(prev => ({ ...prev, [cur.variant]: JSON.parse(JSON.stringify(seed)) }));
       setNewKeys(new Set());
-      setMsg('✅ Format ' + cur.variant + ' resetat la structura implicită.');
+      setMsg('✅ ' + t('Format ') + cur.variant + t(' resetat la structura implicită.'));
     } else {
-      setMsg('❌ ' + (j.error || 'Eroare la resetare'));
+      setMsg('❌ ' + (j.error || t('Eroare la resetare')));
     }
     setSaving(false);
   }
@@ -320,8 +322,8 @@ export default function AdminFisaPage() {
     return (
       <Layout>
         <div className="card p-10 text-center text-[var(--fg-soft)]">
-          <div className="text-[18px] font-semibold text-[var(--text)] mb-1">Acces restricționat</div>
-          Doar administratorul poate edita formatul fișei.
+          <div className="text-[18px] font-semibold text-[var(--text)] mb-1">{t('Acces restricționat')}</div>
+          {t('Doar administratorul poate edita formatul fișei.')}
         </div>
       </Layout>
     );
@@ -329,45 +331,44 @@ export default function AdminFisaPage() {
 
   return (
     <Layout>
-      <h1 className="text-[26px] mb-1 rise">Format fișă</h1>
+      <h1 className="text-[26px] mb-1 rise">{t('Format fișă')}</h1>
       <p className="text-[var(--fg-soft)] text-[13px] mb-5 rise">
-        Editezi <b>structura fișei de strategie</b> (etichete, tipuri de câmp, opțiuni, ordine). Modificările se aplică <b>tuturor agenților</b>.
-        În dreapta vezi <b>previzualizarea live</b> a fișei, exact cum o văd agenții. Cheia de stocare a fiecărui câmp e fixă,
-        iar câmpurile <b>calculate</b> au formulă fixă și nu se editează.
+        {t('Editezi ')}<b>{t('structura fișei de strategie')}</b>{t(' (etichete, tipuri de câmp, opțiuni, ordine). Modificările se aplică ')}<b>{t('tuturor agenților')}</b>{t('.')}
+        {t(' În dreapta vezi ')}<b>{t('previzualizarea live')}</b>{t(' a fișei, exact cum o văd agenții. Cheia de stocare a fiecărui câmp e fixă, iar câmpurile ')}<b>{t('calculate')}</b>{t(' au formulă fixă și nu se editează.')}
       </p>
 
       {/* Taburi variante + acțiuni globale sus */}
       <div className="flex items-center gap-2 mb-4 rise flex-wrap">
-        <span className="kpi-label">Variantă:</span>
+        <span className="kpi-label">{t('Variantă:')}</span>
         <div className="inline-flex rounded-[var(--r-sm)] border border-[var(--border)] overflow-hidden">
           {(['V1', 'V2'] as Variant[]).map((v, idx) => (
             <button key={v} type="button" onClick={() => { setTab(v); setMsg(''); setDel(null); }}
               className={'px-3 py-1 text-[12px] font-semibold transition-colors ' + (idx > 0 ? 'border-l border-[var(--border)] ' : '')
                 + (tab === v ? 'bg-[var(--accent)] text-white' : 'text-[var(--fg-soft)] hover:text-[var(--text)]')}>
-              {v === 'V1' ? 'V1 (construcție)' : 'V2 (casă locuită)'}
+              {v === 'V1' ? t('V1 (construcție)') : t('V2 (casă locuită)')}
             </button>
           ))}
         </div>
         <div className="flex-1" />
         <button type="button" onClick={resetToSeed} disabled={saving || loading || !cur}
-          className="btn btn-secondary !text-[12px] disabled:opacity-50" title="Suprascrie formatul curent cu structura standard">
-          ↺ Resetează la structura implicită
+          className="btn btn-secondary !text-[12px] disabled:opacity-50" title={t('Suprascrie formatul curent cu structura standard')}>
+          {t('↺ Resetează la structura implicită')}
         </button>
         <button type="button" onClick={save} disabled={saving || loading || !cur} className="btn btn-primary disabled:opacity-60">
-          {saving ? 'Se salvează…' : 'Salvează ' + tab}
+          {saving ? t('Se salvează…') : t('Salvează ') + tab}
         </button>
       </div>
 
       {msg && <div className={'toast mb-3 ' + (msg.startsWith('✅') ? 'toast-ok' : 'toast-err')}>{msg}</div>}
 
       {loading || !cur ? (
-        <div className="card p-10 text-center text-[var(--fg-soft)]">Se încarcă formatul…</div>
+        <div className="card p-10 text-center text-[var(--fg-soft)]">{t('Se încarcă formatul…')}</div>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
           {/* ── STÂNGA: editor ── */}
           <div>
             <div className="card p-5 rise rise-1 mb-4">
-              <label className="kpi-label block mb-1">Titlu fișă ({cur.variant})</label>
+              <label className="kpi-label block mb-1">{t('Titlu fișă (')}{cur.variant}{t(')')}</label>
               <input className="field" value={cur.titlu} onChange={e => update(t => ({ ...t, titlu: e.target.value }))} />
             </div>
 
@@ -376,13 +377,13 @@ export default function AdminFisaPage() {
                 <div key={z.id || zi} className="card p-5 rise rise-2">
                   <div className="flex items-center gap-2 mb-3">
                     <input className="field !text-[15px] font-semibold flex-1" value={z.titlu}
-                      onChange={e => setZoneTitle(zi, e.target.value)} placeholder="Titlu zonă" />
+                      onChange={e => setZoneTitle(zi, e.target.value)} placeholder={t('Titlu zonă')} />
                     <button type="button" onClick={() => moveZone(zi, -1)} disabled={zi === 0}
-                      className="btn btn-secondary !py-1 !px-2 !text-[12px] disabled:opacity-40" title="Mută zona sus">↑</button>
+                      className="btn btn-secondary !py-1 !px-2 !text-[12px] disabled:opacity-40" title={t('Mută zona sus')}>↑</button>
                     <button type="button" onClick={() => moveZone(zi, 1)} disabled={zi === cur.zones.length - 1}
-                      className="btn btn-secondary !py-1 !px-2 !text-[12px] disabled:opacity-40" title="Mută zona jos">↓</button>
+                      className="btn btn-secondary !py-1 !px-2 !text-[12px] disabled:opacity-40" title={t('Mută zona jos')}>↓</button>
                     <button type="button" onClick={() => removeZone(zi)}
-                      className="btn btn-secondary !py-1 !px-2 !text-[11px] whitespace-nowrap">Șterge zona</button>
+                      className="btn btn-secondary !py-1 !px-2 !text-[11px] whitespace-nowrap">{t('Șterge zona')}</button>
                   </div>
 
                   <div className="space-y-3">
@@ -394,36 +395,36 @@ export default function AdminFisaPage() {
                         <div key={(z.id || zi) + '-' + fi} className="border border-[var(--border)] rounded-[var(--r-sm)] p-3 bg-[var(--surface-2)]">
                           <div className="flex items-start gap-3 flex-wrap">
                             <div className="flex-1 min-w-[180px]">
-                              <label className="kpi-label block mb-1">Etichetă</label>
+                              <label className="kpi-label block mb-1">{t('Etichetă')}</label>
                               <input className="field" value={f.label} onChange={e => setField(zi, fi, { label: e.target.value })} />
                             </div>
                             <div className="min-w-[140px]">
-                              <label className="kpi-label block mb-1">Tip câmp</label>
+                              <label className="kpi-label block mb-1">{t('Tip câmp')}</label>
                               <select className="field" value={f.control} disabled={isCalc}
                                 onChange={e => setField(zi, fi, { control: e.target.value as FisaControl })}>
-                                {CONTROLS.map(c => <option key={c.value} value={c.value} disabled={c.value === 'calc'}>{c.label}</option>)}
+                                {CONTROLS.map(c => <option key={c.value} value={c.value} disabled={c.value === 'calc'}>{t(c.label)}</option>)}
                               </select>
                             </div>
                             <div className="min-w-[140px]">
-                              <label className="kpi-label block mb-1">Sursă</label>
+                              <label className="kpi-label block mb-1">{t('Sursă')}</label>
                               <select className="field" value={f.source ?? 'manual'} disabled={isCalc}
                                 onChange={e => setField(zi, fi, { source: e.target.value as FisaField['source'] })}>
-                                {SOURCES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                                {SOURCES.map(s => <option key={s.value} value={s.value}>{t(s.label)}</option>)}
                               </select>
                             </div>
                             <div className="flex items-end gap-1 pb-0.5 self-stretch">
                               <button type="button" onClick={() => moveField(zi, fi, -1)} disabled={fi === 0}
-                                className="btn btn-secondary !py-1 !px-2 !text-[12px] disabled:opacity-40" title="Sus">↑</button>
+                                className="btn btn-secondary !py-1 !px-2 !text-[12px] disabled:opacity-40" title={t('Sus')}>↑</button>
                               <button type="button" onClick={() => moveField(zi, fi, 1)} disabled={fi === z.fields.length - 1}
-                                className="btn btn-secondary !py-1 !px-2 !text-[12px] disabled:opacity-40" title="Jos">↓</button>
+                                className="btn btn-secondary !py-1 !px-2 !text-[12px] disabled:opacity-40" title={t('Jos')}>↓</button>
                               <button type="button" onClick={() => onRemoveField(zi, fi)}
-                                className="btn btn-secondary !py-1 !px-2 !text-[11px]" title="Șterge câmpul">✕</button>
+                                className="btn btn-secondary !py-1 !px-2 !text-[11px]" title={t('Șterge câmpul')}>✕</button>
                             </div>
                           </div>
 
                           {hasOptions && (
                             <div className="mt-2">
-                              <label className="kpi-label block mb-1">Opțiuni (una pe linie)</label>
+                              <label className="kpi-label block mb-1">{t('Opțiuni (una pe linie)')}</label>
                               <textarea className="field !h-auto" rows={Math.max(3, (f.options?.length ?? 0))}
                                 value={(f.options ?? []).join('\n')}
                                 onChange={e => setField(zi, fi, { options: e.target.value.split('\n').map(s => s.trim()).filter(Boolean) })} />
@@ -433,21 +434,21 @@ export default function AdminFisaPage() {
                           <div className="mt-2 flex items-center gap-4 flex-wrap text-[11px]">
                             <label className="flex items-center gap-1.5 cursor-pointer text-[var(--fg-soft)]">
                               <input type="checkbox" checked={!!f.full} onChange={e => setField(zi, fi, { full: e.target.checked })} />
-                              Ocupă tot rândul
+                              {t('Ocupă tot rândul')}
                             </label>
                             <span className="flex items-center gap-1.5 text-[var(--fg-faint)]">
-                              <span>Cheie:</span>
+                              <span>{t('Cheie:')}</span>
                               {isNewField ? (
                                 <>
                                   <input
                                     className="field !py-0.5 !px-1.5 !h-auto font-mono !text-[10px] !w-[160px]"
                                     value={f.key}
-                                    placeholder="se generează din etichetă"
-                                    title="Cheia de stocare a câmpului nou. După prima salvare nu se mai poate schimba (ar orfaniza datele)."
+                                    placeholder={t('se generează din etichetă')}
+                                    title={t('Cheia de stocare a câmpului nou. După prima salvare nu se mai poate schimba (ar orfaniza datele).')}
                                     onChange={e => setFieldKey(zi, fi, f.key, e.target.value)}
                                     onBlur={() => ensureFieldKey(zi, fi, f.key, f.label)}
                                   />
-                                  <span className="text-[var(--fg-faint)]">editabilă doar până la prima salvare</span>
+                                  <span className="text-[var(--fg-faint)]">{t('editabilă doar până la prima salvare')}</span>
                                 </>
                               ) : (
                                 <>
@@ -455,14 +456,14 @@ export default function AdminFisaPage() {
                                     className="field !py-0.5 !px-1.5 !h-auto font-mono !text-[10px] !w-[160px] disabled:opacity-100 disabled:cursor-not-allowed"
                                     value={f.key}
                                     disabled
-                                    title="Cheia nu se poate schimba după creare (ar orfaniza datele)"
+                                    title={t('Cheia nu se poate schimba după creare (ar orfaniza datele)')}
                                   />
-                                  <span title="Cheia nu se poate schimba după creare (ar orfaniza datele)">cheie de stocare — nu se schimbă</span>
+                                  <span title={t('Cheia nu se poate schimba după creare (ar orfaniza datele)')}>{t('cheie de stocare — nu se schimbă')}</span>
                                 </>
                               )}
                             </span>
                             {isCalc && (
-                              <span className="pill pill-lucru text-[10px]">formulă fixă{f.calcKey ? ' · ' + f.calcKey : ''} (read-only)</span>
+                              <span className="pill pill-lucru text-[10px]">{t('formulă fixă')}{f.calcKey ? ' · ' + f.calcKey : ''}{t(' (read-only)')}</span>
                             )}
                           </div>
                         </div>
@@ -470,13 +471,13 @@ export default function AdminFisaPage() {
                     })}
 
                     <button type="button" onClick={() => addField(zi)} className="btn btn-secondary !py-1.5 !text-[12px]">
-                      + Adaugă câmp
+                      {t('+ Adaugă câmp')}
                     </button>
                   </div>
                 </div>
               ))}
 
-              <button type="button" onClick={addZone} className="btn btn-secondary">+ Adaugă zonă</button>
+              <button type="button" onClick={addZone} className="btn btn-secondary">{t('+ Adaugă zonă')}</button>
             </div>
           </div>
 
@@ -492,38 +493,38 @@ export default function AdminFisaPage() {
         <div className="fixed inset-0 bg-[rgba(20,32,28,.5)] backdrop-blur-sm flex items-center justify-center z-50 p-6">
           <div className="card !shadow-[var(--shadow-lg)] max-w-lg w-full p-6 rise">
             <div className="flex justify-between items-start mb-2">
-              <h2 className="text-[17px] font-semibold pr-4">⚠ {del.count} lucrări au date completate în acest rând</h2>
+              <h2 className="text-[17px] font-semibold pr-4">⚠ {del.count} {t('lucrări au date completate în acest rând')}</h2>
               <button onClick={() => setDel(null)} className="btn btn-ghost btn-xs text-base" disabled={del.busy}>✕</button>
             </div>
             <p className="text-[13px] text-[var(--fg-soft)] mb-4">
-              Câmpul <b>„{del.field.label.replace(/:\s*$/, '')}"</b> (cheie <span className="font-mono">{del.field.key}</span>)
-              are date completate la <b>{del.count}</b> {del.count === 1 ? 'lucrare' : 'lucrări'}. Cum vrei să ștergi?
+              {t('Câmpul ')}<b>{t('„')}{del.field.label.replace(/:\s*$/, '')}{t('"')}</b>{t(' (cheie ')}<span className="font-mono">{del.field.key}</span>{t(')')}
+              {t(' are date completate la ')}<b>{del.count}</b> {del.count === 1 ? t('lucrare') : t('lucrări')}{t('. Cum vrei să ștergi?')}
             </p>
             <div className="space-y-2">
               <button type="button" onClick={() => confirmDelete('delete-hard')} disabled={del.busy}
                 className="btn btn-secondary w-full justify-start !text-left disabled:opacity-60">
                 <span className="block">
-                  <span className="font-semibold block">Șterge definitiv (inclusiv din arhivă)</span>
-                  <span className="text-[11px] text-[var(--fg-faint)]">Datele dispar din toate lucrările și din toate snapshoturile de arhivă. Ireversibil.</span>
+                  <span className="font-semibold block">{t('Șterge definitiv (inclusiv din arhivă)')}</span>
+                  <span className="text-[11px] text-[var(--fg-faint)]">{t('Datele dispar din toate lucrările și din toate snapshoturile de arhivă. Ireversibil.')}</span>
                 </span>
               </button>
               {del.obsKey ? (
                 <button type="button" onClick={() => confirmDelete('delete-to-obs')} disabled={del.busy}
                   className="btn btn-primary w-full justify-start !text-left disabled:opacity-60">
                   <span className="block">
-                    <span className="font-semibold block">Șterge, dar salvează datele în Observații</span>
-                    <span className="text-[11px] opacity-80">Valoarea fiecărei lucrări se mută în observațiile zonei (prefixată cu eticheta câmpului).</span>
+                    <span className="font-semibold block">{t('Șterge, dar salvează datele în Observații')}</span>
+                    <span className="text-[11px] opacity-80">{t('Valoarea fiecărei lucrări se mută în observațiile zonei (prefixată cu eticheta câmpului).')}</span>
                   </span>
                 </button>
               ) : (
                 <div className="text-[11px] text-[var(--fg-faint)] border border-dashed border-[var(--border)] rounded-[var(--r-sm)] p-2">
-                  Zona nu are un câmp de observații → opțiunea „salvează în Observații" nu e disponibilă.
+                  {t('Zona nu are un câmp de observații → opțiunea „salvează în Observații" nu e disponibilă.')}
                 </div>
               )}
             </div>
             <div className="flex justify-end mt-4">
               <button type="button" onClick={() => setDel(null)} disabled={del.busy} className="btn btn-secondary !text-[12px]">
-                {del.busy ? 'Se procesează…' : 'Anulează'}
+                {del.busy ? t('Se procesează…') : t('Anulează')}
               </button>
             </div>
           </div>
@@ -536,6 +537,7 @@ export default function AdminFisaPage() {
 // ── PREVIZUALIZARE LIVE (WYSIWYG) — randează fișa EXACT ca pagina de strategie reală, read-only. ──
 // Reutilizează clasele design globale .fz/.frow/.fstat/.chipset. Date demo (DEMO_FORM), calc demo.
 function FisaPreview({ tpl }: { tpl: FisaTemplateData }) {
+  const { t } = useT();
   const calc = useMemo(() => calculate({
     suprafata: DEMO_FORM.suprafata,
     putere_pftv: DEMO_FORM.putere_pftv,
@@ -553,8 +555,8 @@ function FisaPreview({ tpl }: { tpl: FisaTemplateData }) {
   return (
     <div className="card p-4 rise rise-1">
       <div className="flex items-center justify-between gap-2 mb-3">
-        <span className="kpi-label">Previzualizare live (cum o văd agenții)</span>
-        <span className="pill pill-lucru text-[10px]">read-only · date demo</span>
+        <span className="kpi-label">{t('Previzualizare live (cum o văd agenții)')}</span>
+        <span className="pill pill-lucru text-[10px]">{t('read-only · date demo')}</span>
       </div>
       {/* Container fișei (clasă .fisa pt scoping) */}
       <div className="fisa">

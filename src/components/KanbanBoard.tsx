@@ -5,6 +5,7 @@ import { Icon } from '@/components/Icon';
 import { PriorityStar, RotText } from '@/components/indicators';
 import { stelutaToPrio } from '@/lib/aspect-meta';
 import { deriveStage } from '@/lib/stage-rules';
+import { useT } from '@/lib/i18n';
 
 // Kanban = a TREIA vizualizare a pâlniei (drag & drop). Trăiește în pagina /palnie,
 // nu mai e o pagină separată „Pipeline" — aceleași date, doar alt mod de afișare.
@@ -49,6 +50,7 @@ interface Props {
 }
 
 export function KanbanBoard({ clienti, isManager, ownerFilter, onPatch, setMsg, reload }: Props) {
+  const { t } = useT();
   const router = useRouter();
   const [drag, setDrag] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
@@ -72,11 +74,11 @@ export function KanbanBoard({ clienti, isManager, ownerFilter, onPatch, setMsg, 
     const cur = clienti.find(c => c.id === id);
     if (colKey === 'contractat' && cur && !nz(cur.ofertat)) patch.ofertat = today();
     onPatch(id, patch); // optimist
-    setMsg(`⏳ Mut în „${col.label}"…`);
+    setMsg(`⏳ ${t('Mut în')} „${t(col.label)}"…`);
     const r = await fetch(`/api/clienti/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
     const j = await r.json().catch(() => ({}));
-    if (r.ok) setMsg(`✅ Mutat în „${col.label}" (sincronizat în CRM)`);
-    else { setMsg('❌ ' + (j.validationErrors?.length ? j.validationErrors.join(' ') : (j.error || 'Eroare la mutare'))); reload(); }
+    if (r.ok) setMsg(`✅ ${t('Mutat în')} „${t(col.label)}" ${t('(sincronizat în CRM)')}`);
+    else { setMsg('❌ ' + (j.validationErrors?.length ? j.validationErrors.join(' ') : (j.error || t('Eroare la mutare')))); reload(); }
   }
 
   const byCol: Record<string, KanbanClient[]> = {};
@@ -109,11 +111,11 @@ export function KanbanBoard({ clienti, isManager, ownerFilter, onPatch, setMsg, 
                 <header className="kcol__head">
                   <span className="kcol__bar" />
                   <div className="kcol__title">
-                    <span className="kcol__name" style={{ color: col.color }}>{col.label}</span>
+                    <span className="kcol__name" style={{ color: col.color }}>{t(col.label)}</span>
                   </div>
                   <div className="kcol__stats">
                     <span className="kcol__wip">{cards.length}</span>
-                    <span className="mono muted" title="Suprafață totală în coloană">{mp ? 'Σ ' + mp.toLocaleString('ro-RO') + ' mp' : ''}</span>
+                    <span className="mono muted" title={t('Suprafață totală în coloană')}>{mp ? 'Σ ' + mp.toLocaleString('ro-RO') + ' mp' : ''}</span>
                   </div>
                 </header>
                 <div className="kcol__list scroll-thin">
@@ -124,12 +126,12 @@ export function KanbanBoard({ clienti, isManager, ownerFilter, onPatch, setMsg, 
                          onClick={() => router.push('/strategie/' + c.id)}
                          className={'kc' + (drag === c.id ? ' is-dragging' : '')}
                          style={{ '--sc': col.color } as React.CSSProperties}
-                         title="Trage pentru a schimba stadiul · click pentru fișă">
-                      <span className="kc__handle" title="Trage"><Icon name="grip" size={14} /></span>
+                         title={t('Trage pentru a schimba stadiul · click pentru fișă')}>
+                      <span className="kc__handle" title={t('Trage')}><Icon name="grip" size={14} /></span>
                       <div className="kc__body">
                         <div className="kc__top">
-                          <span className="kc__name">{c.nume || '(fără nume)'}</span>
-                          <span onClick={stop} title="Prioritate (live în CRM)"><PriorityStar value={stelutaToPrio(c.stelutaCat)} size={16} /></span>
+                          <span className="kc__name">{c.nume || t('(fără nume)')}</span>
+                          <span onClick={stop} title={t('Prioritate (live în CRM)')}><PriorityStar value={stelutaToPrio(c.stelutaCat)} size={16} /></span>
                         </div>
                         <div className="kc__meta">
                           {c.localitate && <span><Icon name="pin" size={11} />{c.localitate}</span>}
@@ -143,7 +145,7 @@ export function KanbanBoard({ clienti, isManager, ownerFilter, onPatch, setMsg, 
                       </div>
                     </article>
                   ))}
-                  {cards.length === 0 && <div className="kcol__empty">— gol —</div>}
+                  {cards.length === 0 && <div className="kcol__empty">{t('— gol —')}</div>}
                 </div>
               </section>
             );
@@ -175,6 +177,7 @@ const WON_REASONS = ['ROI clar', 'Buget aprobat', 'Urgență (sezon)', 'Recomand
 const LOST_REASONS = ['Preț prea mare', 'A ales concurența', 'Fără decizie / amânat', 'Fără urgență', 'Buget tăiat', 'Necontactabil', 'Altul'];
 
 function WinLossModal({ colKey, onConfirm, onClose }: { colKey: string; onConfirm: (detail: string) => void; onClose: () => void }) {
+  const { t } = useT();
   const won = colKey === 'contractat';
   const reasons = won ? WON_REASONS : LOST_REASONS;
   const [sel, setSel] = useState(reasons[0]);
@@ -184,23 +187,23 @@ function WinLossModal({ colKey, onConfirm, onClose }: { colKey: string; onConfir
   return (
     <div className="fixed inset-0 bg-[rgba(20,32,28,.5)] backdrop-blur-sm flex items-center justify-center z-50 p-6" onClick={onClose}>
       <div className="card !shadow-[var(--shadow-lg)] max-w-sm w-full p-6 rise" onClick={e => e.stopPropagation()}>
-        <h2 className="text-lg mb-1">{won ? '✅ Contractat — de ce a câștigat?' : '❌ Anulat — de ce s-a pierdut?'}</h2>
-        <p className="text-[12px] text-[var(--fg-soft)] mb-4">Motivul intră în raportul de win/loss (coaching).</p>
+        <h2 className="text-lg mb-1">{won ? t('✅ Contractat — de ce a câștigat?') : t('❌ Anulat — de ce s-a pierdut?')}</h2>
+        <p className="text-[12px] text-[var(--fg-soft)] mb-4">{t('Motivul intră în raportul de win/loss (coaching).')}</p>
         <div className="space-y-1.5 mb-4">
           {reasons.map(r => (
             <label key={r} className={'flex items-center gap-2 px-3 py-2 rounded-[var(--radius-sm)] border cursor-pointer text-[13px] ' + (sel === r ? 'border-[var(--ember)] bg-[var(--ember-soft)] font-semibold' : 'border-[var(--line-2)]')}>
-              <input type="radio" name="reason" checked={sel === r} onChange={() => setSel(r)} />{r}
+              <input type="radio" name="reason" checked={sel === r} onChange={() => setSel(r)} />{t(r)}
             </label>
           ))}
           {sel === 'Altul' && (
             <textarea className="field w-full mt-1" rows={3} autoFocus value={free}
-              onChange={e => setFree(e.target.value)} placeholder={won ? 'Scrie motivul concret al câștigului…' : 'Scrie motivul concret al pierderii…'} />
+              onChange={e => setFree(e.target.value)} placeholder={won ? t('Scrie motivul concret al câștigului…') : t('Scrie motivul concret al pierderii…')} />
           )}
         </div>
         <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="btn btn-secondary">Anulează</button>
+          <button onClick={onClose} className="btn btn-secondary">{t('Anulează')}</button>
           <button onClick={confirm} disabled={!canConfirm}
-            className={'btn ' + (won ? 'btn-pine' : 'btn-primary') + (canConfirm ? '' : ' opacity-50 pointer-events-none')}>Confirmă</button>
+            className={'btn ' + (won ? 'btn-pine' : 'btn-primary') + (canConfirm ? '' : ' opacity-50 pointer-events-none')}>{t('Confirmă')}</button>
         </div>
       </div>
     </div>
@@ -208,6 +211,7 @@ function WinLossModal({ colKey, onConfirm, onClose }: { colKey: string; onConfir
 }
 
 function NextStepModal({ onConfirm, onClose }: { onConfirm: (text: string, due: string) => void; onClose: () => void }) {
+  const { t } = useT();
   const isoIn = (days: number) => { const d = new Date(); d.setDate(d.getDate() + days); return d.toISOString().slice(0, 10); };
   const [text, setText] = useState('');
   const [due, setDue] = useState(isoIn(3));
@@ -216,23 +220,23 @@ function NextStepModal({ onConfirm, onClose }: { onConfirm: (text: string, due: 
   return (
     <div className="fixed inset-0 bg-[rgba(20,32,28,.5)] backdrop-blur-sm flex items-center justify-center z-50 p-6" onClick={onClose}>
       <div className="card !shadow-[var(--shadow-lg)] max-w-sm w-full p-6 rise" onClick={e => e.stopPropagation()}>
-        <h2 className="text-lg mb-1">📤 Ofertat — care e pasul următor?</h2>
-        <p className="text-[12px] text-[var(--fg-soft)] mb-4">Setează un follow-up clar ca oferta să nu rămână fără urmărire.</p>
+        <h2 className="text-lg mb-1">{t('📤 Ofertat — care e pasul următor?')}</h2>
+        <p className="text-[12px] text-[var(--fg-soft)] mb-4">{t('Setează un follow-up clar ca oferta să nu rămână fără urmărire.')}</p>
         <div className="space-y-3 mb-4">
           <div>
-            <label className="block text-[12px] text-[var(--fg-soft)] mb-1">Pas următor</label>
+            <label className="block text-[12px] text-[var(--fg-soft)] mb-1">{t('Pas următor')}</label>
             <textarea className="field w-full" rows={3} autoFocus value={text}
-              onChange={e => setText(e.target.value)} placeholder="Ex: Sun pentru confirmarea ofertei și negociere preț" />
+              onChange={e => setText(e.target.value)} placeholder={t('Ex: Sun pentru confirmarea ofertei și negociere preț')} />
           </div>
           <div>
-            <label className="block text-[12px] text-[var(--fg-soft)] mb-1">Scadența</label>
+            <label className="block text-[12px] text-[var(--fg-soft)] mb-1">{t('Scadența')}</label>
             <input type="date" className="field w-full" value={due} onChange={e => setDue(e.target.value)} />
           </div>
         </div>
         <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="btn btn-secondary">Anulează</button>
+          <button onClick={onClose} className="btn btn-secondary">{t('Anulează')}</button>
           <button onClick={confirm} disabled={!canConfirm}
-            className={'btn btn-primary' + (canConfirm ? '' : ' opacity-50 pointer-events-none')}>Confirmă</button>
+            className={'btn btn-primary' + (canConfirm ? '' : ' opacity-50 pointer-events-none')}>{t('Confirmă')}</button>
         </div>
       </div>
     </div>

@@ -1,9 +1,11 @@
 'use client';
 import { Icon } from './Icon';
 import { PRIORITY_MAP, STAGE_MAP, rotLevel } from '@/lib/aspect-meta';
+import { useT } from '@/lib/i18n';
 
 // 1) PRIORITATE — steluță pe CULOARE (5 fixe). Niciodată doar culoare: + etichetă opțională.
 export function PriorityStar({ value, size = 16, withLabel, onClick }: { value: string; size?: number; withLabel?: boolean; onClick?: (e: any) => void }) {
+  const { t } = useT();
   const p = PRIORITY_MAP[value] || PRIORITY_MAP.alb;
   const star = (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
@@ -12,12 +14,12 @@ export function PriorityStar({ value, size = 16, withLabel, onClick }: { value: 
     </svg>
   );
   if (onClick) return (
-    <button className="prio-star" title={'Prioritate: ' + p.label} onClick={onClick}
+    <button className="prio-star" title={t('Prioritate: ') + p.label} onClick={onClick}
       style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 0, cursor: 'pointer', padding: 2 }}>
       {star}{withLabel && <span className="prio-lbl">{p.label}</span>}
     </button>
   );
-  return <span title={'Prioritate: ' + p.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>{star}{withLabel && <span className="prio-lbl">{p.label}</span>}</span>;
+  return <span title={t('Prioritate: ') + p.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>{star}{withLabel && <span className="prio-lbl">{p.label}</span>}</span>;
 }
 
 // 2) STADIU — pill cu culoarea din token --st-* (editabilă în Aspect).
@@ -34,9 +36,10 @@ export function StagePill({ stage, size }: { stage: string; size?: 'sm' }) {
 
 // 3) VÂRSTĂ / ROTTING — canal SEPARAT (prag per stadiu).
 export function RotText({ stage, days, showIcon = true }: { stage: string; days: number; showIcon?: boolean }) {
+  const { t } = useT();
   const lvl = rotLevel(stage, days);
   return (
-    <span className={'rot rot--' + lvl} title={'Vârstă în stadiu: ' + days + ' zile'}>
+    <span className={'rot rot--' + lvl} title={t('Vârstă în stadiu: ') + days + t(' zile')}>
       {showIcon && lvl === 'late' && <Icon name="alert" size={11} />}
       {showIcon && lvl === 'warn' && <Icon name="clock" size={11} />}
       <span className="mono">{days}z</span>
@@ -46,12 +49,13 @@ export function RotText({ stage, days, showIcon = true }: { stage: string; days:
 
 // Segmented (switcher vizualizări).
 export function Segmented({ value, options, onChange, size }: { value: string; options: { value: string; label: string; icon?: string }[]; onChange: (v: string) => void; size?: 'sm' }) {
+  const { t } = useT();
   return (
     <div className={'segmented' + (size === 'sm' ? ' segmented--sm' : '')} role="tablist">
       {options.map(o => (
         <button key={o.value} role="tab" aria-selected={o.value === value}
           className={'segmented__btn' + (o.value === value ? ' is-on' : '')} onClick={() => onChange(o.value)}>
-          {o.icon && <Icon name={o.icon} size={15} />}{o.label}
+          {o.icon && <Icon name={o.icon} size={15} />}{t(o.label)}
         </button>
       ))}
     </div>

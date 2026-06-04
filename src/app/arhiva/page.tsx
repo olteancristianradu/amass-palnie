@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Layout } from '@/components/Layout';
+import { useT } from '@/lib/i18n';
 
 interface ArhivaEntry {
   id: string;
@@ -13,6 +14,7 @@ interface ArhivaEntry {
 }
 
 export default function ArhivaPage() {
+  const { t } = useT();
   const [entries, setEntries] = useState<ArhivaEntry[]>([]);
   const [filter, setFilter] = useState('');
   const [loading, setLoading] = useState(true);
@@ -28,8 +30,8 @@ export default function ArhivaPage() {
   useEffect(() => { loadEntries(); }, []);
 
   async function restaureaza(e: ArhivaEntry) {
-    const nume = e.client?.nume || 'acest client';
-    if (!confirm(`Restaurezi strategia pentru „${nume}" din snapshotul de la ${new Date(e.createdAt).toLocaleString('ro-RO')}?\n\nStarea curentă se salvează automat ca „pre-restore" și e reversibilă.`)) return;
+    const nume = e.client?.nume || t('acest client');
+    if (!confirm(`${t('Restaurezi strategia pentru')} „${nume}" ${t('din snapshotul de la')} ${new Date(e.createdAt).toLocaleString('ro-RO')}?\n\n${t('Starea curentă se salvează automat ca „pre-restore" și e reversibilă.')}`)) return;
     setRestoringId(e.id);
     try {
       const r = await fetch('/api/arhiva', {
@@ -39,13 +41,13 @@ export default function ArhivaPage() {
       });
       const j = await r.json();
       if (j.ok) {
-        alert('Versiune restaurată cu succes.');
+        alert(t('Versiune restaurată cu succes.'));
         loadEntries();
       } else {
-        alert('Nu am putut restaura: ' + (j.error || 'eroare necunoscută'));
+        alert(t('Nu am putut restaura: ') + (j.error || t('eroare necunoscută')));
       }
     } catch {
-      alert('Nu am putut restaura: eroare de rețea.');
+      alert(t('Nu am putut restaura: eroare de rețea.'));
     } finally {
       setRestoringId(null);
     }
@@ -58,20 +60,20 @@ export default function ArhivaPage() {
 
   const topbar = (
     <div className="topbar__tools" style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto' }}>
-      <input className="input" style={{ minHeight: 34, width: 220 }} placeholder="Caută client…" value={filter} onChange={e => setFilter(e.target.value)} />
+      <input className="input" style={{ minHeight: 34, width: 220 }} placeholder={t('Caută client…')} value={filter} onChange={e => setFilter(e.target.value)} />
     </div>
   );
 
   return (
     <Layout topbar={topbar}>
       <p className="muted rise" style={{ fontSize: 'var(--fs-sm)', marginBottom: 'var(--sp-5)' }}>
-        {filtered.length} din {entries.length} snapshots salvate · se creează automat la salvarea unei fișe.
+        {filtered.length} {t('din')} {entries.length} {t('snapshots salvate · se creează automat la salvarea unei fișe.')}
       </p>
-      {loading ? <div className="card card--pad text-center text-[var(--fg-soft)]" style={{ padding: 40 }}>Se încarcă arhiva…</div> :
+      {loading ? <div className="card card--pad text-center text-[var(--fg-soft)]" style={{ padding: 40 }}>{t('Se încarcă arhiva…')}</div> :
       <div className="card overflow-hidden rise rise-1"><div className="overflow-x-auto scroll-area">
         <table className="tbl">
           <thead><tr>
-            <th>Client</th><th>Versiune</th><th>Data snapshot</th><th>Obs extra</th><th>Acțiuni</th>
+            <th>{t('Client')}</th><th>{t('Versiune')}</th><th>{t('Data snapshot')}</th><th>{t('Obs extra')}</th><th>{t('Acțiuni')}</th>
           </tr></thead>
           <tbody>
             {filtered.map(e => (
@@ -82,12 +84,12 @@ export default function ArhivaPage() {
                 <td className="text-[11.5px] whitespace-pre-wrap max-w-md text-[var(--fg-soft)]">{e.obsExtra ?? '—'}</td>
                 <td>
                   <button className="btn btn-secondary btn-xs whitespace-nowrap" disabled={restoringId === e.id} onClick={() => restaureaza(e)}>
-                    {restoringId === e.id ? 'Se restaurează…' : '↺ Restaurează această versiune'}
+                    {restoringId === e.id ? t('Se restaurează…') : t('↺ Restaurează această versiune')}
                   </button>
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={5} className="text-center text-[var(--fg-soft)] py-12">Niciun snapshot încă — se creează automat la salvarea unei fișe.</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={5} className="text-center text-[var(--fg-soft)] py-12">{t('Niciun snapshot încă — se creează automat la salvarea unei fișe.')}</td></tr>}
           </tbody>
         </table>
       </div></div>}

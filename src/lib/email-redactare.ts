@@ -55,6 +55,20 @@ BR + BR + '<b>ATENTIE — DE ATASAT OBLIGATORIU:</b>' + BR +
   // DIFERENTIERE V1 vs V2 — categoria 1 = CONSTRUCTIE noua, restul (2 / 3 DT) = CASA LOCUITA.
   // Folosim primul caracter al categoriei deja primite (ex. "1", "2", "3 DT").
   const isV1 = String(d.categorie).trim().charAt(0) === '1';
+  // FIX 2026-06-03 (#10 email V1): valori VARIANT-AWARE. V1 (construcție) ține sistemul/costul actual pe
+  // cheile CASEI ACTUALE (ca_sursa_caldura / ca_distributie / ca_cost_lunar); V2 pe cheile curente
+  // (sursa_caldura / distributie / suma). Înainte emailul citea doar cheile V2 → câmpuri GOALE la V1.
+  const sursaCaldura = isV1 ? (v.ca_sursa_caldura ?? v.ca_sistem) : (v.sursa_caldura ?? v.sistem_actual);
+  const distributie = isV1 ? v.ca_distributie : v.distributie;
+  const pompaTip = isV1 ? v.ca_sursa_caldura_pompa_tip : v.sursa_caldura_pompa_tip;
+  const costActual = isV1 ? (v.ca_cost_lunar ?? v.suma) : v.suma;
+  const unitateConsum = isV1 ? 'lei/luna' : (v.consum_unitate || 'lei/luna');
+  // Construcție din câmpurile structurate noi (material / izolație / grosime / niveluri), fallback la cheile vechi.
+  const constructieParts = [v.material, v.izolatie_tip, v.izolatie_cm, fieldValueToText(v.niveluri)]
+    .map(fieldValueToText).map(s => s.trim()).filter(Boolean);
+  const constructieText = constructieParts.length
+    ? constructieParts.join(', ')
+    : fieldValueToText(v.constructie ?? v.constructie_izolatie ?? v.constructie_raw);
   // Paragraf de context specific, accentuat, relevant fiecarei categorii.
   const accentCategorie = isV1
     ? h_('Specific constructie (V1)') + BR +
@@ -88,10 +102,12 @@ h_('Date client') + BR +
 'Sursa: ' + (d.sursa ? esc(d.sursa) : m_('[site / recomandare]')) + BR +
 'Bransament: ' + v_(v.bransament) + BR +
 'PFTV: ' + (v.putere_pftv ? esc(v.putere_pftv) + ' kW' : m_('nu are / urmeaza')) + BR + BR +
-h_('Situatia actuala (casa locuita)') + BR +
-'Constructie / izolatie / etaje: ' + v_(v.constructie) + BR +
-'Sistem actual incalzire: ' + v_(v.sistem_actual) + BR +
-'Consum actual: ' + v_(v.suma) + ' ' + v_(v.consum_unitate) + BR +
+h_(isV1 ? 'Situatia actuala (constructie noua)' : 'Situatia actuala (casa locuita)') + BR +
+(isV1 ? 'Stadiu constructie: ' + v_(v.stadiu_constructie) + BR + 'Doreste PFTV: ' + v_(v.doreste_pftv) + BR : '') +
+'Constructie / izolatie / etaje: ' + v_(constructieText) + BR +
+(isV1 ? 'Sistem actual (casa actuala): ' : 'Sistem actual incalzire: ') + v_(sursaCaldura) + (fieldValueToText(pompaTip).trim() ? ' (' + esc(pompaTip) + ')' : '') + BR +
+'Distributie / emisie: ' + v_(distributie) + BR +
+'Consum actual: ' + v_(costActual) + (fieldValueToText(costActual).trim() ? ' ' + esc(unitateConsum) : '') + BR +
 'Suprafata totala utila incalzita: ' + (v.suprafata ? esc(v.suprafata) + ' mp' : '<b>_____________</b>') + BR +
 'Detalii dictate suprafete: ' + m_('[schita / pe plan]') + BR + BR +
 'Observatii situatie actuala: ' + v_(v.obs_situatie) + BR + BR +

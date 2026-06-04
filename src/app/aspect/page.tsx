@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Layout } from '@/components/Layout';
+import { useT } from '@/lib/i18n';
 
 // Motorul de teme e încărcat global (public/aspect.js → window.Aspect, beforeInteractive).
 const A = () => (typeof window !== 'undefined' ? (window as any).Aspect : null);
@@ -83,11 +84,12 @@ function StagePill({ stage, size }: { stage: string; size?: string }) {
 }
 
 function LivePreview() {
+  const { t } = useT();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button className="btn btn-primary btn-sm">Buton primar</button>
-        <button className="btn btn-secondary btn-sm">Secundar</button>
+        <button className="btn btn-primary btn-sm">{t('Buton primar')}</button>
+        <button className="btn btn-secondary btn-sm">{t('Secundar')}</button>
       </div>
       <div className="lp-card card card--pad" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -99,17 +101,18 @@ function LivePreview() {
           <span className="mono">145 mp</span>
           <span className="rot rot--warn"><Icon name="contrast" size={11} /><span className="mono">12z</span></span>
         </div>
-        <a href="#" onClick={e => e.preventDefault()}>Link activ accent</a>
+        <a href="#" onClick={e => e.preventDefault()}>{t('Link activ accent')}</a>
       </div>
       <div className="lp-row">
-        <span>Rând tabel</span><span className="mono">240</span><StagePill stage="schita" size="sm" />
+        <span>{t('Rând tabel')}</span><span className="mono">240</span><StagePill stage="schita" size="sm" />
       </div>
-      <input className="input field" placeholder="Câmp de input…" />
+      <input className="input field" placeholder={t('Câmp de input…')} />
     </div>
   );
 }
 
 export default function AspectPage() {
+  const { t } = useT();
   const [s, setS] = useState<any>(null);
   useEffect(() => {
     const a = A(); if (!a) return;
@@ -119,7 +122,7 @@ export default function AspectPage() {
   }, []);
 
   const a = A();
-  if (!s || !a) return <Layout><div className="card p-10 text-center text-[var(--fg-soft)]">Se încarcă „Aspect"…</div></Layout>;
+  if (!s || !a) return <Layout><div className="card p-10 text-center text-[var(--fg-soft)]">{t('Se încarcă „Aspect"…')}</div></Layout>;
   const set = (patch: any) => a.set(patch);
   const surface = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() || '#fff';
   const ratioSurface = a.contrast(s.accent, surface);
@@ -128,15 +131,14 @@ export default function AspectPage() {
 
   return (
     <Layout>
-      <h1 className="text-[24px] mb-1">Aspect aplicație</h1>
+      <h1 className="text-[24px] mb-1">{t('Aspect aplicație')}</h1>
       <p className="text-[13px] text-[var(--fg-soft)] mb-5 max-w-2xl">
-        Culoare, formă, fonturi, mărime text și culorile de stadiu — cu previzualizare live. Steluța de prioritate
-        are 5 culori fixe (limbaj comun, nepersonalizabile). Preferințele se salvează pe acest dispozitiv.
+        {t('Culoare, formă, fonturi, mărime text și culorile de stadiu — cu previzualizare live. Steluța de prioritate are 5 culori fixe (limbaj comun, nepersonalizabile). Preferințele se salvează pe acest dispozitiv.')}
       </p>
       <div className="aspect">
         <div className="aspect__main">
-          <Section title="Teme prestabilite" icon="palette">
-            <p className="aspect__hint" style={{ marginTop: 0, marginBottom: 10 }}>Un click setează tot aspectul (culoare, font, formă, densitate, fundal). Apoi poți ajusta orice mai jos.</p>
+          <Section title={t('Teme prestabilite')} icon="palette">
+            <p className="aspect__hint" style={{ marginTop: 0, marginBottom: 10 }}>{t('Un click setează tot aspectul (culoare, font, formă, densitate, fundal). Apoi poți ajusta orice mai jos.')}</p>
             <div className="theme-cards">
               {(a.THEMES || []).map((t: any) => (
                 <button key={t.id} className={'theme-card' + (s.theme === t.id ? ' is-on' : '')} onClick={() => a.setTheme(t.id)}>
@@ -150,12 +152,12 @@ export default function AspectPage() {
             </div>
           </Section>
 
-          <Section title="Mod culoare" icon="contrast">
+          <Section title={t('Mod culoare')} icon="contrast">
             <Segmented value={s.mode} onChange={v => set({ mode: v })}
-              options={[{ value: 'light', label: 'Light', icon: 'sun' }, { value: 'dark', label: 'Dark', icon: 'moon' }, { value: 'system', label: 'Sistem', icon: 'monitor' }]} />
+              options={[{ value: 'light', label: t('Light'), icon: 'sun' }, { value: 'dark', label: t('Dark'), icon: 'moon' }, { value: 'system', label: t('Sistem'), icon: 'monitor' }]} />
           </Section>
 
-          <Section title="Accent / brand" icon="palette">
+          <Section title={t('Accent / brand')} icon="palette">
             <div className="preset-row">
               {a.PRESETS.map((p: any) => (
                 <button key={p.id} className={'preset' + (s.preset === p.id ? ' is-on' : '')} onClick={() => set({ accent: p.accent, preset: p.id })} title={p.name}>
@@ -172,59 +174,59 @@ export default function AspectPage() {
                 onChange={e => { const v = e.target.value; if (/^#?[0-9a-fA-F]{0,6}$/.test(v)) set({ accent: v.startsWith('#') ? v : '#' + v, preset: 'custom' }); }} />
               <span className={'wcag wcag--' + (rateSurface === 'slab' ? 'bad' : rateSurface === 'AA mare' ? 'warn' : 'ok')}>
                 {rateSurface === 'slab'
-                  ? <><Icon name="alert" size={13} />Contrast slab ({ratioSurface.toFixed(1)}:1)</>
-                  : <><Icon name="check" size={13} />Contrast {rateSurface} ({ratioSurface.toFixed(1)}:1)</>}
+                  ? <><Icon name="alert" size={13} />{t('Contrast slab')} ({ratioSurface.toFixed(1)}:1)</>
+                  : <><Icon name="check" size={13} />{t('Contrast')} {rateSurface} ({ratioSurface.toFixed(1)}:1)</>}
               </span>
             </div>
-            <p className="aspect__hint">Din accent se derivă hover, focus ring și suprafețele soft. Logo-ul AMASS rămâne mereu roșu. Text pe accent: contrast {ratioOn.toFixed(1)}:1.</p>
+            <p className="aspect__hint">{t('Din accent se derivă hover, focus ring și suprafețele soft. Logo-ul AMASS rămâne mereu roșu. Text pe accent: contrast')} {ratioOn.toFixed(1)}:1.</p>
           </Section>
 
-          <Section title="Font" icon="type">
+          <Section title={t('Font')} icon="type">
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 160 }}><span className="label">Titluri</span>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 160 }}><span className="label">{t('Titluri')}</span>
                 <select className="select field" value={s.fontDisplay} onChange={e => set({ fontDisplay: e.target.value })}>
                   {Object.keys(a.FONTS.display).map((f: string) => <option key={f}>{f}</option>)}
                 </select></label>
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 160 }}><span className="label">Interfață</span>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 160 }}><span className="label">{t('Interfață')}</span>
                 <select className="select field" value={s.fontUi} onChange={e => set({ fontUi: e.target.value })}>
                   {Object.keys(a.FONTS.ui).map((f: string) => <option key={f}>{f}</option>)}
                 </select></label>
             </div>
           </Section>
 
-          <Section title="Formă" icon="sliders">
+          <Section title={t('Formă')} icon="sliders">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <StepSlider label="Colțuri (radius)" value={s.radius} labels={a.RADIUS_LABELS} onChange={v => set({ radius: v })} />
+              <StepSlider label={t('Colțuri (radius)')} value={s.radius} labels={a.RADIUS_LABELS} onChange={v => set({ radius: v })} />
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <span className="label">Densitate</span>
+                <span className="label">{t('Densitate')}</span>
                 <Segmented value={s.density} onChange={v => set({ density: v })}
-                  options={[{ value: 'compact', label: 'Compact' }, { value: 'normal', label: 'Normal' }, { value: 'comfortable', label: 'Confortabil' }]} />
+                  options={[{ value: 'compact', label: t('Compact') }, { value: 'normal', label: t('Normal') }, { value: 'comfortable', label: t('Confortabil') }]} />
               </div>
             </div>
           </Section>
 
-          <Section title="Mărime text" icon="type" highlight>
-            <StepSlider label={'Scală: ' + a.TEXT_LABELS[s.textSize] + ' (' + Math.round(a.TEXT_STEPS[s.textSize] * 100) + '%)'}
+          <Section title={t('Mărime text')} icon="type" highlight>
+            <StepSlider label={t('Scală:') + ' ' + a.TEXT_LABELS[s.textSize] + ' (' + Math.round(a.TEXT_STEPS[s.textSize] * 100) + '%)'}
               value={s.textSize} labels={a.TEXT_LABELS} onChange={v => set({ textSize: v })} />
-            <p className="aspect__hint">Scalează toată interfața. Vezi previzualizarea live →</p>
+            <p className="aspect__hint">{t('Scalează toată interfața. Vezi previzualizarea live →')}</p>
           </Section>
 
-          <Section title="Culori stadii" icon="kanban">
-            <p className="aspect__hint" style={{ marginTop: 0 }}>Personalizează fiecare stadiu — apare instant în Kanban, Tabel, Carduri și Dashboard.</p>
+          <Section title={t('Culori stadii')} icon="kanban">
+            <p className="aspect__hint" style={{ marginTop: 0 }}>{t('Personalizează fiecare stadiu — apare instant în Kanban, Tabel, Carduri și Dashboard.')}</p>
             <div className="stage-colors">
               {a.ALL_STAGES.map((st: any) => (
                 <label key={st.key} className="stage-color">
                   <input type="color" value={a.stageColor(st.key)} onChange={e => a.setStage(st.key, e.target.value)} />
                   <span className="stage-color__chip" style={{ background: 'var(--st-' + st.key + ')' }}></span>
                   <span>{st.label}</span>
-                  {s.stages[st.key] && <button className="stage-color__reset" title="Implicit" onClick={e => { e.preventDefault(); a.resetStage(st.key); }}><Icon name="reset" size={12} /></button>}
+                  {s.stages[st.key] && <button className="stage-color__reset" title={t('Implicit')} onClick={e => { e.preventDefault(); a.resetStage(st.key); }}><Icon name="reset" size={12} /></button>}
                 </label>
               ))}
             </div>
           </Section>
 
-          <Section title="Fundal" icon="palette">
-            <p className="aspect__hint" style={{ marginTop: 0, marginBottom: 8 }}>Temele de sus setează deja un fundal — aici îl poți schimba separat.</p>
+          <Section title={t('Fundal')} icon="palette">
+            <p className="aspect__hint" style={{ marginTop: 0, marginBottom: 8 }}>{t('Temele de sus setează deja un fundal — aici îl poți schimba separat.')}</p>
             <div className="bg-row">
               {(a.BACKGROUNDS || []).map((b: any) => (
                 <button key={b.id} className={'bg-opt' + ((s.background || 'none') === b.id ? ' is-on' : '')} onClick={() => set({ background: b.id })}>
@@ -234,20 +236,20 @@ export default function AspectPage() {
             </div>
           </Section>
 
-          <Section title="Prioritate (fix — limbaj comun)" icon="alert">
-            <p className="aspect__hint" style={{ marginTop: 0 }}>Cele 5 culori ale steluței NU se personalizează (sens universal în toată echipa).</p>
+          <Section title={t('Prioritate (fix — limbaj comun)')} icon="alert">
+            <p className="aspect__hint" style={{ marginTop: 0 }}>{t('Cele 5 culori ale steluței NU se personalizează (sens universal în toată echipa).')}</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
               {a.PRIORITIES.map((p: any) => <PriorityStar key={p.key} value={p.key} withLabel size={16} />)}
             </div>
           </Section>
 
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => a.reset()}><Icon name="reset" size={14} />Resetează tot</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => a.reset()}><Icon name="reset" size={14} />{t('Resetează tot')}</button>
           </div>
         </div>
 
         <aside className="aspect__preview">
-          <div className="label" style={{ marginBottom: 10 }}>Previzualizare live</div>
+          <div className="label" style={{ marginBottom: 10 }}>{t('Previzualizare live')}</div>
           <LivePreview />
         </aside>
       </div>

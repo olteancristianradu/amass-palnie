@@ -79,10 +79,10 @@ export function Layout({ children, title, topbar, contentMod }: {
             </svg>
             <span className="brand-text navitem__lbl">
               <span className="brand-word">AMASS<sup>®</sup></span>
-              <span className="brand-sub">Pâlnie de vânzări</span>
+              <span className="brand-sub">{t('Pâlnie de vânzări')}</span>
             </span>
           </span>
-          <button className="sidebar__collapse btn btn-ghost btn-icon btn-sm" title={collapsed ? 'Extinde meniul' : 'Restrânge meniul'} onClick={toggleCollapsed}><Icon name={collapsed ? 'chevR' : 'chevL'} size={16} /></button>
+          <button className="sidebar__collapse btn btn-ghost btn-icon btn-sm" title={collapsed ? t('Extinde meniul') : t('Restrânge meniul')} onClick={toggleCollapsed}><Icon name={collapsed ? 'chevR' : 'chevL'} size={16} /></button>
           <button className="sidebar__close btn btn-ghost btn-icon btn-sm" onClick={() => setNavOpen(false)}><Icon name="x" size={18} /></button>
         </div>
         <nav className="sidebar__nav scroll-thin">
@@ -102,7 +102,7 @@ export function Layout({ children, title, topbar, contentMod }: {
         </nav>
         <div className="sidebar__foot" style={{ position: 'relative' }}>
           {/* Cont & setări — meniu pe numele agentului (regula: acțiunile stau sub un trigger). */}
-          <button className="userbtn" onClick={() => setUserMenu(v => !v)} title="Cont & setări"
+          <button className="userbtn" onClick={() => setUserMenu(v => !v)} title={t('Cont & setări')}
             style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, background: 'none', border: 0, cursor: 'pointer', textAlign: 'left', padding: 0, color: 'inherit' }}>
             <div className="avatar">{initial}</div>
             <div className="navitem__lbl" style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, flex: 1 }}>
@@ -114,10 +114,10 @@ export function Layout({ children, title, topbar, contentMod }: {
           {userMenu && (<>
             <div className="usermenu-backdrop" onClick={() => setUserMenu(false)} />
             <div className="usermenu">
-              <Link href="/settings" className="usermenu__item" onClick={() => setUserMenu(false)}><Icon name="settings" size={16} />Setări</Link>
-              <button className="usermenu__item" onClick={() => { const A = (window as any).Aspect; if (A) { const m = A.resolveMode(A.get().mode); A.set({ mode: m === 'dark' ? 'light' : 'dark' }); } setUserMenu(false); }}><Icon name="contrast" size={16} />Comută tema (light/dark)</button>
+              <Link href="/settings" className="usermenu__item" onClick={() => setUserMenu(false)}><Icon name="settings" size={16} />{t('Setări')}</Link>
+              <button className="usermenu__item" onClick={() => { const A = (window as any).Aspect; if (A) { const m = A.resolveMode(A.get().mode); A.set({ mode: m === 'dark' ? 'light' : 'dark' }); } setUserMenu(false); }}><Icon name="contrast" size={16} />{t('Comută tema (light/dark)')}</button>
               <div className="usermenu__sep" />
-              <button className="usermenu__item usermenu__item--danger" onClick={() => signOut({ callbackUrl: '/login' })}><Icon name="logout" size={16} />Ieșire</button>
+              <button className="usermenu__item usermenu__item--danger" onClick={() => signOut({ callbackUrl: '/login' })}><Icon name="logout" size={16} />{t('Ieșire')}</button>
             </div>
           </>)}
         </div>
@@ -126,10 +126,10 @@ export function Layout({ children, title, topbar, contentMod }: {
 
       <main className="main">
         <header className="topbar">
-          <button className="topbar__menu btn btn-ghost btn-icon" onClick={() => setNavOpen(true)} aria-label="Meniu"><Icon name="menu" size={20} /></button>
-          {pageTitle && TOPBAR_TITLE_PAGES.includes(pathname) && <h1 className="topbar__title">{pageTitle}</h1>}
+          <button className="topbar__menu btn btn-ghost btn-icon" onClick={() => setNavOpen(true)} aria-label={t('Meniu')}><Icon name="menu" size={20} /></button>
+          {pageTitle && TOPBAR_TITLE_PAGES.includes(pathname) && <h1 className="topbar__title">{t(pageTitle)}</h1>}
           {topbar}
-          <button className="btn btn-ghost btn-sm help-btn" style={{ marginLeft: 'auto' }} onClick={() => setHelpOpen(true)} title="Ajutor: ghid și explicații pentru fiecare buton"><Icon name="help" size={17} /><span className="help-btn__lbl">Ajutor</span></button>
+          <button className="btn btn-ghost btn-sm help-btn" style={{ marginLeft: 'auto' }} onClick={() => setHelpOpen(true)} title={t('Ajutor: ghid și explicații pentru fiecare buton')}><Icon name="help" size={17} /><span className="help-btn__lbl">{t('Ajutor')}</span></button>
         </header>
         <div className={'content' + (contentMod ? ' ' + contentMod : '')}>{children}</div>
       </main>
