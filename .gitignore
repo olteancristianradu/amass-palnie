@@ -29,7 +29,13 @@ next-env.d.ts
 .DS_Store
 /tmp
 
-# fișiere de lucru temporare
+# documente interne (rapoarte/analize/design/planuri) — DOAR local, NU pe GitHub.
+# Mutate în /Users/radu-server/amass-local-docs/ (separat de aplicația web). Repo-ul e PUBLIC.
+/reports/
+/docs/
+/AUDIT_INCHIDERE.md
+/PLAN_PRODUS.md
+/PROMPT_CLAUDE_DESIGN.md
 /reports/_*.csv
 /reports/_*.txt
 
