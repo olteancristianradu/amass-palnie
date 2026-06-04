@@ -14,8 +14,10 @@ export async function GET(req: NextRequest) {
 
   // Filtru pe dataIntrare (cohortă), echivalent C3/E3 din Dashboard.gs.
   // Interval inclusiv: start = 00:00 ziua start, end = sfârșitul zilei end (< end+1zi).
-  const start = startParam ? new Date(startParam) : null;
-  const end = endParam ? new Date(endParam) : null;
+  // Parsăm 'yyyy-mm-dd' ca miezul nopții LOCAL (fără 'Z' → fus local), nu UTC — ca granițele zilei
+  // să fie corecte indiferent de fusul orar al serverului.
+  const start = startParam ? new Date(startParam + 'T00:00:00') : null;
+  const end = endParam ? new Date(endParam + 'T00:00:00') : null;
   const validStart = start && !isNaN(start.getTime()) ? start : null;
   const validEnd = end && !isNaN(end.getTime()) ? end : null;
   if (validStart || validEnd) {

@@ -26,7 +26,8 @@ const DATE_PRESETS: Array<{ k: string; label: string }> = [
   { k: 'azi', label: 'Azi' }, { k: 'ieri', label: 'Ieri' }, { k: '7', label: '7 zile' },
   { k: '30', label: '30 zile' }, { k: 'an', label: 'Anul curent' }, { k: 'tot', label: 'Tot' },
 ];
-const isoDay = (off: number) => { const d = new Date(); d.setDate(d.getDate() - off); return d.toISOString().slice(0, 10); };
+// Dată LOCALĂ 'yyyy-mm-dd' (NU toISOString/UTC — evită decalajul de fus la granița zilei, ex. 00:00–02:00).
+const isoDay = (off: number) => { const d = new Date(); d.setDate(d.getDate() - off); const p = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
 
 // Stadiu (etichetă DB) → token de stadiu (--st-*) pentru StagePill / culori bare.
 function stStadiu(k: string): string {

@@ -79,11 +79,18 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const before = await prisma.client.findUnique({ where: { id: params.id } });
   if (!before || !(await canAccessClient(scope, before.ownerId))) return NextResponse.json({ ok: false }, { status: 404 });
 
+  // Parsare dată robustă: acceptă ISO (yyyy-mm-dd / ISO complet) ȘI formatul RO dd.mm.yyyy (folosit de
+  // celulele de dată din tabel). Întoarce null la valoare invalidă (NU „Invalid Date" → evită crash la save).
+  const parseDateFlexible = (v: any): Date | null => {
+    if (!v) return null;
+    if (typeof v === 'string' && /^\d{2}\.\d{2}\.\d{4}$/.test(v)) { const [d, m, y] = v.split('.'); return new Date(+y, +m - 1, +d); }
+    const dt = new Date(v); return isNaN(dt.getTime()) ? null : dt;
+  };
   // Construiește data de update (whitelist; datele primesc Date sau null).
   const data: any = {};
   for (const f of SIMPLE_FIELDS) {
     if (updates[f] === undefined) continue;
-    if (DATE_FIELDS.includes(f)) data[f] = updates[f] ? new Date(updates[f]) : null;
+    if (DATE_FIELDS.includes(f)) data[f] = parseDateFlexible(updates[f]);
     else data[f] = updates[f];
   }
   // ANTI-WIPE (restaurat — fusese revertit la JSON.stringify): gol nu suprascrie non-gol.
