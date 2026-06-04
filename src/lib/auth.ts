@@ -51,7 +51,7 @@ export const authOptions: NextAuthOptions = {
       }
     })
   ],
-  session: { strategy: 'jwt', maxAge: 30 * 24 * 60 * 60 },  // 30 zile (era 24h → oamenii erau deconectați zilnic)
+  session: { strategy: 'jwt', maxAge: 7 * 24 * 60 * 60 },  // 7 zile (CRM cu date sensibile — fereastră mai scurtă decât 30z; getScope verifică active/rol la fiecare request)
   pages: { signIn: '/login' },
   // App intern pe rețea locală, accesat prin HTTP (http://IP:3000) → cookie-urile NU trebuie marcate
   // „Secure" (altfel browserul nu le trimite pe HTTP și login-ul eșuează „silent", indiferent de parolă).

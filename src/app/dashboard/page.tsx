@@ -55,8 +55,8 @@ export default function DashboardPage() {
   useEffect(() => { load(); }, [owner, start, end]);
   // Auto-refresh la 30s (păstrează indicatorii la zi, respectă filtrele curente)
   useEffect(() => {
-    const t = setInterval(() => load(owner, start, end), 30000);
-    return () => clearInterval(t);
+    const id = setInterval(() => load(owner, start, end), 30000);
+    return () => clearInterval(id);
   }, [owner, start, end]);
   if (!s) return (
     <Layout>

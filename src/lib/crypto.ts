@@ -27,6 +27,8 @@ export function encrypt(plaintext: string): string {
 export function decrypt(ciphertext: string): string {
   const key = getKey();
   const buf = Buffer.from(ciphertext, 'base64');
+  // Validare lungime minimă (12 IV + 16 tag): input corupt/gol → eroare clară, nu un GCM criptic.
+  if (buf.length < 28) throw new Error('decrypt: ciphertext invalid (prea scurt / corupt)');
   const iv = buf.slice(0, 12);
   const tag = buf.slice(12, 28);
   const enc = buf.slice(28);

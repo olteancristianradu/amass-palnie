@@ -98,6 +98,7 @@ function isLoginPage(html: string): boolean {
 }
 
 export async function invalidateCookie(userId: string): Promise<void> {
+  if (!userId) return; // GUARD: userId gol → updateMany ar atinge TOATE rândurile (vezi bug-ul updateMany-undefined)
   await prisma.crmCredentials.updateMany({
     where: { userId }, data: { cookieJar: null, cookieTs: null }
   });

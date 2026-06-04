@@ -69,6 +69,7 @@ export async function getStatus(userId: string) {
 }
 
 export async function disconnect(userId: string) {
+  if (!userId) return; // GUARD: userId gol → deleteMany ar șterge TOATE token-urile (bug updateMany/deleteMany-undefined)
   await prisma.outlookToken.deleteMany({ where: { userId } });
 }
 

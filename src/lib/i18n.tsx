@@ -6,6 +6,11 @@ export type Lang = 'ro' | 'en';
 /* Cheia = textul ROMÂNESC sursă. EN = overlay. t(text) întoarce EN dacă lang=en și
    există în dicționar, altfel textul original (română) — deci stringuri netraduse rămân RO. */
 const EN: Record<string, string> = {
+  "Nevoie Acoperita in anumite conditii": "Need covered under certain conditions",
+  "Cald": "Warm",
+  "Mesh": "Mesh",
+  "Puncte": "Dots",
+  "Caroiaj": "Grid",
   " (cheie ": " (key ",
   " (etichete, tipuri de câmp, opțiuni, ordine). Modificările se aplică ": " (labels, field types, options, order). Changes apply to ",
   " (reîncearcă automat)": " (retries automatically)",

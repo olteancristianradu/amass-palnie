@@ -230,7 +230,7 @@ export default function AspectPage() {
             <div className="bg-row">
               {(a.BACKGROUNDS || []).map((b: any) => (
                 <button key={b.id} className={'bg-opt' + ((s.background || 'none') === b.id ? ' is-on' : '')} onClick={() => set({ background: b.id })}>
-                  <span className="bg-opt__prev" data-bg={b.id}></span>{b.name}
+                  <span className="bg-opt__prev" data-bg={b.id}></span>{t(b.name)}
                 </button>
               ))}
             </div>
