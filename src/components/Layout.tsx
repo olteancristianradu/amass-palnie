@@ -11,7 +11,7 @@ import { HelpPanel, Tour } from './Help';
 type NavGroup = { section?: string; roles?: string[]; items: { href: string; label: string; icon: string }[] };
 const NAV: NavGroup[] = [
   { items: [
-    { href: '/palnie', label: 'Pâlnie clienți', icon: 'funnel' },
+    { href: '/palnie', label: 'Pâlnie clienți', icon: 'kanban' },
     { href: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
   ] },
   { section: 'Administrare', roles: ['admin', 'manager'], items: [
