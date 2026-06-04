@@ -124,7 +124,7 @@ export default function DashboardPage() {
   //  - Anulați    = clienți cu stadiu 'Anulat'.
   const cCalificat = fn.nevoie;
   const cTentativa = s.byNevoie?.['Tentativa'] ?? 0;
-  const cAnulat = s.byStadiu['Anulat'] ?? 0;
+  const cAnulat = s.byStadiu?.['Anulat'] ?? 0;
   const raport: [string, number][] = [
     [t('Clienți Intrați'), fn.intrari],
     [t('Clienți Sunați (T1)'), fn.t1],
@@ -187,7 +187,7 @@ export default function DashboardPage() {
         <div className="d2-keyrow">
           <div className="d2key"><span className="d2key__l">{t('Clienți în pâlnie')}</span><span className="d2key__v">{num(s.total)}</span><span className="d2key__s">{t('în intervalul selectat')}</span></div>
           <div className="d2key"><span className="d2key__l">{t('Rată conversie (contract / intrați)')}</span><span className="d2key__v">{conv}%</span><span className="d2key__s">{t('contract semnat din total')}</span></div>
-          <div className="d2key"><span className="d2key__l">{t('Deal-uri semnate')}</span><span className="d2key__v">{s.byStadiu['Contractat'] ?? 0}</span><span className="d2key__s">{t('status = Contractat')}</span></div>
+          <div className="d2key"><span className="d2key__l">{t('Deal-uri semnate')}</span><span className="d2key__v">{s.byStadiu?.['Contractat'] ?? 0}</span><span className="d2key__s">{t('status = Contractat')}</span></div>
           <div className="d2key"><span className="d2key__l">{t('Suprafață totală (m²)')}</span><span className="d2key__v accent">{num(s.totalSuprafata)}</span><span className="d2key__s">{t('suma mp clienți în interval')}</span></div>
         </div>
 

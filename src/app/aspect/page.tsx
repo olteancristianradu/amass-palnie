@@ -262,13 +262,17 @@ function AspectPanel({ focusText }: { focusText?: boolean } = {}) {
                 <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => {
                   const f = e.target.files?.[0]; if (!f) return;
                   const rd = new FileReader();
+                  rd.onerror = () => toast(t('Nu am putut citi fișierul'), 'error');
                   rd.onload = () => {
                     const img = new Image();
+                    img.onerror = () => toast(t('Imagine invalidă'), 'error');
                     img.onload = () => {
                       const max = 1600, sc = Math.min(1, max / Math.max(img.width, img.height));
                       const cv = document.createElement('canvas');
                       cv.width = Math.round(img.width * sc); cv.height = Math.round(img.height * sc);
-                      cv.getContext('2d')?.drawImage(img, 0, 0, cv.width, cv.height);
+                      const ctx = cv.getContext('2d');
+                      if (!ctx) { toast(t('Imagine invalidă'), 'error'); return; }
+                      ctx.drawImage(img, 0, 0, cv.width, cv.height);
                       try {
                         const url = cv.toDataURL('image/jpeg', 0.82);
                         a.setBgImage(url); toast(t('Fundal personalizat aplicat'), 'success');
@@ -308,6 +312,7 @@ function AspectPanel({ focusText }: { focusText?: boolean } = {}) {
                 <Icon name="upload" size={14} />{t('Importă aspect')}
                 <input type="file" accept="application/json" style={{ display: 'none' }} onChange={e => {
                   const f = e.target.files?.[0]; if (!f) return; const r = new FileReader();
+                  r.onerror = () => toast(t('Nu am putut citi fișierul'), 'error');
                   r.onload = () => { a.importJSON(String(r.result)) ? toast(t('Aspect importat'), 'success') : toast(t('Fișier invalid'), 'error'); };
                   r.readAsText(f); e.target.value = '';
                 }} />

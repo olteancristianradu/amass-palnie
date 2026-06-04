@@ -243,7 +243,10 @@
     importJSON: (txt) => {
       try { const o = JSON.parse(txt); if (!o || typeof o !== 'object') return false;
         delete o._amass_aspect; delete o.user;
-        state = { ...DEFAULTS, ...state, ...o, stages: { ...(o.stages || {}) } }; save(); apply(); return true;
+        // Imagine de fundal prea mare (peste ~1.5M caractere) → o ignorăm (altfel localStorage overflow + save tăcut).
+        if (typeof o.bgImage === 'string' && o.bgImage.length > 1500000) delete o.bgImage;
+        // MERGE culori stadii (nu înlocui) — ca importul unui preset fără `stages` să NU șteargă personalizările curente.
+        state = { ...DEFAULTS, ...state, ...o, stages: { ...state.stages, ...(o.stages || {}) } }; save(); apply(); return true;
       } catch (e) { return false; }
     },
   };

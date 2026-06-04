@@ -7,6 +7,7 @@ import { Montserrat, Inter, JetBrains_Mono } from 'next/font/google';
 import Script from 'next/script';
 import { SessionProvider } from '@/components/SessionProvider';
 import { LangProvider } from '@/lib/i18n';
+import { ToastHost } from '@/components/ui';
 
 // Display (titluri, KPI, numere mari, nume carduri) — Montserrat
 const montserrat = Montserrat({
@@ -59,6 +60,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* PWA: înregistrează service worker-ul (offline + Add to Home Screen). */}
         <Script id="sw-register" strategy="afterInteractive" dangerouslySetInnerHTML={{ __html: `if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});}` }} />
         <SessionProvider><LangProvider>{children}</LangProvider></SessionProvider>
+        {/* Gazdă globală pentru toast() (folosit de /aspect: fundal/export/import/reset) — altfel feedback-ul e silențios. */}
+        <ToastHost />
       </body>
     </html>
   );

@@ -51,8 +51,8 @@ export default function SettingsPage() {
   }, []);
 
   async function disconnectOutlook() {
-    await fetch('/api/outlook/status', { method: 'DELETE' });
-    setMsg(t('ℹ️ Outlook deconectat')); load();
+    const r = await fetch('/api/outlook/status', { method: 'DELETE' });
+    setMsg(r.ok ? t('ℹ️ Outlook deconectat') : '❌ ' + t('Eroare la deconectare')); load();
   }
 
   async function toggleAuto() {

@@ -119,7 +119,7 @@ export function AudioReminder({ client, compact }: { client: AudioReminderClient
       {client.audio && <span className="ar__ic ar__ic--on" title={t('Înregistrare audio disponibilă')}><Icon name="headphones" size={14} /></span>}
       {client.obs && <span className="ar__ic" title={t('Are observații')}><Icon name="note" size={14} /></span>}
       {client.reminder && !compact && (
-        <span className={'ar__rem ar__rem--' + (client.reminderWhen || '')} title={t('Reminder: ') + client.reminder}>
+        <span className={'ar__rem' + (client.reminderWhen ? ' ar__rem--' + client.reminderWhen : '')} title={t('Reminder: ') + client.reminder}>
           <Icon name="bell" size={12} />{client.reminder}
         </span>
       )}

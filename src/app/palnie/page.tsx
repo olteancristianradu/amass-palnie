@@ -422,7 +422,9 @@ export default function PalniePage() {
   // „↺ auto": revine la completarea automată (T1 = Data intrare + 1 zi, t1Locked=false).
   const setT1AutoRevert = (id: string) => {
     const c = clienti.find(x => x.id === id);
-    updateInlineMulti(id, { t1: t1Auto(c?.dataIntrare), t1Locked: false });
+    const auto = t1Auto(c?.dataIntrare);
+    // ANTI-PIERDERE: dacă nu există dataIntrare, t1Auto e gol → NU șterge T1-ul existent; doar deblochează.
+    updateInlineMulti(id, auto ? { t1: auto, t1Locked: false } : { t1Locked: false });
   };
 
   // Schimbarea Stadiu: 'Contractat'/'Anulat' = închidere → cere motiv (modal) și trimite
