@@ -30,6 +30,9 @@ export const metadata: Metadata = {
   manifest: '/manifest.webmanifest',
   icons: { icon: '/icon-192.png', apple: '/icon-192.png' },
   appleWebApp: { capable: true, title: 'AMASS Pâlnie', statusBarStyle: 'default' },
+  // Meta generic non-Apple (paritate handoff HTML line 10) — evită warning-ul de deprecare din Chrome
+  // când e prezent doar `apple-mobile-web-app-capable`.
+  other: { 'mobile-web-app-capable': 'yes' },
 };
 
 // Scalare corectă pe telefon/tabletă (responsive) + viewport-fit pentru notch. theme-color = roșu brand.

@@ -6,13 +6,18 @@ import { useT } from '@/lib/i18n';
 // ── TUR GHIDAT (coachmarks cu spotlight) — port din handoff help.jsx ──
 // Adaptat pt Next: turul funcționează CROSS-RUTĂ. Pașii cu `route` declanșează navigarea (nav)
 // înainte de măsurare; pașii fără țintă → tooltip centrat.
+// Tur extins (paritate handoff help.jsx, ~11 pași) — acoperă Dashboard + Pâlnie + Fișă + Setări.
 const TOUR_STEPS: Array<{ sel: string; title: string; body: string[]; place?: string; route?: string }> = [
   { sel: '.sidebar__nav', title: 'Meniul principal', body: ['Dashboard = rapoarte și cifre cheie', 'Pâlnie clienți = lista ta de lucru', 'Numărul = câți clienți ai în pâlnie'], place: 'right' },
+  { sel: '.dash2__bar', title: 'Dashboard — ce vezi aici', body: ['Câți clienți, rata de conversie, suprafața totală', 'Cum curge pâlnia pe cele 7 etape + conversii', 'Indicatori urgenți: schițe/oferte fără follow-up'], place: 'bottom', route: '/dashboard' },
+  { sel: '.drange', title: 'Filtrează pe perioadă', body: ['Azi / Ieri / 7 zile / 30 zile / Anul curent / Tot', 'Toate cifrele se recalculează la selecție', 'Sau alege un interval propriu de date'], place: 'bottom', route: '/dashboard' },
   { sel: '.topbar__switch', title: '3 moduri de a vedea pâlnia', body: ['Carduri = răsfoire rapidă cu acțiuni', 'Tabel = totul dens, ca în Excel', 'Kanban = tragi clienții între stadii (drag & drop)'], place: 'bottom', route: '/palnie' },
   { sel: '.topbar__search', title: 'Caută orice client', body: ['Scrie numele, orașul sau ID-ul', 'Lista se filtrează instant', 'Funcționează în toate vizualizările'], place: 'bottom', route: '/palnie' },
   { sel: '.filter-toggle', title: 'Filtre', body: ['Filtrează după stadiu, prioritate, vârstă, agent, CRM sau perioadă', 'Filtrele rămân active în Carduri, Tabel și Kanban', 'Apasă „Curăță" ca să le resetezi'], place: 'bottom', route: '/palnie' },
+  { sel: '.tbl__total', title: 'Rândul „Total / etapă"', body: ['Totalurile pe fiecare coloană', 'Câți clienți au ajuns în fiecare etapă', 'Se recalculează automat la filtrare'], place: 'bottom', route: '/palnie' },
   { sel: '.tbl-info', title: 'Legenda simbolurilor (ⓘ)', body: ['Explicațiile stau ascunse sub butonul info', 'Punct albastru = T1 completat automat', '⚠ la nume = client fără CRM'], place: 'bottom', route: '/palnie' },
   { sel: '.t1cell', title: 'T1 — automat dar editabil', body: ['Se completează singur din Data intrare', 'Dacă scrii tu o dată → devine „manual"', 'Manual NU se mai suprascrie niciodată'], place: 'bottom', route: '/palnie' },
+  { sel: '.cnm__name', title: 'Deschide fișa clientului', body: ['Click pe nume → Fișa de strategie', 'Stânga scrii datele, dreapta se calculează singur', 'Sus vezi argumentul de vânzare (economie, amortizare)'], place: 'right', route: '/palnie' },
   { sel: '.help-btn', title: 'Butonul de Ajutor', body: ['Disponibil pe orice pagină', 'Reia turul oricând', 'Explică ce face fiecare buton și setare'], place: 'bottom' },
   { sel: '.userbtn', title: 'Cont & Setări', body: ['Click pe numele tău → meniu', 'Setări: CRM, sincronizare, apoi aspect', 'Comutare temă light/dark'], place: 'top' },
 ];

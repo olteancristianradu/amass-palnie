@@ -68,6 +68,8 @@ export default function StrategiePage() {
   const formDirty = useRef(false);
   const [emailOpen, setEmailOpen] = useState(false);
   const [reminderOpen, setReminderOpen] = useState(false);
+  // Mod prezentare (paritate handoff .fisa--present): ascunde inputurile, lasă doar panoul AMASS (vedere client).
+  const [present, setPresent] = useState(false);
   const [infoCrmOpen, setInfoCrmOpen] = useState(false);
   const [infoText, setInfoText] = useState('');
   // Contact LIVE din CRM (telefon/email reale) pentru header-ul fișei.
@@ -331,7 +333,8 @@ export default function StrategiePage() {
       const value = typeof raw === 'number'
         ? nfmt(raw, Number.isInteger(raw) ? 0 : 2)
         : (raw == null || raw === '' ? '—' : String(raw));
-      return <CalcRow key={f.key} label={t(label)} value={value} formula={f.formula ? t(f.formula) : f.formula} note={f.note ? t(f.note) : f.note} fam={f.fam} />;
+      const unit = f.calcKey ? CALC_UNITS[f.calcKey] : undefined;
+      return <CalcRow key={f.key} label={t(label)} value={value} formula={f.formula ? t(f.formula) : f.formula} note={f.note ? t(f.note) : f.note} fam={f.fam} unit={unit} hero={f.calcKey === 'cost_investitie_eur'} />;
     }
 
     const control = renderControl(f);
@@ -619,7 +622,7 @@ export default function StrategiePage() {
 
   return (
     <Layout contentMod="content--fisa" title={client.nume}>
-      <div className="fisa rise">
+      <div className={'fisa rise' + (present ? ' fisa--present' : '')}>
         {/* ── breadcrumb (Pâlnie + cat-tag) + Stadiu + bară de acțiuni (autosave + butoane colorate) ── */}
         <header className="fisa__top">
           <div className="fisa__crumbs">
@@ -659,6 +662,9 @@ export default function StrategiePage() {
             <button onClick={downloadWord} className="btn btn-word btn-sm"><Icon name="note" size={14} />{t('Word')}</button>
             <a href={`https://gestcom.ro/amass/index.php?m=lucrari&a=view&id_lucrare=${client.idLucrare}`}
                target="_blank" rel="noopener" className="btn btn-secondary btn-sm">{t('CRM ↗')}</a>
+            {/* Mod prezentare (paritate handoff): ascunde inputurile, lasă doar panoul AMASS pentru client. */}
+            <button onClick={() => setPresent(p => !p)} className={'btn btn-sm ' + (present ? 'btn-primary' : 'btn-secondary')}
+              title={t('Vedere client: doar economia cu AMASS')}><Icon name={present ? 'eyeOff' : 'eye'} size={14} />{present ? t('Ieși din prezentare') : t('Prezentare')}</button>
           </div>
         </header>
 
@@ -800,14 +806,25 @@ function InfoDot({ formula, note }: { formula?: string; note?: string }) {
 }
 
 // ── Câmp calculat AMASS (read-only) cu info clickabil (.calcrow) ──
-function CalcRow({ label, value, formula, note, fam }: { label: string; value: string; formula?: string; note?: string; fam?: FisaColorFam }) {
+// Sufix unitate per rând de calcul (paritate handoff pa-fisa.jsx calcrow__u). Doar SCALARI;
+// range-urile (cost_esalonare_range / reactie_esalonare_range) au deja unitatea în valoare → omise.
+const CALC_UNITS: Record<string, string> = {
+  putere_necesara_kw: 'kW', consum_zilnic_kwh: 'kWh', consum_lunar_kwh: 'kWh',
+  consum_anual_kwh: 'kWh', necesar_pftv_amass_kw: 'kW', productie_estimata: 'kWh',
+  cost_investitie_eur: '€', cost_investitie_economic_eur: '€', cost_promo_eur: '€',
+  diferenta_consum_lei: 'lei/lună', profit_anual_lei: 'lei', diferenta_pftv_kw: 'kW', amortizare_ani: 'ani',
+};
+
+function CalcRow({ label, value, formula, note, fam, unit, hero }: { label: string; value: string; formula?: string; note?: string; fam?: FisaColorFam; unit?: string; hero?: boolean }) {
   const strong = fam === 'verde';
   return (
-    <div className={'calcrow' + (strong ? ' is-strong' : '')}>
+    <div className={'calcrow' + (hero ? ' is-hero' : strong ? ' is-strong' : '')}>
       <span className="calcrow__lbl">{label}
         {(formula || note) && <InfoDot formula={formula} note={note} />}
       </span>
-      <span className="calcrow__v mono">{value}</span>
+      <span className="calcrow__v mono">{value}
+        {value !== '—' && unit ? <span className="calcrow__u" style={{ color: 'var(--text-muted)', fontWeight: 400, marginLeft: 3, fontSize: '.82em' }}>{unit}</span> : null}
+      </span>
     </div>
   );
 }
