@@ -2,6 +2,11 @@
 # Pornire:  docker compose up -d --build
 # Logs:     docker compose logs -f
 # Oprire:   docker compose down   (datele rămân în volum)
+#
+# IMPORTANT: numele proiectului e FIXAT la 'amass-palnie' (independent de numele folderului) → volumul de
+# date e MEREU 'amass-palnie_amass-data'. Așa, toate scripturile (.bat) și comenzile de backup/restaurare
+# nimeresc ÎNTOTDEAUNA volumul corect, indiferent în ce folder e clonat repo-ul (evită „date pierdute").
+name: amass-palnie
 services:
   amass:
     build: .
