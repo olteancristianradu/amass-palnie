@@ -362,9 +362,14 @@
 .fisa__notes { font-family: var(--font-ui); }
 .fz .input, .fz .select, .fz textarea.input { font-size: .8125rem; }
 
-/* mod prezentare client — ascunde inputurile, arată argumentul */
-.fisa--present .fisa__cols, .fisa--present .qbody, .fisa--present .fisa__notes { display: none; }
+/* mod prezentare client — ascunde inputurile, arată DOAR panoul AMASS (vedere client).
+   Webapp: .fz--amass e în .fisa__colR (în .fisa__cols), nu un .argcard separat ca în handoff —
+   deci NU ascundem tot .fisa__cols, ci doar coloana de input (.fisa__colL) + zonele non-amass. */
+.fisa--present .qbody, .fisa--present .fisa__notes, .fisa--present .fisa__colL { display: none; }
 .fisa--present .fz:not(.fz--amass) { display: none; }
+.fisa--present .fisa__cols { grid-template-columns: 1fr; }
+.fisa--present .fisa__colR { position: static; top: auto; max-width: 680px; margin: 0 auto; }
+.fisa--present .fz--amass { box-shadow: var(--shadow-lg); }
 .fisa--present .argcard { box-shadow: var(--shadow-lg); }
 .fisa--present .argtile__v { font-size: 2.1rem; }
 
