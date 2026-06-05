@@ -37,8 +37,8 @@
   --fs-body:.875rem; --fs-sm:.8125rem; --fs-xs:.6875rem; --fs-mono:.8125rem;
   --lh-tight:1.15; --lh-snug:1.35; --lh-body:1.5;
   --sp-1:.25rem; --sp-2:.5rem; --sp-3:.75rem; --sp-4:1rem; --sp-5:1.25rem; --sp-6:1.5rem; --sp-8:2rem; --sp-10:2.5rem; --sp-12:3rem; --sp-16:4rem;
-  --r-xs:2px; --r-sm:4px; --r-md:6px; --r-lg:10px; --r-full:999px;
-  --sidebar-w:244px; --header-h:56px;
+  --r-xs:3px; --r-sm:5px; --r-md:8px; --r-lg:13px; --r-full:999px; /* aliniat handoff (era 2/4/6/10) */
+  --sidebar-w:248px; --header-h:60px; /* aliniat handoff (era 244/56) */
   --density:1; --transition:140ms cubic-bezier(.4,0,.2,1);
 
   /* ---- ALIAS-URI compat cu codul vechi ---- */
@@ -91,7 +91,7 @@
 [data-density="comfortable"] { --density:1.18; --density-pad:1.28; }
 [data-density="relaxed"]     { --density:1.18; --density-pad:1.28; }
 [data-radius="sharp"]   { --r-xs:0; --r-sm:1px; --r-md:2px; --r-lg:3px; }
-[data-radius="default"], [data-radius="normal"] { --r-xs:2px; --r-sm:4px; --r-md:6px; --r-lg:10px; }
+[data-radius="default"], [data-radius="normal"] { --r-xs:3px; --r-sm:5px; --r-md:8px; --r-lg:13px; } /* aliniat handoff */
 [data-radius="soft"], [data-radius="round"] { --r-xs:4px; --r-sm:8px; --r-md:12px; --r-lg:16px; }
 
 /* ============================================================================ RESET / BAZĂ */
