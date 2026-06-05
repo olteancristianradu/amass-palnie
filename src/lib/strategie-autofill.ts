@@ -262,6 +262,10 @@ export function parseObservatii(obsText: string | null | undefined): AutofillRes
   let bransament: string | null =
     findInlineMatch(/bransament/i, /\b(monofazic|trifazic)\b/i)
     || findAnswerAfter(/(?:branșament|bransament|tip\s+curent).*?(?:monofazic|trifazic|amperaj)/i)
+    // FIX 2026-06-05: format formular cu valoarea pe LINIA URMĂTOARE ("Bransament\nTRIFAZIC") — eticheta
+    // singură, valoarea de pe linia de după. (~33 clienți aveau trifazic/monofazic dar ieșeau null.)
+    // Normalizarea STRICTĂ de mai jos garantează că o linie nepotrivită → null (sigur).
+    || findAnswerAfter(/bran[sșş]ament|tip\s+curent/i)
     || findAnswerAfter(/curent.*?electric/i);
 
   // PFTV: răspunsuri "DA"/"NU"/"DORESTE"/"ARE DEJA"/"VREAU IN VIITOR"
