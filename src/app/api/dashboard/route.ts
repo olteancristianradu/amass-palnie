@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   const validStart = parseLocalDay(startParam);
   const validEnd = parseLocalDay(endParam);
   if (validStart || validEnd) {
-    const di: any = {};
+    const di: { gte?: Date; lt?: Date } = {};
     if (validStart) {
       di.gte = validStart; // deja 00:00:00 LOCAL
     }
@@ -54,9 +54,9 @@ export async function GET(req: NextRequest) {
   const byNevoie: Record<string, number> = {};
   const byPrioritate: Record<string, number> = { '0': 0, '1': 0, '2': 0, '3': 0, '4': 0 };
   let totalSuprafata = 0;
-  const nz = (v: any) => v != null && String(v).trim() !== '';
+  const nz = (v: unknown) => v != null && String(v).trim() !== '';
   // Treapta "Nevoie identificată" = nevoia acoperită (eventual cu condiții), ca în Dashboard.gs.
-  const isNevoieAcoperita = (v: any) => {
+  const isNevoieAcoperita = (v: unknown) => {
     const s = String(v ?? '').trim();
     return s === 'Nevoie Acoperita' || s === 'Nevoie Acoperita in anumite conditii';
   };
@@ -104,7 +104,7 @@ export async function GET(req: NextRequest) {
 
   // Worklist „Clienți cu schiță în lucru" (paritate design pa-dashboard.jsx): schiță setată,
   // FĂRĂ pre-ofertă; sortat după vechimea schiței (cele mai vechi sus). Cap la 50 de rânduri.
-  const parseRoDays = (v: any): number => {
+  const parseRoDays = (v: unknown): number => {
     const m = String(v ?? '').match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
     if (!m) return 0;
     const d = new Date(+m[3], +m[2] - 1, +m[1]);

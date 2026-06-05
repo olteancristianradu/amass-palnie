@@ -3,7 +3,7 @@
  * scheduler-ul de auto-sync (lib/auto-sync.ts). Fără sesiune; primește userId.
  */
 import { prisma } from './db';
-import { fetchList, fetchDetail, fetchUltimulReminderDeschis } from './crm-client';
+import { fetchList, fetchDetail, fetchUltimulReminderDeschis, type CrmDetail } from './crm-client';
 import { parseObservatii, mapAlternativaChips } from './strategie-autofill';
 import { auditLog } from './audit';
 
@@ -31,12 +31,12 @@ function autofillBlob(prev: string | null | undefined, observatii: string | null
   const parsed = parseObservatii(observatii);
 
   // Parse blob existent în mod tolerant (JSON corupt → pornim de la {}, nu pierdem rândul).
-  let base: Record<string, any> = {};
+  let base: Record<string, unknown> = {};
   if (prev) { try { base = JSON.parse(prev) || {}; } catch { base = {}; } }
 
   let changed = false;
   // FILL-ONLY-EMPTY: setează cheia DOAR dacă e goală în blob ȘI valoarea parsată e utilă.
-  const fillEmpty = (key: string, val: any) => {
+  const fillEmpty = (key: string, val: unknown) => {
     const cur = base[key];
     const curEmpty = cur === undefined || cur === null || String(cur).trim() === '';
     const valOk = val !== undefined && val !== null && String(val).trim() !== '';
@@ -76,7 +76,7 @@ function autofillBlob(prev: string | null | undefined, observatii: string | null
 }
 
 /** Câmpurile de detaliu comune (din CRM detail) pentru upsert. */
-function detailFields(d: any) {
+function detailFields(d: CrmDetail) {
   return {
     judet: d.judet, sursa: d.sursa, telefon: d.telefon, email: d.email,
     suprafata: typeof d.suprafata === 'number' ? d.suprafata : null,
@@ -118,14 +118,14 @@ export async function syncNewClients(userId: string) {
           update: { lastDetailAt: new Date(), ...detailFields(d), ...blobField }
         });
         added++;
-      } catch (e: any) { console.error('syncNewClients id=' + id, e?.message); }
+      } catch (e) { console.error('syncNewClients id=' + id, e instanceof Error ? e.message : String(e)); }
     }
     await prisma.syncRun.update({ where: { id: run.id }, data: { status: 'COMPLETED', completedAt: new Date(), total: allIds.length, processed: added } });
     // Audit sync: sumar processed/total/fetches/errors (fără să stricăm fluxul de sync/SyncRun).
     await auditLog({ userId, func: 'sync/clients-new', action: 'SYNC', fields: JSON.stringify({ processed: added, total: allIds.length, fetches: fresh.length, errors: fresh.length - added }) });
     return { ok: true as const, totalCRM: allIds.length, added };
-  } catch (e: any) {
-    return { ok: false as const, error: e?.message };
+  } catch (e) {
+    return { ok: false as const, error: e instanceof Error ? e.message : String(e) };
   }
 }
 
@@ -168,16 +168,17 @@ export async function refreshDetailsBatch(userId: string, limit = 0, type = 'DET
           }
         });
         updated++;
-      } catch (e: any) { errors++; console.error('refreshDetails id=' + c.idLucrare, e?.message); }
+      } catch (e) { errors++; console.error('refreshDetails id=' + c.idLucrare, e instanceof Error ? e.message : String(e)); }
       processed++;
     }
     await prisma.syncRun.update({ where: { id: run.id }, data: { status: 'COMPLETED', completedAt: new Date(), processed, total: clienti.length } });
     // Audit sync: sumar processed/total/fetches/errors (fără să stricăm fluxul de sync/SyncRun).
     await auditLog({ userId, func: 'sync/details', action: 'SYNC', fields: JSON.stringify({ processed, total: clienti.length, fetches: processed, updated, errors }) });
     return { ok: true as const, processed, updated, errors, total: clienti.length };
-  } catch (e: any) {
-    await prisma.syncRun.update({ where: { id: run.id }, data: { status: 'FAILED', completedAt: new Date(), errorMessage: e?.message } });
-    return { ok: false as const, error: e?.message };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await prisma.syncRun.update({ where: { id: run.id }, data: { status: 'FAILED', completedAt: new Date(), errorMessage: msg } });
+    return { ok: false as const, error: msg };
   }
 }
 
@@ -201,8 +202,9 @@ export async function refreshRemindere(userId: string) {
     // Audit sync: sumar processed/total/fetches/errors (fără să stricăm fluxul de sync/SyncRun).
     await auditLog({ userId, func: 'sync/reminders', action: 'SYNC', fields: JSON.stringify({ processed, total: clienti.length, fetches: processed, withReminder, errors: 0 }) });
     return { ok: true as const, processed, withReminder, total: clienti.length };
-  } catch (e: any) {
-    await prisma.syncRun.update({ where: { id: run.id }, data: { status: 'FAILED', completedAt: new Date(), errorMessage: e?.message } });
-    return { ok: false as const, error: e?.message };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await prisma.syncRun.update({ where: { id: run.id }, data: { status: 'FAILED', completedAt: new Date(), errorMessage: msg } });
+    return { ok: false as const, error: msg };
   }
 }

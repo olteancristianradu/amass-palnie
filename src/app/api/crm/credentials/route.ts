@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ ok: false, error: 'Neautentificat' }, { status: 401 });
   const userId = (session.user as any).id;
-  const { crmUser, crmPass } = await req.json().catch(() => ({} as any));
+  const { crmUser, crmPass } = await req.json().catch(() => ({} as Record<string, unknown>));
   if (!crmUser || !crmPass) return NextResponse.json({ ok: false, error: 'Date lipsă' }, { status: 400 });
   const enc = encrypt(crmPass);
   await prisma.crmCredentials.upsert({
@@ -34,7 +34,7 @@ export async function PATCH(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ ok: false }, { status: 401 });
   const userId = (session.user as any).id;
-  const { autoSync } = await req.json().catch(() => ({} as any));
+  const { autoSync } = await req.json().catch(() => ({} as Record<string, unknown>));
   const c = await prisma.crmCredentials.findUnique({ where: { userId } });
   if (!c) return NextResponse.json({ ok: false, error: 'Nu ai credențiale CRM configurate' }, { status: 400 });
   await prisma.crmCredentials.update({ where: { userId }, data: { autoSync: !!autoSync } });

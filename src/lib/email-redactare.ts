@@ -24,24 +24,24 @@ const TO_LIST = 'backoffice@amass.ro; Tehnic Amass <tehnic@amass.ro>; AMASS <adm
 const CC_LIST = 'Dana Rulea <danarulea@amass.ro>';
 
 /** FIX #1: elimină CR/LF din valori folosite în subiect/headere — previne email header injection */
-function stripHeaders(s: any): string {
+function stripHeaders(s: unknown): string {
   return String(s ?? '').replace(/[\r\n]+/g, ' ').trim();
 }
 /** FIX #2: escape entități HTML pentru câmpuri interpolate în corpul HTML al emailului */
-function esc(s: any): string {
+function esc(s: unknown): string {
   // fieldValueToText normalizează multiselect (array în blob) → text cu virgule; pe non-array e identitate
   return fieldValueToText(s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
-function v_(x: any, suffix = ''): string {
+function v_(x: unknown, suffix = ''): string {
   // pentru multiselect: array gol e truthy în JS → folosim textul normalizat ca test de "are valoare"
   const text = fieldValueToText(x);
   return text ? esc(x) + suffix : '<b>_____________</b>';
 }
 function m_(label: string): string { return '<b>' + esc(label) + '</b>'; }
 /** FIX #3: test explicit null/undefined/'' — valoarea 0 (numeric) e validă și trebuie afișată ca "0" */
-function numStr(x: any, suffix: string): string {
+function numStr(x: unknown, suffix: string): string {
   return (x !== null && x !== undefined && x !== '') ? String(x) + suffix : '';
 }
 function h_(text: string): string { return '<b style="text-transform:uppercase;letter-spacing:0.5px">' + esc(text) + '</b>'; }

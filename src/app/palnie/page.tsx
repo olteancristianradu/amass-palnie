@@ -43,6 +43,16 @@ interface Client {
   owner?: { id: string; name: string | null; email: string } | null;
 }
 
+// Răspuns minimal al API-urilor /api/clienti* și /api/crm/*.
+interface ApiResp {
+  ok?: boolean;
+  error?: string;
+  validationErrors?: string[];
+  id?: string;
+  clienti?: Client[];
+  isManager?: boolean;
+}
+
 const STADII = ['', 'Anulat', 'Contractat', 'Amanat', 'Finalizat'];
 const NEVOI = ['', 'Nevoie Acoperita', 'Tentativa', 'Nu il putem ajuta', 'Nevoie viitoare', 'Nevoie Acoperita in anumite conditii'];
 
@@ -190,7 +200,8 @@ function DateCell({ value, onChange, faint, title }: {
   const ref = useRef<HTMLInputElement>(null);
   const open = () => {
     const el = ref.current; if (!el) return;
-    if ((el as any).showPicker) { try { (el as any).showPicker(); return; } catch {} }
+    const elp = el as HTMLInputElement & { showPicker?: () => void };
+    if (elp.showPicker) { try { elp.showPicker(); return; } catch {} }
     el.focus(); el.click();
   };
   const iso = dateToISO(value);
@@ -278,7 +289,7 @@ export default function PalniePage() {
   useEffect(() => { try { localStorage.setItem('amass-palnie-filters', JSON.stringify(filters)); } catch {} }, [filters]);
   useEffect(() => { try { localStorage.setItem('amass-palnie-sort', sortKey); } catch {} }, [sortKey]);
   // Update optimist local — folosit de Kanban (drag & drop) ca să reflecte mutarea instant.
-  const patchLocal = (id: string, patch: Record<string, any>) => setClienti(prev => prev.map(c => c.id === id ? { ...c, ...patch } : c));
+  const patchLocal = (id: string, patch: Partial<Client>) => setClienti(prev => prev.map(c => c.id === id ? { ...c, ...patch } : c));
   // Token anti-race pentru load(): fiecare cerere primește un id; la întoarcere, dacă a pornit între
   // timp o cerere mai nouă (ex. managerul a comutat agentul), ignorăm rezultatul stale (nu mai facem setState).
   const loadToken = useRef(0);
@@ -300,14 +311,14 @@ export default function PalniePage() {
       const r = await fetch('/api/clienti?limit=5000&owner=' + reqOwner);
       // Sesiune expirată/invalidă → NU lăsa pagina goală; trimite la login.
       if (r.status === 401) { window.location.href = '/login'; return; }
-      const j = await r.json().catch(() => ({} as any));
+      const j: ApiResp = await r.json().catch(() => ({} as ApiResp));
       // ANTI-RACE: a pornit între timp o cerere mai nouă → ignorăm acest rezultat (nu suprapunem date stale).
       if (myToken !== loadToken.current) return;
-      if (r.ok && j.ok) { setClienti(j.clienti); setIsManager(j.isManager); }
+      if (r.ok && j.ok) { setClienti(j.clienti ?? []); setIsManager(j.isManager ?? false); }
       else if (!silent) setMsg('❌ ' + (j.error || `${t('Eroare server')} (${r.status})`));
-    } catch (e: any) {
+    } catch (e) {
       if (myToken !== loadToken.current) return; // eroarea unei cereri stale nu trebuie să afecteze UI-ul curent
-      if (!silent) setMsg('❌ ' + (e?.message || t('Nu s-a putut încărca pâlnia')));
+      if (!silent) setMsg('❌ ' + (e instanceof Error ? e.message : t('Nu s-a putut încărca pâlnia')));
     } finally {
       // finally garantează că spinnerul „Se încarcă pâlnia…" nu rămâne agățat la o eroare/HTML neașteptat.
       // Doar cererea cea mai nouă are voie să stingă spinnerul (o cerere stale nu trebuie să-l stingă prematur).
@@ -352,7 +363,7 @@ export default function PalniePage() {
       const j = await r.json();
       if (j.ok) { setMsg(`✅ ${label}: ${JSON.stringify(j).slice(0, 200)}`); await load(); loadMeta(); }
       else { setMsg('❌ ' + j.error); }
-    } catch (e: any) { setMsg('❌ ' + e.message); }
+    } catch (e) { setMsg('❌ ' + (e instanceof Error ? e.message : String(e))); }
     setSync(null);
   }
 
@@ -365,7 +376,7 @@ export default function PalniePage() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      const j = await r.json().catch(() => ({} as any));
+      const j: ApiResp = await r.json().catch(() => ({} as ApiResp));
       if (r.ok && j.ok) {
         setMsg('✅ ' + t('Client creat (⚠ fără înregistrare CRM)'));
         setNewModal(false);
@@ -374,8 +385,8 @@ export default function PalniePage() {
       } else {
         setMsg('❌ ' + (j.error || `${t('Eroare server')} (${r.status})`));
       }
-    } catch (e: any) {
-      setMsg('❌ ' + (e?.message || t('Nu s-a putut crea clientul')));
+    } catch (e) {
+      setMsg('❌ ' + (e instanceof Error ? e.message : t('Nu s-a putut crea clientul')));
     }
   }
 
@@ -392,7 +403,7 @@ export default function PalniePage() {
   }
 
   async function updateInline(id: string, field: string, value: string) {
-    const prev = clienti.find(c => c.id === id) as any;
+    const prev = clienti.find(c => c.id === id) as (Client & Record<string, unknown>) | undefined;
     const prevVal = prev ? (prev[field] ?? null) : null;
     const newVal = value || null;
     setClienti(p => p.map(c => c.id === id ? { ...c, [field]: newVal } : c));
@@ -401,20 +412,20 @@ export default function PalniePage() {
       body: JSON.stringify({ [field]: newVal })
     });
     if (!r.ok) {
-      const j = await r.json().catch(() => ({} as any));
+      const j: ApiResp = await r.json().catch(() => ({} as ApiResp));
       setMsg('❌ ' + (j.validationErrors?.join(' ') || j.error || t('Nu s-a putut salva')));
       // Rollback DOAR dacă valoarea afișată e încă cea pe care AM setat-o noi. Dacă între timp a apărut o
       // a doua editare (alt val) pe același câmp, NU o suprascriem cu valoarea veche (anti-pierdere afișaj).
-      setClienti(p => p.map(c => (c.id === id && (c as any)[field] === newVal) ? { ...c, [field]: prevVal } : c));
+      setClienti(p => p.map(c => (c.id === id && (c as Client & Record<string, unknown>)[field] === newVal) ? { ...c, [field]: prevVal } : c));
     }
   }
 
   // Update optimist cu MAI MULTE câmpuri într-un singur PATCH (ex. T1 + t1Locked, sau stadiu + nevoia).
   // Aceeași logică de rollback ca updateInline, dar pe tot setul de câmpuri modificate.
-  async function updateInlineMulti(id: string, patch: Record<string, any>) {
-    const prev = clienti.find(c => c.id === id) as any;
-    const prevVals: Record<string, any> = {};
-    const newVals: Record<string, any> = {};
+  async function updateInlineMulti(id: string, patch: Record<string, unknown>) {
+    const prev = clienti.find(c => c.id === id) as (Client & Record<string, unknown>) | undefined;
+    const prevVals: Record<string, unknown> = {};
+    const newVals: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(patch)) {
       prevVals[k] = prev ? (prev[k] ?? null) : null;
       newVals[k] = (typeof v === 'string') ? (v || null) : v;
@@ -425,7 +436,7 @@ export default function PalniePage() {
       body: JSON.stringify(newVals)
     });
     if (!r.ok) {
-      const j = await r.json().catch(() => ({} as any));
+      const j: ApiResp = await r.json().catch(() => ({} as ApiResp));
       setMsg('❌ ' + (j.validationErrors?.join(' ') || j.error || t('Nu s-a putut salva')));
       // Rollback COMPLET (toate câmpurile atinse), nu parțial — altfel pe un eșec cu mai multe câmpuri
       // ar rămâne o stare hibridă coruptă. Atomic, doar dacă încă suntem în starea optimistă pe care AM
@@ -433,7 +444,7 @@ export default function PalniePage() {
       // ORICARE câmp, nu rescriem nimic (anti-pierdere afișaj).
       setClienti(p => p.map(c => {
         if (c.id !== id) return c;
-        const stillOurs = Object.keys(newVals).every(k => (c as any)[k] === newVals[k]);
+        const stillOurs = Object.keys(newVals).every(k => (c as Client & Record<string, unknown>)[k] === newVals[k]);
         return stillOurs ? { ...c, ...prevVals } : c;
       }));
     }
@@ -465,10 +476,10 @@ export default function PalniePage() {
     updateInline(id, 'stadiu', value);
   }
   async function closeWithReason(id: string, stadiu: 'Contractat' | 'Anulat', detail: string) {
-    const prev = clienti.find(c => c.id === id) as any;
+    const prev = clienti.find(c => c.id === id);
     const closureReason = stadiu === 'Contractat' ? 'Won' : 'Lost';
     // BUSINESS RULE: la Anulat setăm și nevoia='Nu il putem ajuta' în ACELAȘI PATCH (paritate spreadsheet).
-    const body: Record<string, any> = { stadiu, closureReason, closureReasonDetail: detail };
+    const body: Record<string, unknown> = { stadiu, closureReason, closureReasonDetail: detail };
     if (stadiu === 'Anulat') body.nevoia = 'Nu il putem ajuta';
     setClienti(p => p.map(c => c.id === id ? { ...c, stadiu, ...(stadiu === 'Anulat' ? { nevoia: 'Nu il putem ajuta' } : {}) } : c)); // optimist
     setMsg(`⏳ ${stadiu === 'Contractat' ? t('Contractare') : t('Anulare')} ${t('în CRM…')}`);
@@ -478,10 +489,10 @@ export default function PalniePage() {
     });
     if (r.ok) { setMsg(`✅ ${t('Marcat')} „${t(stadiu)}" ${t('(sincronizat în CRM)')}`); }
     else {
-      const j = await r.json().catch(() => ({} as any));
+      const j: ApiResp = await r.json().catch(() => ({} as ApiResp));
       setMsg('❌ ' + (j.validationErrors?.join(' ') || j.error || t('Nu s-a putut salva')));
-      setClienti(p => p.map(c => (c.id === id && (c as any).stadiu === stadiu)
-        ? { ...c, stadiu: prev ? (prev.stadiu ?? null) : null, ...(stadiu === 'Anulat' && (c as any).nevoia === 'Nu il putem ajuta' ? { nevoia: prev ? (prev.nevoia ?? null) : null } : {}) }
+      setClienti(p => p.map(c => (c.id === id && c.stadiu === stadiu)
+        ? { ...c, stadiu: prev ? (prev.stadiu ?? null) : null, ...(stadiu === 'Anulat' && c.nevoia === 'Nu il putem ajuta' ? { nevoia: prev ? (prev.nevoia ?? null) : null } : {}) }
         : c));
     }
   }
@@ -737,7 +748,7 @@ export default function PalniePage() {
         <div className="table-wrap card rise">
           <TableInfo />
           {(() => {
-            const cnt = (f: (c: Client) => any) => filtered.filter(c => { const v = f(c); return v != null && String(v).trim() !== ''; }).length;
+            const cnt = (f: (c: Client) => unknown) => filtered.filter(c => { const v = f(c); return v != null && String(v).trim() !== ''; }).length;
             const tot = { supr: cnt(c => c.suprafata), intrare: cnt(c => c.dataIntrare), t1: cnt(c => c.t1), nevoia: cnt(c => c.nevoia), schita: cnt(c => c.schitaStatus), preof: cnt(c => c.preOfertat), ofertat: cnt(c => c.ofertat), status: cnt(c => c.stadiu) };
             const faraCRM = filtered.filter(c => c.inCRM === false).length;
             // Celulă de dată editabilă (DateCell): calendar nativ, format cu nume de lună (paritate handoff).
@@ -795,7 +806,7 @@ export default function PalniePage() {
                             </span>
                             {!c.hasAudio && <Icon name="alert" size={13} style={{ color: 'var(--warning)', flex: '0 0 13px' }} />}
                             {/* ⚠ client fără înregistrare în CRM. Modelul webapp NU are câmp inCRM → tratăm ca TRUE (deci nu apare acum); logica e gata. */}
-                            {(c as any).inCRM === false && (
+                            {c.inCRM === false && (
                               <span className="cnm__warn" title={t('Fără înregistrare în CRM — de sincronizat')}><Icon name="alert" size={13} /></span>
                             )}
                             {/* Numele preia culoarea STELEI doar dacă are steluță colorată; altfel rămâne neutru (din CSS). */}

@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   if (!scope) return NextResponse.json({ ok: false, error: 'Neautentificat' }, { status: 401 });
   if (scope.role !== 'admin') return NextResponse.json({ ok: false, error: 'Doar admin' }, { status: 403 });
 
-  let body: any = {};
+  let body: Record<string, unknown> = {};
   try { body = await req.json(); } catch { body = {}; }
   const variant = body?.variant as Variant;
   const key = typeof body?.key === 'string' ? body.key.trim() : '';
@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
   if (action === 'count') {
     let count = 0;
     for (const c of clients) {
-      const blob = safeParseBlob((c as any)[col]);
+      const blob = safeParseBlob(c[col]);
       if (isNonEmptyValue(blob[key])) count++;
     }
     // Audit ușor (read-only, dar util pentru trasabilitate „ce a verificat adminul").
@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
 
   // Ținta vizată: clienții care chiar AU cheia în blob (existență, nu doar non-goală — la hard
   // ștergem cheia indiferent de valoare; la to-obs mutăm doar valori non-goale, dar tot ștergem cheia).
-  const targets = clients.filter(c => key in safeParseBlob((c as any)[col]));
+  const targets = clients.filter(c => key in safeParseBlob(c[col]));
 
   let affected = 0;
   // FIX Bug 1: acumulăm eșecurile per-client (idLucrare/id) în loc să raportăm un fals total.
@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
   // O tranzacție per client (nu una globală) → la 820 clienți o tranzacție uriașă ar putea bloca SQLite;
   // izolarea per client e atomică acolo unde contează (un client nu rămâne în stare inconsistentă).
   for (const c of targets) {
-    const live = applyFieldDeletionToBlob((c as any)[col], key, { mode, label, obsKey });
+    const live = applyFieldDeletionToBlob(c[col], key, { mode, label, obsKey });
 
     // Snapshoturile clientului (dataSnapshot = JSON.stringify(client), cu strategieV1/V2 nested-string).
     const snaps = await prisma.arhivaEntry.findMany({
@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
 
     const snapUpdates: { id: string; dataSnapshot: string }[] = [];
     for (const s of snaps) {
-      let snapObj: any;
+      let snapObj: Record<string, unknown>;
       try { snapObj = JSON.parse(s.dataSnapshot); } catch { continue; } // snapshot corupt → îl lăsăm intact
       if (!snapObj || typeof snapObj !== 'object' || Array.isArray(snapObj)) continue;
       // Câmpul de strategie din snapshot e un JSON nested (string). Aplicăm aceeași ștergere.
@@ -140,7 +140,7 @@ export async function POST(req: NextRequest) {
       affected++;
     } catch (e) {
       // FIX Bug 1 + Bug 3: înregistrăm eșecul (nu incrementăm affected) și logăm cu detalii.
-      const errMsg = (e as any)?.message ?? 'eroare necunoscută';
+      const errMsg = e instanceof Error ? e.message : (e == null ? 'eroare necunoscută' : String(e));
       failed.push({ id: c.id, error: errMsg });
       console.error('[fisa-field] update eșuat pt client', c.id, errMsg);
     }

@@ -10,10 +10,10 @@ import { auditLog } from '@/lib/audit';
 // deci match-ul e NEAMBIGUU și NU se poate scrie pe clientul altui agent (fiecare agent își importă propriile date).
 // UPDATE, nu creează clienți noi (aceia vin din sync CRM). Blob strategie = MERGE (nu pierde ce era).
 
-function isPlainObject(x: any): x is Record<string, any> {
+function isPlainObject(x: unknown): x is Record<string, any> {
   return x != null && typeof x === 'object' && !Array.isArray(x);
 }
-function mergeBlob(existing: string | null, incoming: any): string | undefined {
+function mergeBlob(existing: string | null, incoming: unknown): string | undefined {
   if (incoming == null || incoming === '') return undefined;
   let base: Record<string, any> = {};
   if (existing) { try { const b = JSON.parse(existing); if (isPlainObject(b)) base = b; } catch { /* base = {} */ } }

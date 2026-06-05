@@ -151,6 +151,42 @@ export async function fetchList(userId: string): Promise<string[]> {
   return [...ids].sort((a, b) => Number(a) - Number(b));
 }
 
+/**
+ * Forme DINAMICE ale răspunsurilor AJAX gestcom (JSON.parse din suppressHeaders).
+ * Câmpurile sunt opționale și `unknown` la valoare — accesul se face mereu defensiv
+ * (String(x.foo ?? ''), comparații cu String(...)) ca în Apps Script-ul original.
+ * NU restrâng tipul valorilor (string|number etc.) ca să NU resping date valide.
+ */
+interface GestcomReminderRaw {
+  status_reminder?: unknown;
+  datareminder_reminder?: unknown;
+  orareminder_reminder?: unknown;
+  tip_reminder?: unknown;
+  subtip_reminder?: unknown;
+  info_reminder?: unknown;
+  id_reminder?: unknown;
+  idreminder_reminder?: unknown;
+  idcontact_reminder?: unknown;
+  idcontact?: unknown;
+  idlocalitate_reminder?: unknown;
+  durata_reminder?: unknown;
+  notificare_reminder?: unknown;
+}
+
+interface GestcomContactRaw {
+  idcontact_conluc?: unknown;
+  idcontact?: unknown;
+  id?: unknown;
+  rol_conluc?: unknown;
+  rol?: unknown;
+  nume_contact?: unknown;
+  nume?: unknown;
+  denumire?: unknown;
+  nrtel_reminder?: unknown;
+  telefon_contact?: unknown;
+  telefon?: unknown;
+}
+
 export interface CrmDetail {
   id: string;
   name: string;
@@ -224,14 +260,14 @@ export async function fetchDetail(userId: string, idLucrare: string): Promise<Cr
     const remUrl = CRM_BASE + '?m=remindere&a=lista_remindere&suppressHeaders=1&tip_reminder=0&status_reminder=0&idlucrare_reminder=' + idSafe;
     const remR = await fetch(remUrl, { headers: { Cookie: cookie } });
     const remTxt = await remR.text();
-    const reminders = JSON.parse(remTxt);
+    const reminders: unknown = JSON.parse(remTxt);
     // P2: validare explicită că e array (null/obiect/string → warn + tratăm ca gol).
     if (!Array.isArray(reminders)) { console.warn('[fetchDetail] remindere non-array id_lucrare=' + idSafe + ' tip=' + typeof reminders); }
     if (Array.isArray(reminders) && reminders.length > 0) {
-      const dates = reminders
-        .filter((r: any) => String(r.status_reminder) === '3')
-        .map((r: any) => r.datareminder_reminder)
-        .filter((d: string) => d && d !== '0000-00-00' && /^\d{4}-\d{2}-\d{2}$/.test(d))
+      const dates = (reminders as GestcomReminderRaw[])
+        .filter(r => String(r.status_reminder) === '3')
+        .map(r => String(r.datareminder_reminder ?? ''))
+        .filter(d => d && d !== '0000-00-00' && /^\d{4}-\d{2}-\d{2}$/.test(d))
         .sort();
       if (dates.length > 0) {
         const p = dates[0].split('-');
@@ -311,14 +347,14 @@ export async function fetchUltimulReminderDeschis(userId: string, idLucrare: str
   const url = CRM_BASE + '?m=remindere&a=lista_remindere&suppressHeaders=1&tip_reminder=0&status_reminder=0&idlucrare_reminder=' + idSafe;
   const r = await fetch(url, { headers: { Cookie: cookie } });
   const txt = await r.text();
-  let data: any;
+  let data: unknown;
   try { data = JSON.parse(txt); } catch { return ''; }
   if (!Array.isArray(data)) return '';
 
   // Caut reminders deschise (status=0) sortez după data ASC, iau primul
-  const deschise = data
-    .filter((x: any) => String(x.status_reminder) === '0')
-    .sort((a: any, b: any) => String(a.datareminder_reminder).localeCompare(String(b.datareminder_reminder)));
+  const deschise = (data as GestcomReminderRaw[])
+    .filter(x => String(x.status_reminder) === '0')
+    .sort((a, b) => String(a.datareminder_reminder).localeCompare(String(b.datareminder_reminder)));
   if (deschise.length === 0) return '';
 
   const r0 = deschise[0];
@@ -328,7 +364,7 @@ export async function fetchUltimulReminderDeschis(userId: string, idLucrare: str
     '8': 'TELEFON', '9': 'EMAIL', '10': 'SMS', '11': 'TRIM. OFERTA', '12': 'REDACTARE CONTRACT',
     '13': 'INTREBARE', '14': 'RASPUNS', '16': 'IMPINGERE CONTRACT'
   };
-  const d = r0.datareminder_reminder;
+  const d = String(r0.datareminder_reminder ?? '');
   const dataf = /^\d{4}-\d{2}-\d{2}$/.test(d)
     ? `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}` : '';
   const ora = String(r0.orareminder_reminder || '').slice(0, 5);
@@ -365,18 +401,18 @@ export async function listRemindere(userId: string, idLucrare: string): Promise<
   const url = CRM_BASE + '?m=remindere&a=lista_remindere&suppressHeaders=1&tip_reminder=0&status_reminder=0&idlucrare_reminder=' + idSafe;
   const r = await fetch(url, { headers: { Cookie: cookie } });
   const txt = await r.text();
-  let data: any;
+  let data: unknown;
   try { data = JSON.parse(txt); } catch { return []; }
   if (!Array.isArray(data)) return [];
   const STATUS: Record<string, string> = { '0': 'deschis', '3': 'executat' };
-  const cleanInfo = (s: string) => String(s || '')
+  const cleanInfo = (s: unknown) => String(s || '')
     .replace(/<br\s*\/?>/gi, ' ').replace(/<\/?[a-z][^>]*>/gi, '')
     .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#0?39;|&apos;/g, "'")
     .replace(/&abreve;/gi, 'ă').replace(/&acirc;/gi, 'â').replace(/&icirc;/gi, 'î')
     .replace(/&scedil;/gi, 'ș').replace(/&scaron;/gi, 'ș').replace(/&tcedil;/gi, 'ț')
     .replace(/&[a-z]+;/gi, ' ').replace(/\s+/g, ' ').trim();
   const sortKey = (d: string) => d.split('.').reverse().join(''); // dd.mm.yyyy → yyyymmdd
-  return data.map((x: any) => {
+  return (data as GestcomReminderRaw[]).map(x => {
     const d = String(x.datareminder_reminder || '');
     const dataf = /^\d{4}-\d{2}-\d{2}$/.test(d) ? `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}` : d;
     return {
@@ -570,7 +606,7 @@ export async function pushObservatii(userId: string, idLucrare: string, textNou:
 export async function pushStatusPalnie(userId: string, idLucrare: string, st: {
   schita?: string | null; preOfertat?: string | null; ofertat?: string | null; nevoia?: string | null; stadiu?: string | null;
 }) {
-  const nz = (v: any) => v != null && String(v).trim() !== '';
+  const nz = (v: unknown) => v != null && String(v).trim() !== '';
   const linie = [
     'Schiță: ' + (nz(st.schita) ? st.schita : '—'),
     'Pre-ofertat: ' + (nz(st.preOfertat) ? st.preOfertat : '—'),
@@ -588,14 +624,14 @@ export async function fetchContacte(userId: string, idLucrare: string): Promise<
   const url = CRM_BASE + '?m=lucrari&a=lista_conluc&suppressHeaders=1&id_lucrare=' + idSafe;
   const r = await fetch(url, { headers: { Cookie: cookie } });
   const txt = await r.text();
-  let data: any;
+  let data: unknown;
   try { data = JSON.parse(txt); } catch { return []; }
   if (!Array.isArray(data)) return [];
   // lista_conluc e join table — are idcontact_conluc + rol_conluc (nu nume/telefon direct).
   const ROL: Record<string, string> = { '1': 'Beneficiar', '2': 'Plătitor', '3': 'Contact', '4': 'Arhitect', '5': 'Constructor' };
   const seen = new Set<string>();
   const out: Array<{ idContact: string; nume: string; telefon: string; rol: string }> = [];
-  for (const c of data) {
+  for (const c of data as GestcomContactRaw[]) {
     const id = String(c.idcontact_conluc || c.idcontact || c.id || '').trim();
     if (!id || id === '0' || seen.has(id)) continue;
     seen.add(id);
@@ -692,7 +728,7 @@ export async function markOpenRemindersExecuted(userId: string, idLucrare: strin
   if (!idSafe) return { ok: false, marked: 0, error: 'id_lucrare invalid' };
 
   // 1) Citește lista de remindere (raw JSON), cu retry pe sesiune expirată.
-  let deschise: any[] = [];
+  let deschise: GestcomReminderRaw[] = [];
   let cookie = '';
   try {
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -702,14 +738,14 @@ export async function markOpenRemindersExecuted(userId: string, idLucrare: strin
       const r = await fetch(url, { headers: { Cookie: cookie } });
       const txt = await r.text();
       if (isLoginPage(txt)) { await invalidateCookie(userId); continue; }
-      let data: any;
+      let data: unknown;
       try { data = JSON.parse(txt); } catch { data = null; }
       if (!Array.isArray(data)) { deschise = []; break; }
-      deschise = data.filter((x: any) => String(x.status_reminder) === '0');
+      deschise = (data as GestcomReminderRaw[]).filter(x => String(x.status_reminder) === '0');
       break;
     }
-  } catch (e: any) {
-    console.warn('[markOpenRemindersExecuted] eroare la citirea listei id_lucrare=' + idSafe + ': ' + (e?.message || e));
+  } catch (e) {
+    console.warn('[markOpenRemindersExecuted] eroare la citirea listei id_lucrare=' + idSafe + ': ' + (e instanceof Error ? e.message : String(e)));
     return { ok: false, marked: 0, error: 'Nu am putut citi reminderele deschise' };
   }
 
@@ -767,8 +803,8 @@ export async function markOpenRemindersExecuted(userId: string, idLucrare: strin
         continue;
       }
       marked++;
-    } catch (e: any) {
-      console.warn('[markOpenRemindersExecuted] eroare la marcarea unui reminder (id_lucrare=' + idSafe + '): ' + (e?.message || e));
+    } catch (e) {
+      console.warn('[markOpenRemindersExecuted] eroare la marcarea unui reminder (id_lucrare=' + idSafe + '): ' + (e instanceof Error ? e.message : String(e)));
     }
   }
 

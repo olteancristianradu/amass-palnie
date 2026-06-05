@@ -28,8 +28,8 @@ interface AcctState { lastLightAt: number; lastDetailAt: number; lastError?: str
 
 interface AutoSyncGlobal { started: boolean; state: Map<string, AcctState>; timer: ReturnType<typeof setInterval> | null; busy: Set<string>; }
 function G(): AutoSyncGlobal {
-  const g = globalThis as any;
-  if (!g.__amassAutoSync) g.__amassAutoSync = { started: false, state: new Map(), timer: null, busy: new Set<string>() } as AutoSyncGlobal;
+  const g = globalThis as typeof globalThis & { __amassAutoSync?: AutoSyncGlobal };
+  if (!g.__amassAutoSync) g.__amassAutoSync = { started: false, state: new Map(), timer: null, busy: new Set<string>() };
   // Migrare în caz de hot-reload peste o instanță veche fără `busy`.
   if (!g.__amassAutoSync.busy) g.__amassAutoSync.busy = new Set<string>();
   return g.__amassAutoSync;
@@ -91,8 +91,8 @@ async function tick() {
           if (!r.ok) throw new Error(r.error);
           s.lightBackoffUntil = 0;
           if (now >= s.detailBackoffUntil) s.lastError = undefined;
-        } catch (e: any) {
-          s.lastError = e?.message || String(e);
+        } catch (e) {
+          s.lastError = e instanceof Error ? (e.message || String(e)) : String(e);
           s.lightBackoffUntil = Date.now() + BACKOFF_MS;
           console.error('[auto-sync] cont', userId, 'eroare LIGHT → backoff 5min:', s.lastError);
         }
@@ -103,8 +103,8 @@ async function tick() {
           if (!r.ok) throw new Error(r.error);
           s.detailBackoffUntil = 0;
           if (now >= s.lightBackoffUntil) s.lastError = undefined;
-        } catch (e: any) {
-          s.lastError = e?.message || String(e);
+        } catch (e) {
+          s.lastError = e instanceof Error ? (e.message || String(e)) : String(e);
           s.detailBackoffUntil = Date.now() + BACKOFF_MS;
           console.error('[auto-sync] cont', userId, 'eroare DETAIL → backoff 5min:', s.lastError);
         }
@@ -120,7 +120,7 @@ export function startAutoSync() {
   console.log('[auto-sync] pornit (light 90s / detalii 10min, lot ' + BATCH + ')');
   // Curăță SyncRun-uri rămase RUNNING după un crash/restart (audit 2026-06-01) — altfel rămân orfane.
   // P4: adăugat catch cu logging (anterior catch gol → eroare Prisma la startup era silențioasă).
-  prisma.syncRun.updateMany({ where: { status: 'RUNNING' }, data: { status: 'FAILED', completedAt: new Date(), errorMessage: 'întrerupt (restart server)' } }).catch((e: any) => { console.error('[auto-sync] cleanup SyncRun la pornire a eșuat:', e?.message || e); });
+  prisma.syncRun.updateMany({ where: { status: 'RUNNING' }, data: { status: 'FAILED', completedAt: new Date(), errorMessage: 'întrerupt (restart server)' } }).catch((e: unknown) => { console.error('[auto-sync] cleanup SyncRun la pornire a eșuat:', e instanceof Error ? (e.message || e) : e); });
   setTimeout(() => { tick().catch(() => {}); g.timer = setInterval(() => tick().catch(() => {}), TICK_MS); }, 15_000);
 }
 

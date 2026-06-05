@@ -21,10 +21,10 @@ export interface KanbanClient {
 }
 
 const today = () => { const d = new Date(); return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`; };
-const nz = (v: any) => !!(v && String(v).trim());
+const nz = (v: unknown) => !!(v && String(v).trim());
 // Pipeline-ul lui Radu: Intrare → T1 → Schiță → Pre-ofertat → Ofertat → Contractat
 // (+ stări laterale: Amânat, Finalizat, Anulat). Drag-ul setează câmpurile etapei-țintă.
-const COLS: Array<{ key: string; label: string; color: string; terminal?: boolean; patch: () => any }> = [
+const COLS: Array<{ key: string; label: string; color: string; terminal?: boolean; patch: () => Record<string, unknown> }> = [
   // FIX 2026-06-04 (paritate design C1): culorile coloanelor = tokenii de stadiu --st-* (rampa
   // rece→cald slate→sky→indigo→violet→amber→green), aceiași folosiți de StagePill în Carduri/Tabel/
   // Dashboard. Înainte erau hardcodate cu o rampă caldă (ofertat = var(--ember)/roșu de brand) →
@@ -89,9 +89,9 @@ export function KanbanBoard({ clienti, isManager, ownerFilter, onPatch, setMsg, 
     }
     doMove(id, colKey, {});
   }
-  async function doMove(id: string, colKey: string, extra: any) {
+  async function doMove(id: string, colKey: string, extra: Record<string, unknown>) {
     const col = COLS.find(c => c.key === colKey)!;
-    const patch: any = { ...col.patch(), ...extra };
+    const patch: Record<string, unknown> = { ...col.patch(), ...extra };
     const cur = clienti.find(c => c.id === id);
     // FIX 2026-06-05 (DATA LOSS — mutare ÎNAPOI): patch-urile coloanelor timpurii pun explicit ''
     // pe câmpurile de dată ale etapelor ulterioare (ex. T1 → schitaStatus/preOfertat/ofertat = '').
@@ -108,14 +108,14 @@ export function KanbanBoard({ clienti, isManager, ownerFilter, onPatch, setMsg, 
       // Nu rescrie peste câmpurile de dată deja completate: scoatem din patch orice cheie de etapă
       // pe care patch-ul ar goli-o (''), dar care are deja o valoare în clientul curent.
       for (const f of STAGE_DATE_FIELDS) {
-        if (f in patch && !nz(patch[f]) && nz((cur as any)[f])) delete patch[f];
+        if (f in patch && !nz(patch[f]) && nz(cur[f])) delete patch[f];
       }
     }
     if (colKey === 'contractat' && cur && !nz(cur.ofertat)) patch.ofertat = today();
     onPatch(id, patch); // optimist
     setMsg(`⏳ ${t('Mut în')} „${t(col.label)}"…`);
     const r = await fetch(`/api/clienti/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) });
-    const j = await r.json().catch(() => ({}));
+    const j: { ok?: boolean; error?: string; validationErrors?: string[] } = await r.json().catch(() => ({}));
     if (r.ok) setMsg(`✅ ${t('Mutat în')} „${t(col.label)}" ${t('(sincronizat în CRM)')}`);
     else { setMsg('❌ ' + (j.validationErrors?.length ? j.validationErrors.join(' ') : (j.error || t('Eroare la mutare')))); reload(); }
   }

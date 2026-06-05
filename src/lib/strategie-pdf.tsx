@@ -17,7 +17,7 @@ const styles = StyleSheet.create({
   obs: { fontSize: 9, marginTop: 4 }
 });
 
-function row(label: string, value: any, unit = '') {
+function row(label: string, value: unknown, unit = '') {
   // normalizează valorile multiselect (array în blob) → text cu virgule, nu '[object Object]'
   const norm = fieldValueToText(value);
   const text = norm !== '' ? norm + (unit ? ' ' + unit : '') : '—';
@@ -27,10 +27,24 @@ function row(label: string, value: any, unit = '') {
   );
 }
 
+interface ClientForPdf {
+  categorie: number;
+  strategieV1?: string | null;
+  strategieV2?: string | null;
+  nume: string;
+  localitate?: string | null;
+  isDT?: boolean | null;
+  idLucrare?: string | null;
+  judet?: string | null;
+  telefon?: string | null;
+  email?: string | null;
+  suprafata?: number | null;
+}
+
 /** Construiește buffer-ul PDF pentru un client (cu strategia stocată). */
-export async function renderStrategiePdf(c: any): Promise<Buffer> {
+export async function renderStrategiePdf(c: ClientForPdf): Promise<Buffer> {
   const stored = c.categorie === 1 ? c.strategieV1 : c.strategieV2;
-  let v: any = {};
+  let v: Record<string, any> = {};
   try { v = stored ? JSON.parse(stored) : {}; } catch { v = {}; }
   v.suprafata = c.suprafata;
   const f = calculate(v);

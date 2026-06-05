@@ -20,7 +20,7 @@ const DATE_FIELDS = ['closeDate', 'nextStepDue'];
 // trimise EXPLICIT: golirea intenționată a unui câmp (chips/multiselect → `[]`, text → '', 0, false)
 // trebuie să se persiste. O cheie absentă din `inc` nici nu intră în buclă, deci `merged` păstrează
 // automat valoarea din `base` (anti-wipe). `null`/`undefined` nu se scriu niciodată (vezi mai jos).
-function mergeStrategieBlob(existing: string | null, incoming: any): string {
+function mergeStrategieBlob(existing: string | null, incoming: unknown): string {
   let base: Record<string, any> = {};
   if (existing) { try { const b = JSON.parse(existing); if (b && typeof b === 'object' && !Array.isArray(b)) base = b; } catch {} }
   const inc = (incoming && typeof incoming === 'object' && !Array.isArray(incoming)) ? incoming : {};
@@ -83,7 +83,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const scope = await getScope();
   if (!scope) return NextResponse.json({ ok: false }, { status: 401 });
   const userId = scope.userId;
-  const updates = await req.json().catch(() => ({} as any));
+  const updates = await req.json().catch(() => ({} as Record<string, any>));
   const before = await prisma.client.findUnique({ where: { id: params.id } });
   if (!before || !(await canAccessClient(scope, before.ownerId))) return NextResponse.json({ ok: false }, { status: 404 });
 
@@ -105,7 +105,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // (cheile `undefined` sunt sărite la linia de mai jos). O simplă schimbare de `stadiu` — inclusiv
   // mutarea ÎNAPOI pe pâlnie — NU atinge câmpurile de dată ale etapelor intermediare (schitaStatus,
   // preOfertat, ofertat, t1, nextStepDue, closeDate etc.) decât dacă vin explicit în body.
-  const data: any = {};
+  const data: Record<string, any> = {};
   for (const f of SIMPLE_FIELDS) {
     if (updates[f] === undefined) continue;
     if (DATE_FIELDS.includes(f)) data[f] = parseDateFlexible(updates[f]);
@@ -208,7 +208,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       schita: updated.schitaStatus, preOfertat: updated.preOfertat, ofertat: updated.ofertat,
       nevoia: updated.nevoia, stadiu: updated.stadiu
     }).then(r => { if (!r.ok) console.error('[status→CRM] id=' + updated.idLucrare, r.error); })
-      .catch(e => console.error('[status→CRM] id=' + updated.idLucrare, e?.message));
+      .catch(e => console.error('[status→CRM] id=' + updated.idLucrare, e instanceof Error ? e.message : String(e)));
   }
   return NextResponse.json({ ok: true, client: updated });
 }

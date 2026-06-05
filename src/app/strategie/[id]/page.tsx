@@ -34,6 +34,7 @@ interface Client {
   obsSituatie: string | null;
   strategieNevoi: string | null;
   observatii: string | null;
+  stelutaCat?: number;
 }
 
 // Micro-definiții pentru chip-urile de tipologie emoțională (tooltip pe chip).
@@ -101,8 +102,8 @@ export default function StrategiePage() {
         // A) MIGRARE LAZY: după ce iau blob-ul stocat, aplic migrarea aditivă (cheile vechi → cheile noi).
         // Datele vechi apar în cheile noi ale template-ului. Idempotentă, fill-only-empty, nu pierde nimic.
         // JSON.parse protejat: un blob corupt în DB nu trebuie să arunce pagina în „ecran alb".
-        let parsedStored: any = {};
-        if (stored) { try { parsedStored = JSON.parse(stored) || {}; } catch { parsedStored = {}; } }
+        let parsedStored: Record<string, unknown> = {};
+        if (stored) { try { parsedStored = (JSON.parse(stored) as Record<string, unknown>) || {}; } catch { parsedStored = {}; } }
         const { blob: migrated } = migrateFisaBlob(parsedStored, variant);
         const base: Record<string, any> = {
           ...migrated,
@@ -114,7 +115,7 @@ export default function StrategiePage() {
         // FILL-ONLY-EMPTY: completăm doar câmpurile goale, nu suprascriem ce a pus agentul.
         const parsed = parseObservatii(j.client.observatii);
         // helper: setează cheia DOAR dacă e goală în form și valoarea parsată e utilă.
-        const fillEmpty = (key: string, val: any) => {
+        const fillEmpty = (key: string, val: unknown) => {
           const cur = base[key];
           const curEmpty = cur === undefined || cur === null || String(cur).trim() === '';
           const valOk = val !== undefined && val !== null && String(val).trim() !== '';
@@ -182,7 +183,7 @@ export default function StrategiePage() {
       .then(r => (r.ok ? r.json() : null))
       .then(j => {
         if (cancelled || !j?.ok || !Array.isArray(j.contacte)) return;
-        const cuTel = j.contacte.find((c: any) => c && String(c.telefon || '').trim() !== '');
+        const cuTel = j.contacte.find((c: { telefon?: unknown }) => c && String(c.telefon || '').trim() !== '');
         const tel = (cuTel?.telefon || '').trim();
         if (tel) setLiveContact({ telefon: tel, email: client.email ?? undefined });
       })
@@ -202,7 +203,7 @@ export default function StrategiePage() {
     bransament: form.bransament
   } as StrategieInput), [form, isV1]);
 
-  function set(key: string, val: any) {
+  function set(key: string, val: unknown) {
     // Orice editare a userului marchează form-ul ca „dirty" → permite salvarea automată.
     formDirty.current = true;
     setForm(prev => ({ ...prev, [key]: val }));
@@ -211,21 +212,21 @@ export default function StrategiePage() {
   // FIX #1: păstrăm EXACT valoarea tastată de user în câmpul editat și o derivăm DOAR pe cealaltă,
   // fără rotunjire distructivă pe partea derivată → un eventual round-trip nu mai corupe ce a tastat
   // userul (înainte: 605 sezon → 101 lunar → ×6 re-derivă 606).
-  function setLunar(v: any) {
+  function setLunar(v: string) {
     // Lunarul tastat rămâne neatins; sezonul derivat (×6) e exact când lunarul e întreg, altfel ține zecimalele.
     let sezon = '';
-    if (v !== '' && v != null) {
+    if (v !== '') {
       const raw = Number(v) * 6;
       sezon = String(Number.isInteger(raw) ? raw : Math.round(raw * 100) / 100);
     }
     formDirty.current = true;
     setForm(prev => ({ ...prev, ca_cost_lunar: v, ca_cost_sezon: sezon }));
   }
-  function setSezon(v: any) {
+  function setSezon(v: string) {
     // Sezonul tastat rămâne neatins; lunarul e doar derivat (÷6), păstrat cu 2 zecimale ca un re-derivat
     // (×6) să reconstruiască fidel sezonul (ex: 605 → lunar 100.83 → ×6 = 604.98 ≈ 605, nu 606).
     let lunar = '';
-    if (v !== '' && v != null) {
+    if (v !== '') {
       const raw = Number(v) / 6;
       lunar = String(Number.isInteger(raw) ? raw : Math.round(raw * 100) / 100);
     }
@@ -288,9 +289,9 @@ export default function StrategiePage() {
         setSaveState('idle');
       }
       setMsg(j.ok ? t('✅ Salvat (+ snapshot arhivă)') : '❌ ' + j.error);
-    } catch (e: any) {
+    } catch (e) {
       // Abort intenționat (a venit o cerere mai nouă) → ignorăm tăcut; alt eșec → idle.
-      if (e?.name === 'AbortError') return;
+      if (e instanceof Error && e.name === 'AbortError') return;
       if (mySeq === saveSeq.current) setSaveState('idle');
     }
   }
@@ -303,7 +304,7 @@ export default function StrategiePage() {
     const now = new Date();
     const p2 = (n: number) => String(n).padStart(2, '0');
     const stamp = `${p2(now.getDate())}.${p2(now.getMonth() + 1)}.${now.getFullYear()} ${p2(now.getHours())}:${p2(now.getMinutes())}`;
-    const userName = (session?.user as any)?.name || (session?.user as any)?.email || '';
+    const userName = (session?.user?.name) || (session?.user?.email) || '';
     setInfoText(buildInfoCrmText(template, form, calc, { userName, now: stamp }));
     setInfoCrmOpen(true);
   }
@@ -365,9 +366,10 @@ export default function StrategiePage() {
   // `missing` = cheia NU există ca proprietate în StrategieCalc → typo în template
   // (distinct de o cheie validă cu valoare null, care e doar „încă necalculat"). Doar display +
   // console.warn (o singură dată per cheie), non-distructiv: nu atinge form-ul sau salvarea.
-  const calcVal = (calcKey?: string): { missing: boolean; value: any } => {
+  const calcVal = (calcKey?: string): { missing: boolean; value: unknown } => {
     if (!calcKey) return { missing: false, value: null };
-    if (!(calcKey in (calc as any))) {
+    const calcRecord = calc as unknown as Record<string, unknown>;
+    if (!(calcKey in calcRecord)) {
       if (!warnedCalcKeys.current.has(calcKey)) {
         warnedCalcKeys.current.add(calcKey);
         // eslint-disable-next-line no-console
@@ -375,7 +377,7 @@ export default function StrategiePage() {
       }
       return { missing: true, value: null };
     }
-    return { missing: false, value: (calc as any)[calcKey] };
+    return { missing: false, value: calcRecord[calcKey] };
   };
 
   // Verifică `cond`: câmpul apare doar dacă valoarea din form[cond.key] ∈ cond.in.
@@ -749,7 +751,7 @@ export default function StrategiePage() {
 
         {/* ── titlu: ⚠ (dacă !inCRM) + nume + oraș + id + contact ── */}
         <div className="fisa__title">
-          <PriorityStar value={stelutaToPrio(Number((client as any).stelutaCat ?? 0))} size={18} />
+          <PriorityStar value={stelutaToPrio(Number(client.stelutaCat ?? 0))} size={18} />
           {!inCRM && <span className="cnm__warn" title={t('Fără înregistrare în CRM')}><Icon name="alert" size={16} /></span>}
           <h1>{client.nume}</h1>
           {client.localitate && <span className="fisa__city">· {client.localitate}</span>}
@@ -949,7 +951,7 @@ function Pills({ options, value, onChange, fam, defs }: {
   );
 }
 
-function EmailModal({ email, clientId, onClose }: { email: any; clientId?: string; onClose: () => void }) {
+function EmailModal({ email, clientId, onClose }: { email: { subject: string; to: string; cc: string; body: string }; clientId?: string; onClose: () => void }) {
   const { t } = useT();
   const [body, setBody] = useState(email.body);
   const [subject, setSubject] = useState(email.subject || '');
@@ -1041,7 +1043,7 @@ function InfoCrmModal({ client, text, setText, onClose, onDone }: {
       const j = await r.json();
       if (j.ok) { setStatus(t('✅ Împins în CRM (') + (j.action || 'ok') + ').'); onDone(t('✅ Info împins în CRM')); }
       else { setStatus('❌ ' + (j.error || t('eroare'))); }
-    } catch (e: any) { setStatus('❌ ' + e.message); }
+    } catch (e) { setStatus('❌ ' + (e instanceof Error ? e.message : String(e))); }
     setPushing(false);
   }
   async function copyText() {

@@ -3,13 +3,15 @@ import { useState } from 'react';
 import { Layout } from '@/components/Layout';
 import { useT } from '@/lib/i18n';
 
+interface ImportResult { ok: boolean; updated: number; notFound: number; skipped: number; total: number; notFoundSample?: string[]; error?: string; }
+
 // Import date din spreadsheet (strategii + status + arhivă) în contul propriu, match pe id_lucrare.
 export default function ImportPage() {
   const { t } = useT();
   const [raw, setRaw] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<ImportResult | null>(null);
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -21,16 +23,16 @@ export default function ImportPage() {
 
   async function doImport() {
     setBusy(true); setMsg(''); setResult(null);
-    let parsed: any;
+    let parsed: unknown;
     try { parsed = JSON.parse(raw); } catch { setMsg(t('❌ JSON invalid — verifică fișierul/textul.')); setBusy(false); return; }
     const body = Array.isArray(parsed) ? { clients: parsed } : parsed;
     try {
       const r = await fetch('/api/admin/import-date', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      const j = await r.json().catch(() => ({} as any));
+      const j: ImportResult = await r.json().catch(() => ({} as ImportResult));
       if (r.status === 401) { setMsg(t('❌ Sesiune expirată — reautentifică-te și încearcă din nou.')); }
       else if (j.ok) { setResult(j); setMsg(`✅ ${t('Gata:')} ${j.updated} ${t('actualizați,')} ${j.notFound} ${t('negăsiți,')} ${j.skipped} ${t('săriți (din')} ${j.total}).`); }
       else { setMsg('❌ ' + (j.error || `${t('Eroare')} (${r.status})`)); }
-    } catch (e: any) { setMsg('❌ ' + e.message); }
+    } catch (e) { setMsg('❌ ' + (e instanceof Error ? e.message : String(e))); }
     setBusy(false);
   }
 
@@ -59,8 +61,8 @@ export default function ImportPage() {
         {result && (
           <div className="text-[12px] text-[var(--fg-soft)] border-t border-[var(--border)] pt-3">
             <div><b className="text-[var(--text)]">{result.updated}</b> {t('clienți actualizați')} · <b>{result.notFound}</b> {t('negăsiți')} · <b>{result.skipped}</b> {t('săriți (din')} {result.total})</div>
-            {result.notFound > 0 && result.notFoundSample?.length > 0 && (
-              <div className="mt-1 text-[var(--fg-faint)]">{t('id_lucrare negăsite (primele):')} {result.notFoundSample.join(', ')} {t('— rulează „Sync clienți" întâi ca să existe în pâlnie.')}</div>
+            {result.notFound > 0 && (result.notFoundSample?.length ?? 0) > 0 && (
+              <div className="mt-1 text-[var(--fg-faint)]">{t('id_lucrare negăsite (primele):')} {(result.notFoundSample ?? []).join(', ')} {t('— rulează „Sync clienți" întâi ca să existe în pâlnie.')}</div>
             )}
           </div>
         )}

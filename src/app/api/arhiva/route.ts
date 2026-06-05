@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   if (!session?.user) return NextResponse.json({ ok: false }, { status: 401 });
   const userId = (session.user as any).id;
 
-  let body: any = {};
+  let body: Record<string, unknown> = {};
   try { body = await req.json(); } catch { body = {}; }
   const entryId = body?.entryId;
   if (!entryId || typeof entryId !== 'string') {
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
   if (!entry) return NextResponse.json({ ok: false, error: 'Snapshot inexistent' }, { status: 404 });
 
   // Parsează snapshot-ul (este JSON-ul clientului salvat la momentul creării).
-  let snap: any = {};
+  let snap: Record<string, any> = {};
   try { snap = JSON.parse(entry.dataSnapshot); } catch {
     return NextResponse.json({ ok: false, error: 'Snapshot corupt' }, { status: 422 });
   }
@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
 
   // Restaurează DOAR câmpurile PREZENTE în snapshot. ANTI-PIERDERE: un snapshot vechi care NU are un
   // câmp (ex. obsSituatie adăugat ulterior) NU mai suprascrie valoarea curentă cu null.
-  const data: any = {};
+  const data: Record<string, any> = {};
   if (snap.strategieV1 !== undefined) data.strategieV1 = snap.strategieV1;
   if (snap.strategieV2 !== undefined) data.strategieV2 = snap.strategieV2;
   if (snap.obsSituatie !== undefined) data.obsSituatie = snap.obsSituatie;

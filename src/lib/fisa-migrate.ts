@@ -17,12 +17,12 @@ const NIV_MAP: Record<string, string> = {
   'Parter': 'Parter', '1 etaj': '+1 etaj', '2 etaje': '+2 etaje', 'Mansarda': 'Mansardă', 'Mansardă': 'Mansardă',
 };
 
-function isEmpty(v: any): boolean {
+function isEmpty(v: unknown): boolean {
   return v === undefined || v === null || (typeof v === 'string' && v.trim() === '') || (Array.isArray(v) && v.length === 0);
 }
 
 /** Întoarce { blob: noul obiect, changed: bool }. NU mutează inputul. */
-export function migrateFisaBlob(raw: any, variant: 'V1' | 'V2'): { blob: Record<string, any>; changed: boolean } {
+export function migrateFisaBlob(raw: Record<string, any> | null | undefined, variant: 'V1' | 'V2'): { blob: Record<string, any>; changed: boolean } {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { blob: raw || {}, changed: false };
   const b: Record<string, any> = { ...raw };
   let changed = false;

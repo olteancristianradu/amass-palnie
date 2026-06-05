@@ -50,8 +50,8 @@ export const authOptions: NextAuthOptions = {
           if (!ok) { try { _lfBump(lk); console.warn('[auth] failed login', email, ip); } catch {} return null; }
           try { _loginFails.delete(lk); } catch {} // succes → resetează contorul
           return { id: user.id, email: user.email, name: user.name ?? user.email, role: user.role };
-        } catch (e: any) {
-          console.error('[auth] authorize error:', e?.message);
+        } catch (e) {
+          console.error('[auth] authorize error:', e instanceof Error ? e.message : String(e));
           return null;
         }
       }
@@ -86,9 +86,9 @@ export const authOptions: NextAuthOptions = {
             token.role = fresh.role;
             token.active = (fresh.active as boolean | null) !== false; // null/true = activ
           }
-        } catch (e: any) {
+        } catch (e) {
           // DB indisponibil temporar → păstrăm token-ul curent, NU delogăm userul
-          console.warn('[auth] jwt refresh DB error (fallback la token existent):', e?.message);
+          console.warn('[auth] jwt refresh DB error (fallback la token existent):', e instanceof Error ? e.message : String(e));
         }
       }
       return token;

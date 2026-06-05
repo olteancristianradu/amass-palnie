@@ -60,29 +60,35 @@ function collectKeys(t: FisaTemplateData): Set<string> {
 // `allowRemoveKeys` (opțional) = chei pentru care ștergerea e PERMISĂ explicit (datele au fost deja
 // curățate prin /api/admin/fisa-field înainte de PATCH) → excluse din verificarea anti-orfanizare.
 export function validateTemplate(
-  t: any,
+  t: unknown,
   prev?: FisaTemplateData,
   allowRemoveKeys?: string[]
 ): { ok: boolean; error?: string } {
   if (!t || typeof t !== 'object') return { ok: false, error: 'Template invalid' };
-  if (t.variant !== 'V1' && t.variant !== 'V2') return { ok: false, error: 'variant trebuie V1 sau V2' };
-  if (!Array.isArray(t.zones)) return { ok: false, error: 'zones trebuie să fie listă' };
+  // After the object guard above, treat as a loose record for validation.
+  const tObj = t as Record<string, unknown>;
+  if (tObj['variant'] !== 'V1' && tObj['variant'] !== 'V2') return { ok: false, error: 'variant trebuie V1 sau V2' };
+  if (!Array.isArray(tObj['zones'])) return { ok: false, error: 'zones trebuie să fie listă' };
   const keys = new Set<string>();
-  for (const z of t.zones) {
-    if (!z || !Array.isArray(z.fields)) return { ok: false, error: 'zonă fără câmpuri' };
-    for (const f of z.fields) {
-      if (!f.key || !f.label || !f.control) return { ok: false, error: 'câmp fără key/label/control' };
-      if (keys.has(f.key)) return { ok: false, error: 'cheie duplicată: ' + f.key };
-      keys.add(f.key);
+  for (const z of tObj['zones'] as unknown[]) {
+    const zObj = z as Record<string, unknown>;
+    if (!zObj || !Array.isArray(zObj['fields'])) return { ok: false, error: 'zonă fără câmpuri' };
+    for (const f of zObj['fields'] as unknown[]) {
+      const fObj = f as Record<string, unknown>;
+      if (!fObj['key'] || !fObj['label'] || !fObj['control']) return { ok: false, error: 'câmp fără key/label/control' };
+      const fKey = fObj['key'] as string;
+      if (keys.has(fKey)) return { ok: false, error: 'cheie duplicată: ' + fKey };
+      keys.add(fKey);
       // Controalele cu opțiuni: dropdown/multiselect + noile pills (single) / chips (multi).
-      const needsOptions = f.control === 'dropdown' || f.control === 'multiselect'
-        || f.control === 'pills' || f.control === 'chips';
-      if (needsOptions && (!Array.isArray(f.options) || f.options.length === 0))
-        return { ok: false, error: 'câmp cu opțiuni fără opțiuni (dropdown/multiselect/pills/chips): ' + f.key };
+      const needsOptions = fObj['control'] === 'dropdown' || fObj['control'] === 'multiselect'
+        || fObj['control'] === 'pills' || fObj['control'] === 'chips';
+      if (needsOptions && (!Array.isArray(fObj['options']) || (fObj['options'] as unknown[]).length === 0))
+        return { ok: false, error: 'câmp cu opțiuni fără opțiuni (dropdown/multiselect/pills/chips): ' + fKey };
       // `cond` (progressive disclosure), dacă e dat, trebuie să fie { key, in: string[] } valid.
-      if (f.cond !== undefined) {
-        if (!f.cond || typeof f.cond.key !== 'string' || !f.cond.key || !Array.isArray(f.cond.in))
-          return { ok: false, error: 'cond invalid (cere { key, in: [...] }): ' + f.key };
+      if (fObj['cond'] !== undefined) {
+        const cond = fObj['cond'] as Record<string, unknown>;
+        if (!cond || typeof cond['key'] !== 'string' || !cond['key'] || !Array.isArray(cond['in']))
+          return { ok: false, error: 'cond invalid (cere { key, in: [...] }): ' + fKey };
       }
     }
   }
@@ -104,14 +110,14 @@ export function validateTemplate(
 }
 
 // Normalizează o valoare multiselect (poate fi array, string cu ';'/',' sau gol) → string[] pentru UI/stocare.
-export function asMulti(v: any): string[] {
+export function asMulti(v: unknown): string[] {
   if (Array.isArray(v)) return v.filter(Boolean).map(String);
   if (typeof v === 'string' && v.trim()) return v.split(/[;,]/).map(s => s.trim()).filter(Boolean);
   return [];
 }
 
 // Reprezentare text a unei valori (multiselect → join) pentru PDF/Word/email/push CRM.
-export function fieldValueToText(v: any): string {
+export function fieldValueToText(v: unknown): string {
   if (Array.isArray(v)) return v.filter(Boolean).join(', ');
   return v == null ? '' : String(v);
 }
@@ -121,18 +127,18 @@ export function fieldValueToText(v: any): string {
 
 // Parsează în siguranță un blob JSON (string sau deja-obiect) → obiect plat { key: value }.
 // Orice intrare invalidă (null, array, JSON corupt) → {} (niciodată throw).
-export function safeParseBlob(s: any): Record<string, any> {
-  if (s && typeof s === 'object' && !Array.isArray(s)) return { ...s };
+export function safeParseBlob(s: unknown): Record<string, unknown> {
+  if (s && typeof s === 'object' && !Array.isArray(s)) return { ...(s as Record<string, unknown>) };
   if (typeof s !== 'string' || !s.trim()) return {};
   try {
-    const b = JSON.parse(s);
-    if (b && typeof b === 'object' && !Array.isArray(b)) return b;
+    const b: unknown = JSON.parse(s);
+    if (b && typeof b === 'object' && !Array.isArray(b)) return b as Record<string, unknown>;
   } catch { /* corupt → gol */ }
   return {};
 }
 
 // O valoare e „non-goală" (=> contează drept date completate de un client)?
-export function isNonEmptyValue(v: any): boolean {
+export function isNonEmptyValue(v: unknown): boolean {
   if (v === undefined || v === null) return false;
   if (typeof v === 'string') return v.trim() !== '';
   if (Array.isArray(v)) return v.some(x => x !== undefined && x !== null && String(x).trim() !== '');
@@ -141,7 +147,7 @@ export function isNonEmptyValue(v: any): boolean {
 }
 
 // Compune linia de mutat în Observații pentru delete-to-obs: „\n[Eticheta]: valoare".
-export function obsLineFor(label: string, value: any): string {
+export function obsLineFor(label: string, value: unknown): string {
   const clean = (label || '').replace(/:\s*$/, '').trim();
   const txt = fieldValueToText(value).trim();
   return '\n[' + (clean || 'Câmp') + ']: ' + txt;
@@ -153,11 +159,11 @@ export function obsLineFor(label: string, value: any): string {
 //   'hard'    → șterge doar cheia
 //   'to-obs'  → mută blob[key] în blob[obsKey] (append cu eticheta) apoi șterge cheia
 export function applyFieldDeletionToBlob(
-  raw: any,
+  raw: unknown,
   key: string,
   opts: { mode: 'hard' | 'to-obs'; label?: string; obsKey?: string }
 ): { changed: boolean; blob: string | null } {
-  const obj = safeParseBlob(raw);
+  const obj: Record<string, unknown> = safeParseBlob(raw);
   if (!(key in obj)) {
     // Nimic de șters; păstrăm reprezentarea originală (string netulburat) dacă era string.
     return { changed: false, blob: typeof raw === 'string' ? raw : (Object.keys(obj).length ? JSON.stringify(obj) : null) };

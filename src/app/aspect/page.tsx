@@ -1,10 +1,17 @@
 'use client';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Layout } from '@/components/Layout';
 import { toast } from '@/components/ui';
 import { useT } from '@/lib/i18n';
 
 // Motorul de teme e încărcat global (public/aspect.js → window.Aspect, beforeInteractive).
+// Interfață minimă pentru starea returnată de Aspect.get() — câmpurile citite de AspectPanel.
+interface AspectState {
+  theme: string; mode: string; accent: string; preset: string;
+  fontDisplay: string; fontUi: string; radius: number; density: string;
+  textSize: number; stages: Record<string, string | undefined>; background: string; bgImage: string;
+  layoutSide: string;
+}
 const A = () => (typeof window !== 'undefined' ? (window as any).Aspect : null);
 
 // Subset de iconuri din handoff (icons2.jsx).
@@ -27,7 +34,7 @@ const IP: Record<string, string> = {
   clock: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 7v5l3.5 2',
   x: 'M18 6L6 18M6 6l12 12',
 };
-function Icon({ name, size = 16, style }: { name: string; size?: number; style?: any }) {
+function Icon({ name, size = 16, style }: { name: string; size?: number; style?: React.CSSProperties }) {
   const d = IP[name] || '';
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
@@ -126,17 +133,17 @@ export default function AspectPage() {
 
 function AspectPanel({ focusText }: { focusText?: boolean } = {}) {
   const { t } = useT();
-  const [s, setS] = useState<any>(null);
+  const [s, setS] = useState<AspectState | null>(null);
   useEffect(() => {
     const a = A(); if (!a) return;
-    setS(a.get());
-    const off = a.subscribe((st: any) => setS({ ...st, stages: { ...st.stages } }));
+    setS(a.get() as AspectState);
+    const off = a.subscribe((st: AspectState) => setS({ ...st, stages: { ...st.stages } }));
     return off;
   }, []);
 
   const a = A();
   if (!s || !a) return <Layout><div className="card p-10 text-center text-[var(--fg-soft)]">{t('Se încarcă „Aspect"…')}</div></Layout>;
-  const set = (patch: any) => a.set(patch);
+  const set = (patch: Partial<AspectState>) => a.set(patch);
   const surface = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() || '#fff';
   const ratioSurface = a.contrast(s.accent, surface);
   const ratioOn = a.contrast(s.accent, a.onColor(s.accent));
@@ -154,13 +161,13 @@ function AspectPanel({ focusText }: { focusText?: boolean } = {}) {
           <Section title={t('Teme prestabilite')} icon="palette">
             <p className="aspect__hint" style={{ marginTop: 0, marginBottom: 10 }}>{t('Un click setează tot aspectul (culoare, font, formă, densitate). Apoi poți ajusta orice mai jos.')}</p>
             <div className="theme-cards">
-              {(a.THEMES || []).map((t: any) => (
-                <button key={t.id} className={'theme-card' + (s.theme === t.id ? ' is-on' : '')} onClick={() => a.setTheme(t.id)}>
-                  <span className="theme-card__sw">{t.sw.map((c: string, i: number) => <span key={i} style={{ background: c }}></span>)}</span>
-                  <span className="theme-card__name">{t.name}</span>
-                  <span className="theme-card__tag">{t.tag}</span>
-                  <span className="theme-card__desc">{t.desc}</span>
-                  {s.theme === t.id && <span className="theme-card__on"><Icon name="check" size={13} /></span>}
+              {(a.THEMES || []).map((th: { id: string; sw: string[]; name: string; tag: string; desc: string }) => (
+                <button key={th.id} className={'theme-card' + (s.theme === th.id ? ' is-on' : '')} onClick={() => a.setTheme(th.id)}>
+                  <span className="theme-card__sw">{th.sw.map((c: string, i: number) => <span key={i} style={{ background: c }}></span>)}</span>
+                  <span className="theme-card__name">{th.name}</span>
+                  <span className="theme-card__tag">{th.tag}</span>
+                  <span className="theme-card__desc">{th.desc}</span>
+                  {s.theme === th.id && <span className="theme-card__on"><Icon name="check" size={13} /></span>}
                 </button>
               ))}
             </div>
@@ -173,7 +180,7 @@ function AspectPanel({ focusText }: { focusText?: boolean } = {}) {
 
           <Section title={t('Accent / brand')} icon="palette">
             <div className="preset-row">
-              {a.PRESETS.map((p: any) => (
+              {a.PRESETS.map((p: { id: string; name: string; accent: string }) => (
                 <button key={p.id} className={'preset' + (s.preset === p.id ? ' is-on' : '')} onClick={() => set({ accent: p.accent, preset: p.id })} title={p.name}>
                   <span className="preset__sw" style={{ background: p.accent }}></span>{p.name}
                 </button>
@@ -229,12 +236,12 @@ function AspectPanel({ focusText }: { focusText?: boolean } = {}) {
           <Section title={t('Culori stadii')} icon="kanban">
             <p className="aspect__hint" style={{ marginTop: 0 }}>{t('Personalizează fiecare stadiu — apare instant în Kanban, Tabel, Carduri și Dashboard.')}</p>
             <div className="stage-colors">
-              {a.ALL_STAGES.map((st: any) => (
+              {a.ALL_STAGES.map((st: { key: string; label: string }) => (
                 <label key={st.key} className="stage-color">
-                  <input type="color" value={a.stageColor(st.key)} onChange={e => a.setStage(st.key, e.target.value)} />
+                  <input type="color" value={a.stageColor(st.key)} onChange={(e: React.ChangeEvent<HTMLInputElement>) => a.setStage(st.key, e.target.value)} />
                   <span className="stage-color__chip" style={{ background: 'var(--st-' + st.key + ')' }}></span>
                   <span>{st.label}</span>
-                  {s.stages[st.key] && <button className="stage-color__reset" title={t('Implicit')} onClick={e => { e.preventDefault(); a.resetStage(st.key); }}><Icon name="reset" size={12} /></button>}
+                  {s.stages[st.key] && <button className="stage-color__reset" title={t('Implicit')} onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.preventDefault(); a.resetStage(st.key); }}><Icon name="reset" size={12} /></button>}
                 </label>
               ))}
             </div>
@@ -249,7 +256,7 @@ function AspectPanel({ focusText }: { focusText?: boolean } = {}) {
           <Section title={t('Fundal personalizat')} icon="palette">
             <p className="aspect__hint" style={{ marginTop: 0, marginBottom: 8 }}>{t('Temele de sus setează deja un fundal — aici îl poți schimba sau încărca propria poză.')}</p>
             <div className="bg-row">
-              {(a.BACKGROUNDS || []).map((b: any) => (
+              {(a.BACKGROUNDS || []).map((b: { id: string; name: string }) => (
                 <button key={b.id} className={'bg-opt' + ((s.background || 'none') === b.id && !s.bgImage ? ' is-on' : '')} onClick={() => { a.setBgImage(''); set({ background: b.id }); }}>
                   <span className="bg-opt__prev" data-bg={b.id}></span>{t(b.name)}
                 </button>
@@ -295,7 +302,7 @@ function AspectPanel({ focusText }: { focusText?: boolean } = {}) {
           <Section title={t('Prioritate (fix — limbaj comun)')} icon="alert">
             <p className="aspect__hint" style={{ marginTop: 0 }}>{t('Cele 5 culori ale steluței NU se personalizează (sens universal în toată echipa).')}</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-              {a.PRIORITIES.map((p: any) => <PriorityStar key={p.key} value={p.key} withLabel size={16} />)}
+              {a.PRIORITIES.map((p: { key: string }) => <PriorityStar key={p.key} value={p.key} withLabel size={16} />)}
             </div>
           </Section>
 

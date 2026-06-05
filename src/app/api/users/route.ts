@@ -24,7 +24,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const scope = await requireAdmin();
   if (!scope) return NextResponse.json({ ok: false, error: 'Doar admin' }, { status: 403 });
-  const { email, password, name, role } = await req.json().catch(() => ({} as any));
+  const { email, password, name, role } = await req.json().catch(() => ({} as Record<string, unknown>));
   const emailNorm = String(email ?? '').trim().toLowerCase();
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailNorm || !EMAIL_RE.test(emailNorm) || !password || password.length < 6) {
@@ -40,9 +40,10 @@ export async function POST(req: NextRequest) {
     });
     await auditLog({ userId: scope.userId, func: 'users/create', action: 'CREATE', entity: 'User', entityId: u.id, fields: 'email=' + u.email + '; role=' + r });
     return NextResponse.json({ ok: true, id: u.id });
-  } catch (e: any) {
+  } catch (e) {
     // Cursă: doi admini creează același email simultan → P2002 (unic) → mesaj prietenos, nu 500.
-    if (e?.code === 'P2002') return NextResponse.json({ ok: false, error: 'Email deja folosit' }, { status: 400 });
+    if (e && typeof e === 'object' && 'code' in e && (e as { code?: unknown }).code === 'P2002')
+      return NextResponse.json({ ok: false, error: 'Email deja folosit' }, { status: 400 });
     throw e;
   }
 }
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const scope = await requireAdmin();
   if (!scope) return NextResponse.json({ ok: false, error: 'Doar admin' }, { status: 403 });
-  const { id, role, password, managerId, active, reassignTo, departmentId, position } = await req.json().catch(() => ({} as any));
+  const { id, role, password, managerId, active, reassignTo, departmentId, position } = await req.json().catch(() => ({} as Record<string, any>));
   if (!id) return NextResponse.json({ ok: false, error: 'id lipsă' }, { status: 400 });
 
   // REASIGNARE clienți: mută toți clienții lui `id` → `reassignTo`. DOAR în aplicație — NU atinge gestcom CRM.
@@ -86,7 +87,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ ok: true, moved, skipped, crmMismatch, srcCrmUser, tgtCrmUser });
   }
 
-  const data: any = {};
+  const data: Record<string, any> = {};
   if (role && ['agent', 'manager', 'admin'].includes(role)) {
     // Nu retrograda ULTIMUL admin → altfel toate rutele admin dau 403 și gestionarea conturilor devine
     // imposibilă din aplicație (recuperare doar direct în DB). Aceeași protecție ca la DELETE.
