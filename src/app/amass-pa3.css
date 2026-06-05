@@ -133,6 +133,12 @@ input, select, textarea, button { max-width: 100%; }
 .topbar { flex-wrap: wrap; row-gap: 8px; }
 .fisa__actions { row-gap: 6px; }
 .settings__body { overflow-x: hidden; }
+/* ANTI-SUPRAPUNERE TEXT (cerere user): textul lung se ÎNCADREAZĂ/rupe în loc să se suprapună peste vecini.
+   `min-width:0` de mai sus lasă flex/grid-children să se contracte; aici forțăm wrap pe elementele de text. */
+.cnm__name, .cnm__sub, .fr__name, .fr__city, .fr__sub, .fr__rem, .kc__name, .kc__sub, .cc__name, .cc__sub,
+.d2key__l, .d2key__s, .d2fn__lbl, .d2li__l, .tbl td, .tbl-info__row, .reminder-cell, .obs-cell, .notamg {
+  overflow-wrap: anywhere; word-break: break-word; min-width: 0;
+}
 @media (max-width: 480px) {
   .topbar__title { width: 100%; order: -1; }
   .segmented__btn { padding: 7px 9px; }

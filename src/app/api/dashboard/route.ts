@@ -3,6 +3,10 @@ import { prisma } from '@/lib/db';
 import { getScope, clientScopeWhere, getVisibleOwnerIds } from '@/lib/scope';
 import { getAutoSyncState } from '@/lib/auto-sync';
 
+// Coeficient pentru proxy-ul „Valoare" (RON / m²): nu există câmp monetar pe Client,
+// deci valoarea afișată = suprafata × acest coeficient. Etichetat transparent în UI.
+const VALOARE_MP_RON = 1500;
+
 export async function GET(req: NextRequest) {
   const scope = await getScope();
   if (!scope) return NextResponse.json({ ok: false }, { status: 401 });
@@ -57,6 +61,13 @@ export async function GET(req: NextRequest) {
     return s === 'Nevoie Acoperita' || s === 'Nevoie Acoperita in anumite conditii';
   };
   const funnel = { intrari: clienti.length, t1: 0, nevoie: 0, schita: 0, preofertat: 0, ofertat: 0, contractat: 0 };
+  // Funnel pe SUPRAFAȚĂ (m²): aceleași 7 trepte, aceeași logică de stadiu ca `funnel`,
+  // dar agregăm `suprafata` în loc de a număra clienții (pentru „Mod afișare = Suprafață").
+  const funnelSuprafata = { intrari: 0, t1: 0, nevoie: 0, schita: 0, preofertat: 0, ofertat: 0, contractat: 0 };
+  // Funnel pe VALOARE (RON estimat): NU există câmp monetar pe Client, așa că folosim un proxy
+  // TRANSPARENT — valoare estimată = suprafata × VALOARE_MP_RON (coeficient afișat în UI).
+  // Aceleași 7 trepte/logică ca mai sus; doar metrica agregată diferă.
+  const funnelValoare = { intrari: 0, t1: 0, nevoie: 0, schita: 0, preofertat: 0, ofertat: 0, contractat: 0 };
   // Indicatori urgenți (per-rând, precis):
   //  - schiță setată DAR ofertat gol  → urmărire necesară
   //  - ofertat setat DAR stadiu != Contractat → follow-up
@@ -69,15 +80,24 @@ export async function GET(req: NextRequest) {
     const nk = String(c.nevoia ?? '').trim();
     if (nk) byNevoie[nk] = (byNevoie[nk] ?? 0) + 1;
     byPrioritate[String(c.stelutaCat ?? 0)] = (byPrioritate[String(c.stelutaCat ?? 0)] ?? 0) + 1;
+    const mp = c.suprafata || 0;          // m² ai clientului (0 dacă lipsește)
+    const val = mp * VALOARE_MP_RON;       // valoare estimată (proxy din suprafață)
     if (c.suprafata) totalSuprafata += c.suprafata;
-    if (nz(c.t1)) funnel.t1++;
-    if (isNevoieAcoperita(c.nevoia)) funnel.nevoie++;
-    if (nz(c.schitaStatus)) funnel.schita++;
-    if (nz(c.preOfertat)) funnel.preofertat++;
-    if (nz(c.ofertat)) funnel.ofertat++;
-    if (c.stadiu === 'Contractat') funnel.contractat++;
+    funnelSuprafata.intrari += mp; funnelValoare.intrari += val;
+    if (nz(c.t1)) { funnel.t1++; funnelSuprafata.t1 += mp; funnelValoare.t1 += val; }
+    if (isNevoieAcoperita(c.nevoia)) { funnel.nevoie++; funnelSuprafata.nevoie += mp; funnelValoare.nevoie += val; }
+    if (nz(c.schitaStatus)) { funnel.schita++; funnelSuprafata.schita += mp; funnelValoare.schita += val; }
+    if (nz(c.preOfertat)) { funnel.preofertat++; funnelSuprafata.preofertat += mp; funnelValoare.preofertat += val; }
+    if (nz(c.ofertat)) { funnel.ofertat++; funnelSuprafata.ofertat += mp; funnelValoare.ofertat += val; }
+    if (c.stadiu === 'Contractat') { funnel.contractat++; funnelSuprafata.contractat += mp; funnelValoare.contractat += val; }
     if (nz(c.schitaStatus) && !nz(c.ofertat)) schitaFaraOferta++;
     if (nz(c.ofertat) && c.stadiu !== 'Contractat') ofertatFaraContract++;
+  }
+  // Rotunjim suprafața/valoarea la întreg (afișaj curat; agregarea internă rămâne exactă).
+  for (const f of [funnelSuprafata, funnelValoare]) {
+    f.intrari = Math.round(f.intrari); f.t1 = Math.round(f.t1); f.nevoie = Math.round(f.nevoie);
+    f.schita = Math.round(f.schita); f.preofertat = Math.round(f.preofertat);
+    f.ofertat = Math.round(f.ofertat); f.contractat = Math.round(f.contractat);
   }
   // Rata conversie = Contract / Intrați (cohortă), ca în KPI-ul din Dashboard.gs.
   const rataConversie = funnel.intrari > 0 ? funnel.contractat / funnel.intrari : 0;
@@ -120,6 +140,6 @@ export async function GET(req: NextRequest) {
     ok: true,
     isManager: scope.isManager,
     autoSync: getAutoSyncState(scope.userId),
-    stats: { total: clienti.length, byStadiu, byCategorie, byNevoie, byPrioritate, totalSuprafata, funnel, rataConversie, schitaFaraOferta, ofertatFaraContract, schitaInLucru, recentSyncs, agents }
+    stats: { total: clienti.length, byStadiu, byCategorie, byNevoie, byPrioritate, totalSuprafata, funnel, funnelSuprafata, funnelValoare, valoareMpRon: VALOARE_MP_RON, rataConversie, schitaFaraOferta, ofertatFaraContract, schitaInLucru, recentSyncs, agents }
   });
 }

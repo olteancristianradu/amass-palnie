@@ -504,8 +504,9 @@ export default function PalniePage() {
       if (filters.stadiu && (c.stadiu ?? '') !== filters.stadiu) return false;
       // Nevoia
       if (filters.nevoia && (c.nevoia ?? '') !== filters.nevoia) return false;
-      // Steluță (prioritate culoare)
-      if (filters.steluta !== '' && (c.stelutaCat ?? 0) !== Number(filters.steluta)) return false;
+      // Steluță (prioritate culoare) — compar pe CHEIA de prioritate, nu pe categoria gestcom brută,
+      // ca să prindă și cat 5 (tot „verde") sub opțiunea „Verde" (gestcom cat 4); identic cu punctele din UI.
+      if (filters.steluta !== '' && stelutaToPrio(c.stelutaCat ?? 0) !== stelutaToPrio(Number(filters.steluta))) return false;
       // Vârstă (rotLevel pe etapă: proaspăt / atenție / întârziat)
       if (filters.varsta !== 'all' && rotLevel(deriveStage(c), daysSince(c.dataIntrare)) !== filters.varsta) return false;
       // Audio
@@ -618,7 +619,7 @@ export default function PalniePage() {
   );
 
   return (
-    <Layout topbar={topbar} contentMod={view === 'kanban' ? 'content--kanban' : undefined}>
+    <Layout topbar={topbar} contentMod={view === 'kanban' ? 'content--kanban' : view === 'tabel' ? 'content--table' : undefined}>
       {/* FILTERBAR (rezumat) — apare DOAR când există filtre active (paritate handoff): chips + Curăță tot + contor */}
       {activeFilterCount > 0 && (
         <div className="filterbar">
@@ -790,7 +791,9 @@ export default function PalniePage() {
                             {(c as any).inCRM === false && (
                               <span className="cnm__warn" title={t('Fără înregistrare în CRM — de sincronizat')}><Icon name="alert" size={13} /></span>
                             )}
-                            <a href={`https://gestcom.ro/amass/index.php?m=lucrari&a=view&id_lucrare=${c.idLucrare}`} target="_blank" rel="noopener" onClick={stop} className="cnm__name">{c.nume || t('(nume)')}</a>
+                            {/* Numele preia culoarea STELEI doar dacă are steluță colorată; altfel rămâne neutru (din CSS). */}
+                            <a href={`https://gestcom.ro/amass/index.php?m=lucrari&a=view&id_lucrare=${c.idLucrare}`} target="_blank" rel="noopener" onClick={stop} className="cnm__name"
+                              style={{ color: (c.stelutaCat > 0 && PRIORITY_MAP[stelutaToPrio(c.stelutaCat)]) ? PRIORITY_MAP[stelutaToPrio(c.stelutaCat)].color : undefined }}>{c.nume || t('(nume)')}</a>
                           </div>
                           <div className="cnm__sub mono">#{c.idLucrare} · ({c.categorie}{c.isDT ? 'DT' : ''}){c.localitate ? ' · ' + c.localitate : ''}{isManager && ownerFilter === 'all' && c.owner ? ' · ' + (c.owner.name || c.owner.email) : ''}</div>
                         </td>

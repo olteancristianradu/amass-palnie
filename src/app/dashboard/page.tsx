@@ -13,6 +13,9 @@ interface Stats {
   byNevoie: Record<string, number>;
   byPrioritate: Record<string, number>;
   funnel: { intrari: number; t1: number; nevoie: number; schita: number; preofertat: number; ofertat: number; contractat: number };
+  funnelSuprafata?: { intrari: number; t1: number; nevoie: number; schita: number; preofertat: number; ofertat: number; contractat: number };
+  funnelValoare?: { intrari: number; t1: number; nevoie: number; schita: number; preofertat: number; ofertat: number; contractat: number };
+  valoareMpRon?: number;
   rataConversie: number;
   schitaFaraOferta: number;
   ofertatFaraContract: number;
@@ -108,24 +111,37 @@ export default function DashboardPage() {
   );
 
   const catLabels: Record<string, string> = { '1': 'Cat 1 · construcție', '2': 'Cat 2', '3': 'Cat 3', '4': 'Cat 4', '5': 'Cat 5' };
-  const fn = s.funnel;
-  const lastSync: SyncInfo | null = (s.recentSyncs || [])[0] || null;
   const num = (n: number) => (n ?? 0).toLocaleString('ro-RO');
+  const fn = s.funnel; // funnel pe NUMĂR de clienți — rămâne sursa pentru conversii/raport (definiția istorică)
+  // „Mod afișare" comută funnel-ul „Cum curge pâlnia" pe altă metrică (fallback la `fn` pe payload mai vechi):
+  //  - Activitate = nr. clienți (fn);  Suprafață = m² (funnelSuprafata);  Valoare = RON estimat (funnelValoare).
+  const fnView = mod === 'Suprafață' ? (s.funnelSuprafata ?? fn)
+    : mod === 'Valoare' ? (s.funnelValoare ?? fn)
+    : fn;
+  // Unitate + formatare a numerelor funnel-ului, în funcție de mod.
+  const valMp = s.valoareMpRon ?? 1500;
+  const modUnit = mod === 'Suprafață' ? t('m²') : mod === 'Valoare' ? t('RON (estimat)') : t('clienți');
+  const modNote = mod === 'Suprafață' ? t('Suma suprafeței (m²) clienților pe fiecare treaptă.')
+    : mod === 'Valoare' ? `${t('Valoare estimată = suprafață × ')}${num(valMp)} ${t('RON/m² (proxy: nu există câmp monetar pe client).')}`
+    : t('Numărul de clienți pe fiecare treaptă.');
+  const lastSync: SyncInfo | null = (s.recentSyncs || [])[0] || null;
   const conv = (s.rataConversie * 100).toFixed(1);
   const worklist = s.schitaInLucru || []; // guard defensiv (răspuns API mai vechi → listă goală)
 
-  // Funnel REAL: 7 trepte, bare proporțional din "Intrări".
+  // Funnel REAL: 7 trepte, bare proporțional din "Intrări". Metrica (n) urmează „Mod afișare" (fnView):
+  // nr. clienți / m² / valoare estimată. Etichetele/culorile rămân identice.
   // "Nevoie" = nevoie acoperită (acoperită / cu condiții). "T1" = status, nu treaptă propriu-zisă.
   const funnel = [
-    { label: t('Intrări CRM'), n: fn.intrari, color: 'var(--st-intrare)' },
-    { label: t('T1 făcut'), n: fn.t1, color: 'var(--st-t1)' },
-    { label: t('Nevoie identificată'), n: fn.nevoie, color: 'var(--info)' },
-    { label: t('Schiță trimisă'), n: fn.schita, color: 'var(--st-schita)' },
-    { label: t('Pre-Ofertat'), n: fn.preofertat, color: 'var(--st-preofertat)' },
-    { label: t('Ofertat'), n: fn.ofertat, color: 'var(--st-ofertat)' },
-    { label: t('Contract semnat'), n: fn.contractat, color: 'var(--st-contractat)' },
+    { label: t('Intrări CRM'), n: fnView.intrari, color: 'var(--st-intrare)' },
+    { label: t('T1 făcut'), n: fnView.t1, color: 'var(--st-t1)' },
+    { label: t('Nevoie identificată'), n: fnView.nevoie, color: 'var(--info)' },
+    { label: t('Schiță trimisă'), n: fnView.schita, color: 'var(--st-schita)' },
+    { label: t('Pre-Ofertat'), n: fnView.preofertat, color: 'var(--st-preofertat)' },
+    { label: t('Ofertat'), n: fnView.ofertat, color: 'var(--st-ofertat)' },
+    { label: t('Contract semnat'), n: fnView.contractat, color: 'var(--st-contractat)' },
   ];
-  const top = Math.max(1, fn.intrari);
+  // Procentele rămân relative la „top"-ul metricii curente (Intrări pe metrica selectată).
+  const top = Math.max(1, fnView.intrari);
   const pct = (a: number, b: number) => (b ? ((a / b) * 100).toFixed(2) : '0.00') + '%';
 
   // Conversii ÎNTRE etape — calculate din funnel-ul real (nu schimbă datele, doar derivă rapoarte).
@@ -214,19 +230,23 @@ export default function DashboardPage() {
 
         {/* Funnel — bare pe etape (7 trepte) */}
         <div className="card card--pad">
-          <div className="d2sec-lbl">{t('Cum curge pâlnia')}</div>
+          <div className="d2sec-lbl" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+            <span>{t('Cum curge pâlnia')}</span>
+            {/* Unitatea metricii curente (clienți / m² / RON), discret */}
+            <span className="muted" style={{ fontSize: '.6875rem', fontWeight: 400 }}>{modUnit}</span>
+          </div>
           <div className="d2funnel">
             {funnel.map(f => (
               <a key={f.label} href="/palnie" className="d2fn" title={t('Vezi clienții în pâlnie')} style={{ cursor: 'pointer' }}>
                 <span className="d2fn__lbl">{f.label}</span>
-                <span className="d2fn__n mono">{f.n}</span>
+                <span className="d2fn__n mono">{num(f.n)}</span>
                 <span className="d2fn__track"><span className="d2fn__bar" style={{ width: Math.max(f.n / top * 100, 2) + '%', background: f.color }} /></span>
                 <span className="d2fn__pct mono">{Math.round(f.n / top * 100)}%</span>
               </a>
             ))}
           </div>
           <div className="muted" style={{ fontSize: '.6875rem', marginTop: 12 }}>
-            {t('T1 = status (s-a făcut primul contact), nu o treaptă de conversie propriu-zisă. „Nevoie identificată" = nevoie acoperită (eventual cu condiții).')}
+            {modNote}{' '}{t('T1 = status (s-a făcut primul contact), nu o treaptă de conversie propriu-zisă. „Nevoie identificată" = nevoie acoperită (eventual cu condiții).')}
           </div>
         </div>
 

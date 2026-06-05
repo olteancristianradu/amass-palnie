@@ -105,6 +105,7 @@
 .kcol__bar { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--sc); border-radius: var(--r-md) var(--r-md) 0 0; }
 .kcol__title { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
 .kcol__name { font-family: var(--font-display); font-weight: 700; font-size: .9375rem; }
+.kcol__count { font-size: .6875rem; font-weight: 600; color: var(--text-secondary); }
 .kcol__edit { display: inline-flex; padding: 3px; border: none; background: none; color: var(--text-faint); border-radius: var(--r-xs); cursor: pointer; opacity: 0; transition: all var(--transition); }
 .kcol__head:hover .kcol__edit { opacity: 1; }
 .kcol__edit:hover { color: var(--accent); background: var(--surface-2); }
@@ -138,6 +139,15 @@
 /* ---------------- TABEL ---------------- */
 .table-wrap { overflow: hidden; }
 .tbl-scroll { overflow: auto; max-height: calc(100vh - 220px); }
+/* TABEL full-height (port handoff): vederea Tabel umple ecranul cu scroll INTERN + header sticky
+   (ca la Kanban/Carduri), prin lanț flex — fără numărul magic 220px care se spărgea la topbar pe 2 rânduri.
+   `.content--table` e pus pe wrapper-ul vederii Tabel (vezi Layout contentMod). */
+/* `flex:none` + înălțime DEFINITĂ: shell-ul (.app min-height:100vh, .main flex:1) NU mărginește
+   înălțimea la ecran, deci lanțul flex are nevoie de o înălțime explicită ca să prindă scrollul intern. */
+.content--table { display: flex; flex-direction: column; overflow: hidden; flex: none; box-sizing: border-box;
+  height: calc(100vh - var(--header-h)); height: calc(100dvh - var(--header-h)); }
+.content--table .table-wrap { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.content--table .tbl-scroll { flex: 1 1 auto; min-height: 0; max-height: none; }
 .tbl { width: 100%; border-collapse: separate; border-spacing: 0; font-size: .8125rem; }
 .tbl thead th { position: sticky; top: 0; z-index: 3; background: var(--surface-2); text-align: left; font-size: .6875rem; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; color: var(--text-muted); padding: calc(.6rem * var(--density-pad)) 12px; border-bottom: 1px solid var(--border-strong); white-space: nowrap; cursor: pointer; user-select: none; }
 .tbl thead th .th-in { display: inline-flex; align-items: center; gap: 3px; }
