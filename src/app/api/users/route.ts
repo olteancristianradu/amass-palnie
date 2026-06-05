@@ -24,7 +24,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const scope = await requireAdmin();
   if (!scope) return NextResponse.json({ ok: false, error: 'Doar admin' }, { status: 403 });
-  const { email, password, name, role } = await req.json();
+  const { email, password, name, role } = await req.json().catch(() => ({} as any));
   const emailNorm = String(email ?? '').trim().toLowerCase();
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailNorm || !EMAIL_RE.test(emailNorm) || !password || password.length < 6) {
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const scope = await requireAdmin();
   if (!scope) return NextResponse.json({ ok: false, error: 'Doar admin' }, { status: 403 });
-  const { id, role, password, managerId, active, reassignTo, departmentId, position } = await req.json();
+  const { id, role, password, managerId, active, reassignTo, departmentId, position } = await req.json().catch(() => ({} as any));
   if (!id) return NextResponse.json({ ok: false, error: 'id lipsă' }, { status: 400 });
 
   // REASIGNARE clienți: mută toți clienții lui `id` → `reassignTo`. DOAR în aplicație — NU atinge gestcom CRM.

@@ -23,6 +23,7 @@ function mergeStrategieBlob(existing: string | null, incoming: any): string {
   const inc = (incoming && typeof incoming === 'object' && !Array.isArray(incoming)) ? incoming : {};
   const merged: Record<string, any> = { ...base };
   for (const [k, v] of Object.entries(inc)) {
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue; // anti prototype-pollution
     const empty = v === undefined || v === null || (typeof v === 'string' && v.trim() === '') || (Array.isArray(v) && v.length === 0);
     if (!empty) merged[k] = v;            // valoare nouă utilă → scrie
     else if (!(k in base)) merged[k] = v; // cheie nouă goală (nu exista) → ok
@@ -75,7 +76,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const scope = await getScope();
   if (!scope) return NextResponse.json({ ok: false }, { status: 401 });
   const userId = scope.userId;
-  const updates = await req.json();
+  const updates = await req.json().catch(() => ({} as any));
   const before = await prisma.client.findUnique({ where: { id: params.id } });
   if (!before || !(await canAccessClient(scope, before.ownerId))) return NextResponse.json({ ok: false }, { status: 404 });
 
@@ -83,7 +84,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   // celulele de dată din tabel). Întoarce null la valoare invalidă (NU „Invalid Date" → evită crash la save).
   const parseDateFlexible = (v: any): Date | null => {
     if (!v) return null;
-    if (typeof v === 'string' && /^\d{2}\.\d{2}\.\d{4}$/.test(v)) { const [d, m, y] = v.split('.'); return new Date(+y, +m - 1, +d); }
+    if (typeof v === 'string' && /^\d{2}\.\d{2}\.\d{4}$/.test(v)) {
+      const [d, m, y] = v.split('.').map(Number);
+      const dt = new Date(y, m - 1, d, 12, 0, 0); // ora 12 LOCAL → fără flip de zi la fusul orar
+      // validează că e o dată reală (ex. 31.02.2026 → Date „rostogolește" în martie → respingem)
+      if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) return null;
+      return dt;
+    }
     const dt = new Date(v); return isNaN(dt.getTime()) ? null : dt;
   };
   // Construiește data de update (whitelist; datele primesc Date sau null).

@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
   const scope = await getScope();
   if (!scope) return NextResponse.json({ ok: false }, { status: 401 });
   const userId = scope.userId;
-  const payload = await req.json();
+  const payload = await req.json().catch(() => ({} as any));
   if (!payload.idLucrare || !payload.data || !payload.tip || !payload.info) {
     return NextResponse.json({ ok: false, error: 'Date lipsă (idLucrare, data, tip, info)' }, { status: 400 });
   }

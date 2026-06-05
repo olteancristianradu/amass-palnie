@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
   const scope = await getScope();
   if (!scope) return NextResponse.json({ ok: false }, { status: 401 });
   const userId = scope.userId;
-  const { clientId, idLucrare, cat } = await req.json();
+  const { clientId, idLucrare, cat } = await req.json().catch(() => ({} as any));
   if (!idLucrare || cat === undefined) return NextResponse.json({ ok: false, error: 'Date lipsă' }, { status: 400 });
   // ANTI-IDOR (audit 2026-06-01): verifică proprietatea înainte de scrierea locală/CRM.
   // idLucrare NU e unic singur (@@unique([ownerId, idLucrare])) → folosim findClientInScope

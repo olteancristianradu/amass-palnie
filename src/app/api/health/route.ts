@@ -12,6 +12,8 @@ export async function GET() {
     // NU expunem numere/stare (repo + tunel PUBLIC) — health-check-ul cere doar HTTP 200 + {ok:true}.
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e?.message || 'db error' }, { status: 500 });
+    // Logăm detaliul pe server, dar NU îl expunem public (poate dezvălui schema/coloane).
+    console.error('[health] DB check failed:', e?.message);
+    return NextResponse.json({ ok: false, error: 'db unavailable' }, { status: 500 });
   }
 }

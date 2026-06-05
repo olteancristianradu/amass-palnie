@@ -87,7 +87,10 @@ export default function StrategiePage() {
         const stored = j.client.categorie === 1 ? j.client.strategieV1 : j.client.strategieV2;
         // A) MIGRARE LAZY: după ce iau blob-ul stocat, aplic migrarea aditivă (cheile vechi → cheile noi).
         // Datele vechi apar în cheile noi ale template-ului. Idempotentă, fill-only-empty, nu pierde nimic.
-        const { blob: migrated } = migrateFisaBlob(stored ? JSON.parse(stored) : {}, variant);
+        // JSON.parse protejat: un blob corupt în DB nu trebuie să arunce pagina în „ecran alb".
+        let parsedStored: any = {};
+        if (stored) { try { parsedStored = JSON.parse(stored) || {}; } catch { parsedStored = {}; } }
+        const { blob: migrated } = migrateFisaBlob(parsedStored, variant);
         const base: Record<string, any> = {
           ...migrated,
           suprafata: j.client.suprafata,

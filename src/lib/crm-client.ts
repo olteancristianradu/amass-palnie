@@ -21,7 +21,9 @@ async function getCachedOrLogin(userId: string): Promise<CookieJar> {
     const ageHours = (Date.now() - creds.cookieTs.getTime()) / (1000 * 60 * 60);
     if (ageHours < 6) return { cookie: creds.cookieJar, utilizatorId: creds.utilizatorId ?? undefined };
   }
-  const password = decrypt(creds.crmPassEnc);
+  let password: string;
+  try { password = decrypt(creds.crmPassEnc); }
+  catch { throw new Error('Parola CRM nu poate fi decriptată (CRYPTO_KEY greșit/schimbat?). Reintrodu parola din Setări.'); }
   return await loginFresh(userId, creds.crmUser, password);
 }
 

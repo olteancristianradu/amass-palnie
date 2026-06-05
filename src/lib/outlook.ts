@@ -52,8 +52,12 @@ export async function exchangeCode(userId: string, code: string): Promise<string
 async function getValidAccessToken(userId: string): Promise<string> {
   const tok = await prisma.outlookToken.findUnique({ where: { userId } });
   if (!tok) throw new Error('Outlook neconectat');
-  if (tok.expiresAt.getTime() > Date.now()) return decrypt(tok.accessEnc);
-  const refresh = decrypt(tok.refreshEnc);
+  // decrypt protejat: un token corupt / CRYPTO_KEY schimbat nu trebuie să arunce o eroare criptică.
+  let refresh: string;
+  try {
+    if (tok.expiresAt.getTime() > Date.now()) return decrypt(tok.accessEnc);
+    refresh = decrypt(tok.refreshEnc);
+  } catch { throw new Error('Token Outlook corupt sau CRYPTO_KEY schimbat — reconectează contul Outlook din Setări.'); }
   if (!refresh) throw new Error('Token Outlook expirat — reconectează contul');
   const t = await tokenRequest({ grant_type: 'refresh_token', refresh_token: refresh, scope: SCOPES });
   await prisma.outlookToken.update({

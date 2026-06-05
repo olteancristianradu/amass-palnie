@@ -226,7 +226,7 @@
     get: () => state,
     set: (patch) => { state = { ...state, ...patch }; save(); apply(); },
     setStage: (key, hex) => { state = { ...state, stages: { ...state.stages, [key]: hex } }; save(); apply(); },
-    setBgImage: (dataUrl) => { state = { ...state, bgImage: dataUrl || '', background: dataUrl ? 'image' : 'none' }; save(); apply(); },
+    setBgImage: (dataUrl) => { var ok = typeof dataUrl === 'string' && /^data:image\//.test(dataUrl); state = { ...state, bgImage: ok ? dataUrl : '', background: ok ? 'image' : 'none' }; save(); apply(); },
     resetStage: (key) => { const st = { ...state.stages }; delete st[key]; state = { ...state, stages: st }; save(); apply(); },
     reset: () => { state = { ...DEFAULTS, stages: {} }; save(); apply(); },
     THEMES,
@@ -244,7 +244,8 @@
       try { const o = JSON.parse(txt); if (!o || typeof o !== 'object') return false;
         delete o._amass_aspect; delete o.user;
         // Imagine de fundal prea mare (peste ~1.5M caractere) → o ignorăm (altfel localStorage overflow + save tăcut).
-        if (typeof o.bgImage === 'string' && o.bgImage.length > 1500000) delete o.bgImage;
+        // bgImage acceptat DOAR ca data:image (anti-injecție CSS) + sub ~1.5M (anti-overflow localStorage).
+        if (typeof o.bgImage === 'string' && (o.bgImage.length > 1500000 || !/^data:image\//.test(o.bgImage))) delete o.bgImage;
         // MERGE culori stadii (nu înlocui) — ca importul unui preset fără `stages` să NU șteargă personalizările curente.
         state = { ...DEFAULTS, ...state, ...o, stages: { ...state.stages, ...(o.stages || {}) } }; save(); apply(); return true;
       } catch (e) { return false; }

@@ -9,7 +9,7 @@ import { auditLog } from '@/lib/audit';
 export async function POST(req: NextRequest) {
   const scope = await getScope();
   if (!scope) return NextResponse.json({ ok: false }, { status: 401 });
-  const { to, cc, subject, html, clientId, attachPdf } = await req.json();
+  const { to, cc, subject, html, clientId, attachPdf } = await req.json().catch(() => ({} as any));
   if (!to || !subject || !html) return NextResponse.json({ ok: false, error: 'Lipsesc To / Subiect / Corp' }, { status: 400 });
 
   let attachments;

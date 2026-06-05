@@ -58,16 +58,14 @@ export async function POST(req: NextRequest) {
     }
   });
 
-  // Restaurează DOAR câmpurile de strategie din snapshot pe client.
-  const restored = await prisma.client.update({
-    where: { id: entry.clientId },
-    data: {
-      strategieV1: snap.strategieV1 ?? null,
-      strategieV2: snap.strategieV2 ?? null,
-      obsSituatie: snap.obsSituatie ?? null,
-      strategieNevoi: snap.strategieNevoi ?? null
-    }
-  });
+  // Restaurează DOAR câmpurile PREZENTE în snapshot. ANTI-PIERDERE: un snapshot vechi care NU are un
+  // câmp (ex. obsSituatie adăugat ulterior) NU mai suprascrie valoarea curentă cu null.
+  const data: any = {};
+  if (snap.strategieV1 !== undefined) data.strategieV1 = snap.strategieV1;
+  if (snap.strategieV2 !== undefined) data.strategieV2 = snap.strategieV2;
+  if (snap.obsSituatie !== undefined) data.obsSituatie = snap.obsSituatie;
+  if (snap.strategieNevoi !== undefined) data.strategieNevoi = snap.strategieNevoi;
+  const restored = await prisma.client.update({ where: { id: entry.clientId }, data });
 
   return NextResponse.json({ ok: true, restored });
 }

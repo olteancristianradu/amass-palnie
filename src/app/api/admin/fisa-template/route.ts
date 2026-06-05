@@ -17,7 +17,10 @@ async function loadTemplate(variant: 'V1' | 'V2'): Promise<FisaTemplateData> {
     update: {}, // dacă există, nu modificăm nimic — doar citim
     create: { variant, titlu: seed.titlu, zones: JSON.stringify(seed.zones) },
   });
-  return { variant, titlu: row.titlu, zones: JSON.parse(row.zones) };
+  // JSON.parse protejat: zones corupt în DB nu trebuie să arunce 500 pe toată aplicația.
+  let zones: any = [];
+  try { zones = JSON.parse(row.zones) || []; } catch { zones = []; }
+  return { variant, titlu: row.titlu, zones };
 }
 
 export async function GET() {

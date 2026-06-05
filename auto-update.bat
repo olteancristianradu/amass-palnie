@@ -28,9 +28,11 @@ if "!PREV!"=="!REMOTE!" (
 )
 echo [%date% %time%] Update gasit: !PREV:~0,7! -^> !REMOTE:~0,7!>> "%LOG%"
 
-REM --- 2) BACKUP baza inainte de orice ---
-docker run --rm -v amass-palnie_amass-data:/d -v "%cd%":/b alpine tar czf /b/backup-before-update.tgz -C /d . >> "%LOG%" 2>&1
-echo [%date% %time%] Backup baza facut (backup-before-update.tgz).>> "%LOG%"
+REM --- 2) BACKUP baza inainte de orice (AUTO-DETECT volumul, independent de numele folderului) ---
+set "VOL=amass-palnie_amass-data"
+for /f "delims=" %%v in ('docker volume ls -q --filter name=_amass-data 2^>nul') do set "VOL=%%v"
+docker run --rm -v %VOL%:/d -v "%cd%":/b alpine tar czf /b/backup-before-update.tgz -C /d . >> "%LOG%" 2>&1
+echo [%date% %time%] Backup baza facut din volumul %VOL% (backup-before-update.tgz).>> "%LOG%"
 
 REM --- 3) PULL (VERIFICAT - daca esueaza NU mai rebuild-uim cod vechi tacut) ---
 git pull --ff-only origin main >> "%LOG%" 2>&1
