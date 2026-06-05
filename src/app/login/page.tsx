@@ -13,17 +13,37 @@ const TAGLINES = [
   'Carduri · Tabel · Kanban — cum îți place.',
 ];
 
-// Traseul cablului de încălzire în pardoseală — serpentină (boustrophedon), exact cum se montează:
-// rânduri paralele cu bucle U la capete. Se desenează singur (animație stroke-dashoffset).
-const CABLE = (() => {
-  const x0 = 150, x1 = 1050, yTop = 170, gap = 58, rows = 9, r = gap / 2;
-  let d = `M ${x0} ${yTop}`;
+// Scenă în PERSPECTIVĂ (cameră), exact ca montajul real AMASS: podea care se vede spre peretele din fund,
+// PLASĂ de armătură, CABLU roșu în serpentină prins cu CLEME albe, care se „montează" singur.
+const SCENE = (() => {
+  // Proiecție perspectivă: u 0..1 (stânga→dreapta), v 0..1 (față→fund). Față = lat+jos, fund = îngust+sus.
+  const P = (u: number, v: number): [number, number] => {
+    const yF = 790, yB = 340, hF = 640, hB = 250, cx = 600;
+    const y = yF + (yB - yF) * v;
+    const h = hF + (hB - hF) * v;
+    return [cx + (u - 0.5) * 2 * h, y];
+  };
+  const f = (n: number) => n.toFixed(1);
+  // PLASĂ de armătură (grilă în perspectivă) — linii verticale + orizontale
+  let mesh = '';
+  const VL = 18, HL = 12;
+  for (let i = 0; i <= VL; i++) { const a = P(i / VL, 0), b = P(i / VL, 1); mesh += `M ${f(a[0])} ${f(a[1])} L ${f(b[0])} ${f(b[1])} `; }
+  for (let j = 0; j <= HL; j++) { const a = P(0, j / HL), b = P(1, j / HL); mesh += `M ${f(a[0])} ${f(a[1])} L ${f(b[0])} ${f(b[1])} `; }
+  // CABLU roșu serpentină + CLEME albe la intervale (mai mici spre fund)
+  const rows = 10; let cable = ''; const clips: [number, number, number][] = []; let pv = 0;
   for (let i = 0; i < rows; i++) {
-    const y = yTop + i * gap;
-    if (i % 2 === 0) { d += ` L ${x1} ${y}`; if (i < rows - 1) d += ` A ${r} ${r} 0 0 1 ${x1} ${y + gap}`; }
-    else { d += ` L ${x0} ${y}`; if (i < rows - 1) d += ` A ${r} ${r} 0 0 0 ${x0} ${y + gap}`; }
+    const v = 0.06 + 0.88 * (i / (rows - 1));
+    const uL = i % 2 === 0 ? 0.09 : 0.91, uR = i % 2 === 0 ? 0.91 : 0.09;
+    const A = P(uL, v), B = P(uR, v);
+    if (i === 0) cable = `M ${f(A[0])} ${f(A[1])}`;
+    else { const C = P(i % 2 === 0 ? -0.05 : 1.05, (pv + v) / 2); cable += ` Q ${f(C[0])} ${f(C[1])} ${f(A[0])} ${f(A[1])}`; }
+    cable += ` L ${f(B[0])} ${f(B[1])}`;
+    for (const cu of [0.2, 0.38, 0.56, 0.74]) { const p = P(cu, v); clips.push([+f(p[0]), +f(p[1]), +(1.8 + 2.6 * (1 - v)).toFixed(1)]); }
+    pv = v;
   }
-  return d;
+  const c00 = P(0, 0), c10 = P(1, 0), c11 = P(1, 1), c01 = P(0, 1);
+  const floor = `M ${f(c00[0])} ${f(c00[1])} L ${f(c10[0])} ${f(c10[1])} L ${f(c11[0])} ${f(c11[1])} L ${f(c01[0])} ${f(c01[1])} Z`;
+  return { mesh, cable, clips, floor };
 })();
 
 export default function LoginPage() {
@@ -54,28 +74,36 @@ export default function LoginPage() {
     <div className="aml">
       {/* fundal tematic: cablu de încălzire în pardoseală care se montează singur + podeaua se încălzește */}
       <div className="aml__scene" aria-hidden="true">
-        <svg className="aml__floor" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice">
+        <svg className="aml__floor" viewBox="0 0 1200 820" preserveAspectRatio="xMidYMid slice">
           <defs>
-            <linearGradient id="amlcab" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stopColor="#FFC061" /><stop offset="0.5" stopColor="#FF6A2B" /><stop offset="1" stopColor="#CC0000" />
+            <linearGradient id="amlcab" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor="#FF6B6B" /><stop offset="0.5" stopColor="#E11D2A" /><stop offset="1" stopColor="#B00010" />
             </linearGradient>
-            <radialGradient id="amlheat" cx="50%" cy="52%" r="60%">
-              <stop offset="0" stopColor="#FF6A2B" stopOpacity="0.55" /><stop offset="0.6" stopColor="#CC0000" stopOpacity="0.18" /><stop offset="1" stopColor="#CC0000" stopOpacity="0" />
+            <linearGradient id="amlfloorg" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor="#2a2f37" /><stop offset="1" stopColor="#14171c" />
+            </linearGradient>
+            <linearGradient id="amlwallg" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor="#1c2026" /><stop offset="1" stopColor="#2b313a" />
+            </linearGradient>
+            <radialGradient id="amlheat" cx="50%" cy="64%" r="55%">
+              <stop offset="0" stopColor="#FF6A2B" stopOpacity="0.5" /><stop offset="0.55" stopColor="#CC0000" stopOpacity="0.15" /><stop offset="1" stopColor="#CC0000" stopOpacity="0" />
             </radialGradient>
-            <pattern id="amltile" width="75" height="75" patternUnits="userSpaceOnUse">
-              <path d="M75 0H0V75" fill="none" stroke="#ffffff" strokeOpacity="0.05" strokeWidth="1" />
-            </pattern>
-            <filter id="amlglow" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation="5" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+            <filter id="amlglow" x="-15%" y="-15%" width="130%" height="130%">
+              <feGaussianBlur stdDeviation="4" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
             </filter>
           </defs>
-          {/* podeaua camerei + plăci */}
-          <rect x="80" y="100" width="1040" height="620" rx="14" fill="rgba(255,255,255,0.018)" stroke="rgba(255,255,255,0.10)" strokeWidth="1.5" />
-          <rect x="80" y="100" width="1040" height="620" rx="14" fill="url(#amltile)" />
-          {/* bloom de căldură (apare cand cablul e gata) */}
-          <rect className="aml__bloom" x="80" y="100" width="1040" height="620" rx="14" fill="url(#amlheat)" />
-          {/* cablul care se „monteaza" singur */}
-          <path className="aml__cable" d={CABLE} pathLength={1} fill="none" stroke="url(#amlcab)" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" filter="url(#amlglow)" />
+          {/* peretele din fund */}
+          <rect x="0" y="0" width="1200" height="370" fill="url(#amlwallg)" />
+          {/* podeaua (trapez în perspectivă) */}
+          <path d={SCENE.floor} fill="url(#amlfloorg)" />
+          {/* plasa de armătură (grilă perspectivă) */}
+          <path d={SCENE.mesh} fill="none" stroke="#7a828d" strokeOpacity="0.22" strokeWidth="1.1" />
+          {/* bloom de căldură — podeaua se încălzește când cablul e gata */}
+          <path className="aml__bloom" d={SCENE.floor} fill="url(#amlheat)" />
+          {/* cablul roșu care se „montează" singur (serpentină) */}
+          <path className="aml__cable" d={SCENE.cable} pathLength={1} fill="none" stroke="url(#amlcab)" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" filter="url(#amlglow)" />
+          {/* cleme albe de prindere */}
+          <g className="aml__clips">{SCENE.clips.map((c, i) => <circle key={i} cx={c[0]} cy={c[1]} r={c[2]} fill="#e9edf3" />)}</g>
         </svg>
       </div>
 

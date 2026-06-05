@@ -3,9 +3,12 @@
   background:radial-gradient(120% 120% at 50% -10%,#1a1f26 0%,#0c0e12 55%,#08090c 100%);
   font-family:'Inter',system-ui,-apple-system,sans-serif;padding:20px;}
 /* SCENA: podeaua camerei + cablul de incalzire care se monteaza singur (serpentina) + caldura */
-.aml__scene{position:absolute;inset:0;pointer-events:none;opacity:.92;}
-.aml__floor{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) perspective(900px) rotateX(8deg);width:122%;height:122%;
-  -webkit-mask-image:radial-gradient(95% 85% at 50% 45%,#000 55%,transparent);mask-image:radial-gradient(95% 85% at 50% 45%,#000 55%,transparent);}
+.aml__scene{position:absolute;inset:0;pointer-events:none;opacity:.9;}
+.aml__floor{position:absolute;inset:0;width:100%;height:100%;
+  -webkit-mask-image:radial-gradient(105% 92% at 50% 58%,#000 58%,transparent);mask-image:radial-gradient(105% 92% at 50% 58%,#000 58%,transparent);}
+/* clemele albe apar pe măsură ce cablul se montează */
+.aml__clips{opacity:0;animation:aml-clips 9s ease-in-out infinite;}
+@keyframes aml-clips{0%,10%{opacity:0}55%{opacity:.9}87%{opacity:.9}97%{opacity:0}100%{opacity:0}}
 /* cablul se „deseneaza" singur (lay) apoi tine glow, apoi dispare si se reia */
 .aml__cable{stroke-dasharray:1;stroke-dashoffset:1;animation:aml-lay 9s ease-in-out infinite;}
 @keyframes aml-lay{
@@ -55,4 +58,4 @@
 @keyframes aml-shine{0%,60%{left:-60%}100%{left:160%}}
 .aml__foot{margin-top:22px;text-align:center;font-size:11px;letter-spacing:.04em;color:#6b7280;}
 @media (max-width:420px){.aml__card{padding:30px 22px 22px}.aml__title{font-size:26px}}
-@media (prefers-reduced-motion:reduce){.aml__cable{animation:none;stroke-dashoffset:0;opacity:.9}.aml__bloom{animation:none;opacity:.35}.aml__title,.aml__btn::after,.aml__tag{animation:none}}
+@media (prefers-reduced-motion:reduce){.aml__cable{animation:none;stroke-dashoffset:0;opacity:.9}.aml__bloom{animation:none;opacity:.35}.aml__clips{animation:none;opacity:.9}.aml__title,.aml__btn::after,.aml__tag{animation:none}}
