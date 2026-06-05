@@ -173,6 +173,7 @@ function decHtml(s: string): string {
     .replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '')
     .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&nbsp;/g, ' ')
+    .replace(/&bull;/gi, '•').replace(/&middot;/gi, '•')
     .replace(/&abreve;/gi, 'ă').replace(/&acirc;/gi, 'â').replace(/&icirc;/gi, 'î')
     .replace(/&scedil;/gi, 'ș').replace(/&scaron;/gi, 'ș').replace(/&tcedil;/gi, 'ț')
     .replace(/&#(\d+);/g, (_, d) => String.fromCharCode(parseInt(d, 10)))
@@ -272,10 +273,19 @@ export async function fetchDetail(userId: string, idLucrare: string): Promise<Cr
     if (optM) stelutaCat = parseInt(optM[1], 10);
   }
 
-  // Observatii pentru autofill strategie + contact
+  // Observatii pentru autofill strategie + contact.
+  // FIX 2026-06-05 (CRITIC): răspunsurile FORMULARULUI clientului sunt în celula "OBSERVATII:" din
+  // fieldset-ul INFO CLIENT (<td class="hilite">OBSERVATII:</td><td class="hilite2">…</td>) — exact
+  // celula pe care o citea Apps Script-ul original. `observatii_lucrare` (textarea, notițe agent) NICI
+  // nu apare pe pagina de VIEW → înainte observatii ieșea mereu GOL → autofill-ul nu primea nimic
+  // (confirmat: 0/820 clienți aveau date de formular). decHtml: <br>→\n, &bull;→•, &icirc;→î etc.
   let observatii = '';
-  const obsTextarea = html.match(/<textarea[^>]*name="observatii_lucrare"[^>]*>([\s\S]*?)<\/textarea>/i);
-  if (obsTextarea) observatii = decHtml(obsTextarea[1]);
+  const obsCell = html.match(/<td[^>]*class="hilite"[^>]*>\s*OBSERVATII\s*:?\s*<\/td>\s*<td[^>]*class="hilite2"[^>]*>([\s\S]*?)<\/td>/i);
+  if (obsCell) observatii = decHtml(obsCell[1]);
+  if (!observatii) {
+    const obsTextarea = html.match(/<textarea[^>]*name="observatii_lucrare"[^>]*>([\s\S]*?)<\/textarea>/i);
+    if (obsTextarea) observatii = decHtml(obsTextarea[1]);
+  }
 
   // Județ, localitate, sursa, telefon, email — best-effort
   const getTd = (re: RegExp) => { const m = html.match(re); return m ? decHtml(m[1]) : ''; };
