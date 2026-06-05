@@ -143,6 +143,32 @@ export function mapSistemActualV1(raw: string | null | undefined): string {
 }
 
 /**
+ * Mapează textul liber al alternativelor de încălzire (din CRM, ex. „Incalzire cu radiatoare cu roca
+ * vulcanica (medie 2 ore/zi consum); Incalzire electrica in pardoseala…") la ARRAY-ul de valori EXACTE
+ * din chips-ul `alternativa` (constanta ALTERNATIVE din fisa-template-seed). Fără asta, textul liber NU
+ * se potrivește cu opțiunile → nu se bifează nimic. IDEMPOTENT (prinde și etichetele deja mapate).
+ * Aliniat la ALTERNATIVE = ['Pompă de căldură','Radiatoare rocă vulcanică','Încălzire electrică pardoseală',
+ * 'Plasme infraroșu','Centrală electrică','Panouri fotovoltaice'].
+ */
+export function mapAlternativaChips(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  const out: string[] = [];
+  const push = (v: string) => { if (!out.includes(v)) out.push(v); };
+  // split pe ; (concatenarea bullet-urilor) și pe newline, apoi mapăm fiecare segment.
+  for (const seg of String(raw).split(/[;\n]+/)) {
+    const s = normalizeRo(seg).toLowerCase();
+    if (!s.trim()) continue;
+    if (/pompa\s*(de\s*)?caldura/.test(s)) push('Pompă de căldură');
+    if (/roca\s*vulcanic|vulcanic/.test(s)) push('Radiatoare rocă vulcanică');
+    if (/electric.*pardoseal|pardoseal.*electric|incalzire\s*electrica\s*in\s*pardoseal|\biep\b/.test(s)) push('Încălzire electrică pardoseală');
+    if (/plasm|infraros/.test(s)) push('Plasme infraroșu');
+    if (/centrala?\s*electric/.test(s)) push('Centrală electrică');
+    if (/fotovoltaic|\bpanouri\b/.test(s)) push('Panouri fotovoltaice');
+  }
+  return out;
+}
+
+/**
  * Parser principal — portat 1:1 din Strategie.js::_parseObservatiiForm_ (logica line-based).
  * Primește textul OBSERVATII (deja decodificat în webapp) → întoarce câmpurile de autofill.
  * @param obsText textul brut OBSERVATII (plain text, cu newline-uri)

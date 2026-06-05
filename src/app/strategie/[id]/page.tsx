@@ -5,7 +5,7 @@ import { Icon } from '@/components/Icon';
 import { PriorityStar } from '@/components/indicators';
 import { stelutaToPrio } from '@/lib/aspect-meta';
 import { calculate, type StrategieInput } from '@/lib/strategie-calc';
-import { parseObservatii } from '@/lib/strategie-autofill';
+import { parseObservatii, mapAlternativaChips } from '@/lib/strategie-autofill';
 import { buildEmail } from '@/lib/email-redactare';
 import { buildInfoCrmText } from '@/lib/info-crm-text';
 import { asMulti, type FisaTemplateData, type FisaField, type FisaColorFam } from '@/lib/fisa-template';
@@ -123,8 +123,8 @@ export default function StrategiePage() {
         // Câmpuri comune (V1 + V2): branșament + putere PFTV existentă.
         fillEmpty('bransament', parsed.bransament);
         fillEmpty('putere_pftv', parsed.puterePftv);
-        // Alternative de încălzire (zona 04, comună ambelor variante).
-        fillEmpty('alternativa', parsed.alternativa);
+        // Alternative de încălzire (zona 04, comună ambelor variante). CHIPS → mapăm la valorile opțiunilor (array).
+        fillEmpty('alternativa', mapAlternativaChips(parsed.alternativa));
         if (isV1) {
           // V1 (construcție): sistemul/costul actual țin de CASA ACTUALĂ → ca_sistem / ca_cost_lunar.
           // mapare V1 (dropdown ca_sistem are etichete diferite de V2 — vezi mapSistemActualV1).

@@ -4,7 +4,7 @@
  */
 import { prisma } from './db';
 import { fetchList, fetchDetail, fetchUltimulReminderDeschis } from './crm-client';
-import { parseObservatii } from './strategie-autofill';
+import { parseObservatii, mapAlternativaChips } from './strategie-autofill';
 import { auditLog } from './audit';
 
 const FINAL = ['Anulat', 'Contractat', 'Finalizat'];
@@ -46,7 +46,8 @@ function autofillBlob(prev: string | null | undefined, observatii: string | null
   // Câmpuri comune (V1 + V2): branșament + putere PFTV existentă + alternative de încălzire.
   fillEmpty('bransament', parsed.bransament);
   fillEmpty('putere_pftv', parsed.puterePftv);
-  fillEmpty('alternativa', parsed.alternativa);
+  // alternativa = câmp CHIPS → mapăm textul liber CRM la valorile EXACTE ale opțiunilor (array), altfel nu se bifează.
+  fillEmpty('alternativa', mapAlternativaChips(parsed.alternativa));
 
   if (categorie === 1) {
     // V1 (construcție): sistemul/costul actual țin de CASA ACTUALĂ → ca_sistem / ca_cost_lunar.
