@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Fragment } from 'react';
 import { Layout } from '@/components/Layout';
 import { useT } from '@/lib/i18n';
 
@@ -19,6 +19,35 @@ export default function ArhivaPage() {
   const [filter, setFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null); // rândul cu conținutul snapshot-ului extins
+
+  // Sumar lizibil al conținutului snapshot-ului (ce era în sesiune/strategie la momentul salvării).
+  function snapSummary(e: ArhivaEntry): { label: string; value: string }[] {
+    try {
+      const snap: any = JSON.parse(e.dataSnapshot);
+      const out: { label: string; value: string }[] = [];
+      const push = (label: string, v: any) => {
+        if (v == null || v === '' || (Array.isArray(v) && v.length === 0)) return;
+        out.push({ label, value: Array.isArray(v) ? v.join(', ') : String(v) });
+      };
+      push(t('Suprafață'), snap.suprafata != null ? snap.suprafata + ' mp' : null);
+      push(t('Nevoia'), snap.nevoia);
+      push(t('Stadiu'), snap.stadiu);
+      push(t('Observații situație'), snap.obsSituatie);
+      push(t('Strategie / nevoi'), snap.strategieNevoi);
+      const blobStr = e.versiune === 'V1' ? snap.strategieV1 : snap.strategieV2;
+      if (blobStr) {
+        try {
+          const blob = JSON.parse(blobStr);
+          for (const [k, v] of Object.entries(blob)) {
+            if (/^obs_/.test(k)) continue; // observațiile lungi le sărim din sumar
+            push(k.replace(/_/g, ' '), v);
+          }
+        } catch {}
+      }
+      return out;
+    } catch { return []; }
+  }
 
   function loadEntries() {
     fetch('/api/arhiva').then(r => r.json()).then(j => {
@@ -77,17 +106,38 @@ export default function ArhivaPage() {
           </tr></thead>
           <tbody>
             {filtered.map(e => (
-              <tr key={e.id}>
+              <Fragment key={e.id}>
+              <tr>
                 <td className="font-semibold">{e.client?.nume}{e.client?.localitate ? ' · ' + e.client.localitate : ''}</td>
                 <td><span className="pill pill-lucru">{e.versiune}</span></td>
                 <td className="tabular text-[var(--fg-soft)]">{new Date(e.createdAt).toLocaleString('ro-RO')}</td>
                 <td className="text-[11.5px] whitespace-pre-wrap max-w-md text-[var(--fg-soft)]">{e.obsExtra ?? '—'}</td>
-                <td>
+                <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  <button className="btn btn-secondary btn-xs whitespace-nowrap" onClick={() => setOpenId(openId === e.id ? null : e.id)}>
+                    {openId === e.id ? t('▲ Ascunde conținutul') : t('👁 Vezi conținutul')}
+                  </button>
                   <button className="btn btn-secondary btn-xs whitespace-nowrap" disabled={restoringId === e.id} onClick={() => restaureaza(e)}>
                     {restoringId === e.id ? t('Se restaurează…') : t('↺ Restaurează această versiune')}
                   </button>
                 </td>
               </tr>
+              {openId === e.id && (() => { const rows = snapSummary(e); return (
+                <tr>
+                  <td colSpan={5} style={{ background: 'var(--surface-2)', padding: '12px 16px' }}>
+                    {rows.length === 0 ? <span className="text-[var(--fg-soft)]">{t('(snapshot gol sau necitibil)')}</span> : (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '6px 18px' }}>
+                        {rows.map((r, i) => (
+                          <div key={i} style={{ fontSize: '12.5px', lineHeight: 1.4 }}>
+                            <span className="text-[var(--fg-soft)]" style={{ textTransform: 'capitalize' }}>{r.label}:</span>{' '}
+                            <b style={{ overflowWrap: 'anywhere' }}>{r.value}</b>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ); })()}
+              </Fragment>
             ))}
             {filtered.length === 0 && <tr><td colSpan={5} className="text-center text-[var(--fg-soft)] py-12">{t('Niciun snapshot încă — se creează automat la salvarea unei fișe.')}</td></tr>}
           </tbody>
