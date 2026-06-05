@@ -125,6 +125,8 @@ export default function StrategiePage() {
         fillEmpty('putere_pftv', parsed.puterePftv);
         // Alternative de încălzire (zona 04, comună ambelor variante). CHIPS → mapăm la valorile opțiunilor (array).
         fillEmpty('alternativa', mapAlternativaChips(parsed.alternativa));
+        // Preventie (Sistem/Brand) — CHIPS; parserul întoarce array-ul din cele 2 întrebări CRM.
+        fillEmpty('preventie', parsed.preventie);
         if (isV1) {
           // V1 (construcție): sistemul/costul actual țin de CASA ACTUALĂ → ca_sistem / ca_cost_lunar.
           // mapare V1 (dropdown ca_sistem are etichete diferite de V2 — vezi mapSistemActualV1).

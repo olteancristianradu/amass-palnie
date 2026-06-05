@@ -48,6 +48,8 @@ function autofillBlob(prev: string | null | undefined, observatii: string | null
   fillEmpty('putere_pftv', parsed.puterePftv);
   // alternativa = câmp CHIPS → mapăm textul liber CRM la valorile EXACTE ale opțiunilor (array), altfel nu se bifează.
   fillEmpty('alternativa', mapAlternativaChips(parsed.alternativa));
+  // preventie = CHIPS (Sistem/Brand) — parserul întoarce deja array-ul din cele 2 întrebări „-da" din CRM.
+  fillEmpty('preventie', parsed.preventie);
 
   if (categorie === 1) {
     // V1 (construcție): sistemul/costul actual țin de CASA ACTUALĂ → ca_sistem / ca_cost_lunar.

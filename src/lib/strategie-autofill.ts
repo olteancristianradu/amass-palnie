@@ -34,6 +34,8 @@ export interface AutofillResult {
   doresteOftv: 'Da' | 'Nu' | 'Are deja' | 'În viitor' | null;
   /** Putere PFTV existentă (kW) ca număr, sau null. */
   puterePftv: number | null;
+  /** Preventie — câmp CHIPS: ['Sistem'] și/sau ['Brand'] (clientul poate avea ambele), sau null. */
+  preventie: string[] | null;
 }
 
 // Normalizeaza diacriticele romanesti pentru matching robust (ă/â→a, î→i, ț→t, ș→s).
@@ -169,6 +171,20 @@ export function mapAlternativaChips(raw: string | null | undefined): string[] {
 }
 
 /**
+ * Mapează cele 2 întrebări de preventie din formularul CRM la chips-ul `preventie` (PREVENTIE=['Sistem','Brand']).
+ * Formatul CRM: „Preventie fata de alte sisteme-da" + „Preventie fata de concurenta de BRAND-da" — sufixul
+ * „-da" = răspuns afirmativ (fără sufix = fără răspuns). Clientul poate avea AMBELE → de aceea e chips, nu dropdown.
+ */
+export function mapPreventieChips(obsText: string | null | undefined): string[] {
+  if (!obsText) return [];
+  const s = normalizeRo(String(obsText)).toLowerCase();
+  const out: string[] = [];
+  if (/alte\s+sisteme\s*-\s*da\b/.test(s)) out.push('Sistem');
+  if (/brand\s*-\s*da\b/.test(s)) out.push('Brand');
+  return out;
+}
+
+/**
  * Parser principal — portat 1:1 din Strategie.js::_parseObservatiiForm_ (logica line-based).
  * Primește textul OBSERVATII (deja decodificat în webapp) → întoarce câmpurile de autofill.
  * @param obsText textul brut OBSERVATII (plain text, cu newline-uri)
@@ -176,7 +192,7 @@ export function mapAlternativaChips(raw: string | null | undefined): string[] {
 export function parseObservatii(obsText: string | null | undefined): AutofillResult {
   const empty: AutofillResult = {
     sistem_actual: '', sistem_actual_v1: '', costLunar: null, bugetAchizitie: null, alternativa: null,
-    bransament: null, doresteOftv: null, puterePftv: null
+    bransament: null, doresteOftv: null, puterePftv: null, preventie: null
   };
   if (!obsText) return empty;
 
@@ -327,6 +343,7 @@ export function parseObservatii(obsText: string | null | undefined): AutofillRes
     alternativa: alternativa || null,
     bransament: bransamentOut,
     doresteOftv: doresteOut,
-    puterePftv: puterePftvOut
+    puterePftv: puterePftvOut,
+    preventie: (() => { const p = mapPreventieChips(obsText); return p.length ? p : null; })()
   };
 }

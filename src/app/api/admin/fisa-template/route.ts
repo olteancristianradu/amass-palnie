@@ -9,14 +9,28 @@ import { SEED_V1, SEED_V2 } from '@/lib/fisa-template-seed';
 
 const SEEDS: Record<'V1' | 'V2', FisaTemplateData> = { V1: SEED_V1, V2: SEED_V2 };
 
-// Întoarce template-ul unei variante din DB; dacă lipsește, auto-seed din SEED_V1/V2.
+// Versiunea SEED-ului. BUMP la fiecare schimbare de structură în fisa-template-seed.ts → re-seed AUTOMAT
+// la următoarea citire (template-ul vechi din DB se reactualizează o singură dată). DATA-SAFE: datele
+// clienților stau în blob (client.strategieV1/V2), iar migrateFisaBlob remapează cheile vechi→noi la load.
+// v2 (2026-06-05): V2 zona 02 descompusă (sursa_caldura/pompa_tip/distributie), V1 ca_suprafata reintrodus,
+// preventie → chips. Înainte: loadTemplate făcea update:{} → redesign-ul NU ajungea niciodată în DB.
+const SEED_VERSION = 2;
+
+// Întoarce template-ul unei variante din DB; dacă lipsește, auto-seed; dacă e o versiune veche, re-seed.
 async function loadTemplate(variant: 'V1' | 'V2'): Promise<FisaTemplateData> {
   const seed = SEEDS[variant];
-  const row = await prisma.fisaTemplate.upsert({
+  let row = await prisma.fisaTemplate.upsert({
     where: { variant },
-    update: {}, // dacă există, nu modificăm nimic — doar citim
-    create: { variant, titlu: seed.titlu, zones: JSON.stringify(seed.zones) },
+    update: {}, // citire; re-seed-ul (dacă e cazul) se face mai jos, controlat pe versiune
+    create: { variant, titlu: seed.titlu, zones: JSON.stringify(seed.zones), version: SEED_VERSION },
   });
+  // Re-seed AUTOMAT dacă template-ul din DB e dintr-o versiune SEED mai veche (structură învechită).
+  if ((row.version ?? 1) < SEED_VERSION) {
+    row = await prisma.fisaTemplate.update({
+      where: { variant },
+      data: { titlu: seed.titlu, zones: JSON.stringify(seed.zones), version: SEED_VERSION },
+    });
+  }
   // JSON.parse protejat: zones corupt în DB nu trebuie să arunce 500 pe toată aplicația.
   let zones: any = [];
   try { zones = JSON.parse(row.zones) || []; } catch { zones = []; }

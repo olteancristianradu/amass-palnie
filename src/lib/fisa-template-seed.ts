@@ -84,6 +84,9 @@ export const SEED_V1: FisaTemplateData = {
       // V1: zona 02 = „Info casă actuală (obișnuința clientului)".
       id: 'z02', titlu: '02 Info casă actuală',
       fields: [
+        // REINTRODUS 2026-06-05: „Ce suprafață" (suprafața casei actuale) — scos accidental la un redesign
+        // (3a5517e) fără migrare. Cheia `ca_suprafata` readuce datele orfanizate ale clienților V1.
+        { key: 'ca_suprafata', label: 'Ce suprafață (mp):', control: 'number', source: 'manual', cell: 'C13', unit: 'mp' },
         { key: 'ca_sursa_caldura', label: 'Ce sursă de căldură:', control: 'dropdown', source: 'autofill', cell: 'C14', fam: 'ambra', options: SURSA_CALDURA },
         { key: 'ca_sursa_caldura_pompa_tip', label: 'Tip pompă:', control: 'pills', source: 'manual', fam: 'ambra', options: POMPA_TIP, cond: { key: 'ca_sursa_caldura', in: ['Pompă de căldură'] } },
         { key: 'ca_distributie', label: 'Distribuție / emisie:', control: 'pills', source: 'manual', fam: 'albastru', options: DISTRIBUTIE },
@@ -124,7 +127,7 @@ export const SEED_V1: FisaTemplateData = {
         { key: 'motiv_principal', label: 'Motivul principal ("Doriți să...?"):', control: 'pills', source: 'manual', cell: 'C24', fam: 'violet', options: MOTIV },
         { key: 'plata_esalonata', label: 'Plată eșalonată (din formular):', control: 'text', source: 'autofill', cell: 'C25' },
         { key: 'alternativa', label: 'Alternative de care este interesat:', control: 'chips', source: 'autofill', cell: 'C26', options: ALTERNATIVE },
-        { key: 'preventie', label: 'Preventie (sistem / brand):', control: 'dropdown', source: 'manual', cell: 'C27', options: PREVENTIE },
+        { key: 'preventie', label: 'Preventie (sistem / brand):', control: 'chips', source: 'autofill', cell: 'C27', options: PREVENTIE },
         { key: 'obs_preventie', label: 'Detalii preventie (ce sistem / brand):', control: 'text', source: 'manual', cell: 'D27' },
         { key: 'nivel_bani', label: 'Nivel bani:', control: 'pills', source: 'manual', cell: 'C28', fam: 'violet', options: NIVEL_BANI },
         { key: 'tipologie', label: 'Tipologie emoțională:', control: 'pills', source: 'manual', cell: 'C29', fam: 'violet', options: TIPOLOGIE },
@@ -212,7 +215,7 @@ export const SEED_V2: FisaTemplateData = {
         { key: 'motiv_principal', label: 'Motivul principal ("Doriți să...?"):', control: 'pills', source: 'manual', cell: 'C24', fam: 'violet', options: MOTIV },
         { key: 'plata_esalonata', label: 'Plată eșalonată (din formular):', control: 'text', source: 'autofill', cell: 'C25' },
         { key: 'alternativa', label: 'Alternative de care este interesat:', control: 'chips', source: 'autofill', cell: 'C26', options: ALTERNATIVE },
-        { key: 'preventie', label: 'Preventie (sistem / brand):', control: 'dropdown', source: 'manual', cell: 'C27', options: PREVENTIE },
+        { key: 'preventie', label: 'Preventie (sistem / brand):', control: 'chips', source: 'autofill', cell: 'C27', options: PREVENTIE },
         { key: 'obs_preventie', label: 'Detalii preventie (ce sistem / brand):', control: 'text', source: 'manual', cell: 'D27' },
         { key: 'nivel_bani', label: 'Nivel bani:', control: 'pills', source: 'manual', cell: 'C28', fam: 'violet', options: NIVEL_BANI },
         { key: 'tipologie', label: 'Tipologie emoțională:', control: 'pills', source: 'manual', cell: 'C29', fam: 'violet', options: TIPOLOGIE },
