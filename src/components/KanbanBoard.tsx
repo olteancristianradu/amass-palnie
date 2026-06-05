@@ -59,9 +59,10 @@ interface Props {
   onPatch: (id: string, patch: Record<string, any>) => void; // update optimist local (în pagina părinte)
   setMsg: (m: string) => void;
   reload: () => void;
+  sortKey?: string; // sortarea globală aleasă în panou (data-desc/asc, supr-*, prio-desc, nume-asc, etapa)
 }
 
-export function KanbanBoard({ clienti, isManager, ownerFilter, onPatch, setMsg, reload }: Props) {
+export function KanbanBoard({ clienti, isManager, ownerFilter, onPatch, setMsg, reload, sortKey }: Props) {
   const { t } = useT();
   const router = useRouter();
   const [drag, setDrag] = useState<string | null>(null);
@@ -122,12 +123,24 @@ export function KanbanBoard({ clienti, isManager, ownerFilter, onPatch, setMsg, 
   const byCol: Record<string, KanbanClient[]> = {};
   COLS.forEach(c => byCol[c.key] = []);
   clienti.forEach(c => byCol[stageOf(c)].push(c));
-  // sortare în coloană: „rotting" (cele mai vechi în stadiu) sus → prioritate → suprafață
+  // sortare în coloană: RESPECTĂ sortarea GLOBALĂ din panou (inclusiv „dată intrare", care înainte nu se
+  // aplica în kanban). Default / „etapa" = „rotting" (cele mai vechi în stadiu) sus → prioritate → suprafață.
+  const parseD = (s: string | null) => (s ? new Date(s).getTime() : 0);
   COLS.forEach(col => byCol[col.key].sort((a, b) => {
-    const ad = ageDays(a) ?? -1, bd = ageDays(b) ?? -1;
-    if (bd !== ad) return bd - ad;
-    if (b.stelutaCat !== a.stelutaCat) return b.stelutaCat - a.stelutaCat;
-    return (b.suprafata || 0) - (a.suprafata || 0);
+    switch (sortKey) {
+      case 'data-desc': return parseD(b.dataIntrare) - parseD(a.dataIntrare); // dată intrare: noi → vechi
+      case 'data-asc':  return parseD(a.dataIntrare) - parseD(b.dataIntrare); // dată intrare: vechi → noi
+      case 'supr-desc': return (b.suprafata || 0) - (a.suprafata || 0);
+      case 'supr-asc':  return (a.suprafata || 0) - (b.suprafata || 0);
+      case 'prio-desc': return (b.stelutaCat || 0) - (a.stelutaCat || 0);
+      case 'nume-asc':  return (a.nume || '').localeCompare(b.nume || '', 'ro', { sensitivity: 'base' });
+      default: {
+        const ad = ageDays(a) ?? -1, bd = ageDays(b) ?? -1;
+        if (bd !== ad) return bd - ad;
+        if (b.stelutaCat !== a.stelutaCat) return b.stelutaCat - a.stelutaCat;
+        return (b.suprafata || 0) - (a.suprafata || 0);
+      }
+    }
   }));
   const stop = (e: React.MouseEvent) => e.stopPropagation();
   // FEATURE A: implicit doar coloanele principale; stadiile finale apar la cerere.

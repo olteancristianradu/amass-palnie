@@ -81,6 +81,7 @@ interface FilterState {
   stadiu: string;       // valoare STADII sau ''
   nevoia: string;       // valoare NEVOI sau ''
   steluta: string;      // '' sau '0'..'4'
+  categorie: string;    // '' sau '1'..'5' (clasificarea client gestcom)
   varsta: 'all' | 'fresh' | 'warn' | 'late';  // Vârstă (rotLevel pe etapă): Proaspete/Atenție/Întârziate
   audio: 'all' | 'yes' | 'no';
   inCRM: 'all' | 'yes' | 'no';   // Înregistrare CRM: Toate / În CRM / Fără CRM (null tratat ca în CRM)
@@ -91,7 +92,7 @@ interface FilterState {
   stageFrom: string;    // yyyy-mm-dd — Perioadă schimbare stadiu (pe updatedAt)
   stageTo: string;      // yyyy-mm-dd
 }
-const DEFAULT_FILTERS: FilterState = { stage: '', stadiu: '', nevoia: '', steluta: '', varsta: 'all', audio: 'all', inCRM: 'all', mpMin: '', mpMax: '', dateFrom: '', dateTo: '', stageFrom: '', stageTo: '' };
+const DEFAULT_FILTERS: FilterState = { stage: '', stadiu: '', nevoia: '', steluta: '', categorie: '', varsta: 'all', audio: 'all', inCRM: 'all', mpMin: '', mpMax: '', dateFrom: '', dateTo: '', stageFrom: '', stageTo: '' };
 
 // Înregistrare CRM: null sau true = client real (în CRM); doar false = creat manual în webapp.
 const isInCRM = (c: { inCRM?: boolean | null }) => c.inCRM !== false;
@@ -507,6 +508,8 @@ export default function PalniePage() {
       // Steluță (prioritate culoare) — compar pe CHEIA de prioritate, nu pe categoria gestcom brută,
       // ca să prindă și cat 5 (tot „verde") sub opțiunea „Verde" (gestcom cat 4); identic cu punctele din UI.
       if (filters.steluta !== '' && stelutaToPrio(c.stelutaCat ?? 0) !== stelutaToPrio(Number(filters.steluta))) return false;
+      // Categorie client (1-5, clasificarea gestcom — afișată ca „(N)" lângă nume).
+      if (filters.categorie !== '' && (c.categorie ?? 0) !== Number(filters.categorie)) return false;
       // Vârstă (rotLevel pe etapă: proaspăt / atenție / întârziat)
       if (filters.varsta !== 'all' && rotLevel(deriveStage(c), daysSince(c.dataIntrare)) !== filters.varsta) return false;
       // Audio
@@ -559,7 +562,7 @@ export default function PalniePage() {
   // Nr. de filtre active (pt. badge) — search-ul nu intră, are propriul input.
   const activeFilterCount = (
     (filters.stage ? 1 : 0) + (filters.stadiu ? 1 : 0) + (filters.nevoia ? 1 : 0) +
-    (filters.steluta !== '' ? 1 : 0) + (filters.varsta !== 'all' ? 1 : 0) + (filters.audio !== 'all' ? 1 : 0) +
+    (filters.steluta !== '' ? 1 : 0) + (filters.categorie !== '' ? 1 : 0) + (filters.varsta !== 'all' ? 1 : 0) + (filters.audio !== 'all' ? 1 : 0) +
     (filters.inCRM !== 'all' ? 1 : 0) +
     (filters.mpMin !== '' || filters.mpMax !== '' ? 1 : 0) +
     (filters.dateFrom || filters.dateTo ? 1 : 0) +
@@ -573,6 +576,7 @@ export default function PalniePage() {
     filters.stadiu ? { k: 'stadiu', label: filters.stadiu, clear: () => setF('stadiu', '') } : null,
     filters.nevoia ? { k: 'nevoia', label: filters.nevoia, clear: () => setF('nevoia', '') } : null,
     filters.steluta !== '' ? { k: 'steluta', label: 'Prio: ' + (STELUTA_OPTIONS[Number(filters.steluta)] || filters.steluta), clear: () => setF('steluta', '') } : null,
+    filters.categorie !== '' ? { k: 'categorie', label: 'Categorie ' + filters.categorie, clear: () => setF('categorie', '') } : null,
     filters.varsta !== 'all' ? { k: 'varsta', label: 'Vârstă: ' + ({ fresh: 'Proaspete', warn: 'Atenție', late: 'Întârziate' }[filters.varsta] || filters.varsta), clear: () => setF('varsta', 'all') } : null,
     filters.audio !== 'all' ? { k: 'audio', label: filters.audio === 'yes' ? 'Cu audio' : 'Fără audio', clear: () => setF('audio', 'all') } : null,
     filters.inCRM !== 'all' ? { k: 'inCRM', label: filters.inCRM === 'yes' ? 'În CRM' : 'Fără CRM', clear: () => setF('inCRM', 'all') } : null,
@@ -649,6 +653,9 @@ export default function PalniePage() {
               const p = PRIORITY_MAP[stelutaToPrio(Number(k))];
               return p ? p.color : null;
             }} />
+          <FilterGroup label={t('Categorie')} value={filters.categorie === '' ? 'toate' : filters.categorie}
+            onChange={(k) => setF('categorie', k === 'toate' ? '' : k)}
+            options={[['toate', t('Toate')], ['1', '1'], ['2', '2'], ['3', '3'], ['4', '4'], ['5', '5']]} />
           <FilterGroup label={t('Vârstă')} value={filters.varsta}
             onChange={(k) => setF('varsta', k as FilterState['varsta'])}
             options={[['all', t('Toate')], ['fresh', t('Proaspete')], ['warn', t('Atenție')], ['late', t('Întârziate')]]} />
@@ -851,7 +858,7 @@ export default function PalniePage() {
         </div>
       ) : view === 'kanban' ? (
         <KanbanBoard clienti={filtered} isManager={isManager} ownerFilter={ownerFilter}
-          onPatch={patchLocal} setMsg={setMsg} reload={() => load()} />
+          onPatch={patchLocal} setMsg={setMsg} reload={() => load()} sortKey={sortKey} />
       ) : (
         <div className="funnel-list rise">
           {filtered.map(c => {
