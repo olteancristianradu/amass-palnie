@@ -26,10 +26,16 @@ export function getAuthUrl(state: string): string {
 }
 
 async function tokenRequest(body: Record<string, string>) {
-  const r = await fetch(AUTH + '/token', {
-    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: process.env.AZURE_CLIENT_ID!, client_secret: process.env.AZURE_CLIENT_SECRET!, redirect_uri: redirectUri(), ...body }).toString()
-  });
+  let r: Response;
+  try {
+    r = await fetch(AUTH + '/token', {
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ client_id: process.env.AZURE_CLIENT_ID!, client_secret: process.env.AZURE_CLIENT_SECRET!, redirect_uri: redirectUri(), ...body }).toString()
+    });
+  } catch {
+    // Rețea inaccesibilă (timeout, DNS fail etc.) — eroare clară, nu TypeError brut.
+    throw new Error('Microsoft Graph inaccesibil — verifică conexiunea la internet sau încearcă mai târziu.');
+  }
   const j = await r.json();
   if (!r.ok) throw new Error(j.error_description || j.error || 'token error ' + r.status);
   return j as { access_token: string; refresh_token?: string; expires_in: number };
@@ -55,10 +61,20 @@ async function getValidAccessToken(userId: string): Promise<string> {
   // decrypt protejat: un token corupt / CRYPTO_KEY schimbat nu trebuie să arunce o eroare criptică.
   let refresh: string;
   try {
-    if (tok.expiresAt.getTime() > Date.now()) return decrypt(tok.accessEnc);
+    if (tok.expiresAt.getTime() > Date.now()) {
+      const access = decrypt(tok.accessEnc);
+      // Token gol după decrypt = date corupte (NU expirat), mesaj clar.
+      if (!access) throw new Error('TOKEN_CORUPT');
+      return access;
+    }
     refresh = decrypt(tok.refreshEnc);
-  } catch { throw new Error('Token Outlook corupt sau CRYPTO_KEY schimbat — reconectează contul Outlook din Setări.'); }
-  if (!refresh) throw new Error('Token Outlook expirat — reconectează contul');
+  } catch (err: any) {
+    if (err?.message === 'TOKEN_CORUPT')
+      throw new Error('Token Outlook corupt sau lipsă — reconectează contul Outlook din Setări.');
+    throw new Error('Token Outlook corupt sau CRYPTO_KEY schimbat — reconectează contul Outlook din Setări.');
+  }
+  // Refresh gol după decrypt = date corupte (NU expirat), mesaj clar.
+  if (!refresh) throw new Error('Token Outlook corupt sau lipsă — reconectează contul Outlook din Setări.');
   const t = await tokenRequest({ grant_type: 'refresh_token', refresh_token: refresh, scope: SCOPES });
   await prisma.outlookToken.update({
     where: { userId },
@@ -92,9 +108,15 @@ export async function sendMail(userId: string, msg: { to: string; cc?: string; s
   if (msg.attachments?.length) {
     message.attachments = msg.attachments.map(a => ({ '@odata.type': '#microsoft.graph.fileAttachment', name: a.name, contentType: a.contentType, contentBytes: a.contentBytesBase64 }));
   }
-  const r = await fetch(GRAPH + '/me/sendMail', {
-    method: 'POST', headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, saveToSentItems: true })
-  });
+  let r: Response;
+  try {
+    r = await fetch(GRAPH + '/me/sendMail', {
+      method: 'POST', headers: { Authorization: 'Bearer ' + access, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, saveToSentItems: true })
+    });
+  } catch {
+    // Rețea inaccesibilă — eroare clară pentru caller, nu TypeError brut.
+    throw new Error('Microsoft Graph inaccesibil — verifică conexiunea la internet sau încearcă mai târziu.');
+  }
   if (!r.ok) { const e = await r.text(); throw new Error('Graph sendMail ' + r.status + ': ' + e.slice(0, 200)); }
 }

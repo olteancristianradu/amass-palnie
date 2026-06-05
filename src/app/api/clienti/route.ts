@@ -70,10 +70,17 @@ export async function POST(req: NextRequest) {
     }
   });
 
-  await auditLog({
-    userId: scope.userId, func: 'clienti/create', action: 'CREATE',
-    entity: 'Client', entityId: created.id, fields: 'nume,idLucrare,localitate,judet,telefon,suprafata'
-  });
+  // Audit log: nu trebuie să blocheze răspunsul (clientul e deja creat). `auditLog` își prinde intern
+  // erorile, dar prindem și aici defensiv ca o eventuală eroare la salvarea audit-ului să fie măcar
+  // LOGATĂ cu console.error (nu înghițită tăcut), păstrând răspunsul de succes.
+  try {
+    await auditLog({
+      userId: scope.userId, func: 'clienti/create', action: 'CREATE',
+      entity: 'Client', entityId: created.id, fields: 'nume,idLucrare,localitate,judet,telefon,suprafata'
+    });
+  } catch (e) {
+    console.error('[clienti/create] audit log failed:', e);
+  }
 
   return NextResponse.json({ ok: true, id: created.id });
 }

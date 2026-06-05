@@ -23,6 +23,11 @@ export interface EmailInput {
 const TO_LIST = 'backoffice@amass.ro; Tehnic Amass <tehnic@amass.ro>; AMASS <administrativ@amass.ro>';
 const CC_LIST = 'Dana Rulea <danarulea@amass.ro>';
 
+/** FIX #1: elimină CR/LF din valori folosite în subiect/headere — previne email header injection */
+function stripHeaders(s: any): string {
+  return String(s ?? '').replace(/[\r\n]+/g, ' ').trim();
+}
+/** FIX #2: escape entități HTML pentru câmpuri interpolate în corpul HTML al emailului */
 function esc(s: any): string {
   // fieldValueToText normalizează multiselect (array în blob) → text cu virgule; pe non-array e identitate
   return fieldValueToText(s)
@@ -35,6 +40,10 @@ function v_(x: any, suffix = ''): string {
   return text ? esc(x) + suffix : '<b>_____________</b>';
 }
 function m_(label: string): string { return '<b>' + esc(label) + '</b>'; }
+/** FIX #3: test explicit null/undefined/'' — valoarea 0 (numeric) e validă și trebuie afișată ca "0" */
+function numStr(x: any, suffix: string): string {
+  return (x !== null && x !== undefined && x !== '') ? String(x) + suffix : '';
+}
 function h_(text: string): string { return '<b style="text-transform:uppercase;letter-spacing:0.5px">' + esc(text) + '</b>'; }
 
 export function buildEmail(input: EmailInput): { subject: string; to: string; cc: string; body: string } {
@@ -44,7 +53,8 @@ export function buildEmail(input: EmailInput): { subject: string; to: string; cc
   const agentName = d.agentName || 'Radu-Cristian Oltean';
   const catParen = '(' + d.categorie + ')';
   const titluLucrare = esc(d.nume) + ' - ' + esc(d.localitate) + ' ' + catParen;
-  const subject = 'Redactare fisa ISO + DEVIZ - ' + d.nume + ' - ' + d.localitate + ' ' + catParen;
+  // FIX #1: stripHeaders pe valorile derivate din client — previne header injection prin CR/LF
+  const subject = 'Redactare fisa ISO + DEVIZ - ' + stripHeaders(d.nume) + ' - ' + stripHeaders(d.localitate) + ' ' + catParen;
   const BR = '\n';
 
   const reminderSchite =
@@ -112,18 +122,18 @@ h_(isV1 ? 'Situatia actuala (constructie noua)' : 'Situatia actuala (casa locuit
 'Detalii dictate suprafete: ' + m_('[schita / pe plan]') + BR + BR +
 'Observatii situatie actuala: ' + v_(v.obs_situatie) + BR + BR +
 h_('Cu sistemul AMASS') + BR +
-'Cost investitie AMASS: ' + v_(f.cost_investitie_eur ? f.cost_investitie_eur + ' EUR' : '') + BR +
-'Cost esalonare lunara AMASS: ' + v_(f.cost_esalonare_range || '') + BR + BR +
+'Cost investitie AMASS: ' + v_(numStr(f.cost_investitie_eur, ' EUR')) + BR +
+'Cost esalonare lunara AMASS: ' + v_(f.cost_esalonare_range ?? '') + BR + BR +
 h_('Reactii financiare') + BR +
-'Reactie la limita de buget estimat: ' + v_(f.cost_investitie_economic_eur ? f.cost_investitie_economic_eur + ' EUR' : '') + BR +
-'Reactie la plata integrala + Promo: ' + v_(f.cost_promo_eur ? f.cost_promo_eur + ' EUR' : '') + BR +
+'Reactie la limita de buget estimat: ' + v_(numStr(f.cost_investitie_economic_eur, ' EUR')) + BR +
+'Reactie la plata integrala + Promo: ' + v_(numStr(f.cost_promo_eur, ' EUR')) + BR +
 'Tip plata preferat: ' + v_(v.tip_plata) + BR +
 'Interval buget / esalonare acceptabil: ' + v_(v.interval_buget) + BR + BR +
 h_('Diferente & concluzii') + BR +
-'Diferenta consum (cost/luna): ' + v_(f.diferenta_consum_lei ? f.diferenta_consum_lei + ' lei' : '') + BR +
-'Profit anual estimat: ' + v_(f.profit_anual_lei ? f.profit_anual_lei + ' lei' : '') + BR +
-'Diferenta PFTV: ' + v_(f.diferenta_pftv_kw ? f.diferenta_pftv_kw + ' kW' : '') + BR +
-'Amortizare investitie: ' + v_(f.amortizare_ani ? f.amortizare_ani + ' ani' : '') + BR + BR +
+'Diferenta consum (cost/luna): ' + v_(numStr(f.diferenta_consum_lei, ' lei')) + BR +
+'Profit anual estimat: ' + v_(numStr(f.profit_anual_lei, ' lei')) + BR +
+'Diferenta PFTV: ' + v_(numStr(f.diferenta_pftv_kw, ' kW')) + BR +
+'Amortizare investitie: ' + v_(numStr(f.amortizare_ani, ' ani')) + BR + BR +
 h_('Strategie & nevoi identificate') + BR +
 v_(v.strategie_nevoi) +
 reminderSchite +

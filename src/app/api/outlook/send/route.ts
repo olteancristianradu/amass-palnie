@@ -24,6 +24,8 @@ export async function POST(req: NextRequest) {
     await auditLog({ userId: scope.userId, func: 'outlook/send', action: 'EMAIL', entityId: clientId, fields: 'to=' + to + (attachments ? '; +PDF' : '') });
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
+    // Nu expunem detaliile Graph/infra către client; le logăm pe server.
+    console.error('[outlook/send] eroare trimitere email:', e?.message ?? e);
+    return NextResponse.json({ ok: false, error: 'Trimiterea emailului a eșuat, reîncearcă.' }, { status: 500 });
   }
 }

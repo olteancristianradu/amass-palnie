@@ -66,6 +66,14 @@ export default function StrategiePage() {
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const formDirty = useRef(false);
+  // FIX #3: secvențiere autosave — fiecare PATCH primește un id crescător + un AbortController.
+  // Răspunsul unui PATCH e ignorat dacă între timp a plecat o cerere mai nouă → „ultima editare câștigă".
+  const saveSeq = useRef(0);
+  const saveAbort = useRef<AbortController | null>(null);
+  // Dedup pe payload identic: nu retrimitem același body de două ori la rând.
+  const lastSavedPayload = useRef<string | null>(null);
+  // FIX #2: ținem evidența calcKey-urilor deja semnalate (typo în template) ca să nu spamăm console.warn.
+  const warnedCalcKeys = useRef<Set<string>>(new Set());
   const [emailOpen, setEmailOpen] = useState(false);
   const [reminderOpen, setReminderOpen] = useState(false);
   // Mod prezentare (paritate handoff .fisa--present): ascunde inputurile, lasă doar panoul AMASS (vedere client).
@@ -79,7 +87,12 @@ export default function StrategiePage() {
 
   useEffect(() => {
     if (!params?.id) return;
-    fetch(`/api/clienti/${params.id}`).then(r => r.json()).then(j => {
+    // FIX #4: guard „ignore-if-stale" legat de id-ul curent. La navigare rapidă între clienți,
+    // un răspuns întârziat pentru un id vechi se aruncă → nu amestecăm datele clientului X cu template Y.
+    const reqId = params.id;
+    let cancelled = false;
+    fetch(`/api/clienti/${reqId}`).then(r => r.json()).then(j => {
+      if (cancelled || reqId !== params.id) return;
       if (j.ok) {
         setClient(j.client);
         const isV1 = j.client.categorie === 1;
@@ -140,6 +153,8 @@ export default function StrategiePage() {
         fetch('/api/admin/fisa-template')
           .then(r => (r.ok ? r.json() : null))
           .then(t => {
+            // FIX #4: tot guard-ul de id valabil și pentru răspunsul de template.
+            if (cancelled || reqId !== params.id) return;
             // Acceptăm mai multe forme de răspuns: array, {templates:[...]}, {template} sau template direct.
             const list: FisaTemplateData[] = Array.isArray(t) ? t
               : Array.isArray(t?.templates) ? t.templates
@@ -148,9 +163,10 @@ export default function StrategiePage() {
             const tpl = list.find(x => x && x.variant === wantVariant);
             setTemplate(tpl || seed);
           })
-          .catch(() => setTemplate(seed));
+          .catch(() => { if (!cancelled && reqId === params.id) setTemplate(seed); });
       }
     });
+    return () => { cancelled = true; };
   }, [params?.id]);
 
   // CONTACT LIVE: după ce s-a încărcat clientul, citim contactele reale din CRM
@@ -190,13 +206,27 @@ export default function StrategiePage() {
     setForm(prev => ({ ...prev, [key]: val }));
   }
   // Cost lunar ↔ sezon (×6 / ÷6) reciproc — păstrat din comportamentul fișei (V1, casa actuală).
+  // FIX #1: păstrăm EXACT valoarea tastată de user în câmpul editat și o derivăm DOAR pe cealaltă,
+  // fără rotunjire distructivă pe partea derivată → un eventual round-trip nu mai corupe ce a tastat
+  // userul (înainte: 605 sezon → 101 lunar → ×6 re-derivă 606).
   function setLunar(v: any) {
-    const sezon = v !== '' && v != null ? String(Math.round(Number(v) * 6)) : '';
+    // Lunarul tastat rămâne neatins; sezonul derivat (×6) e exact când lunarul e întreg, altfel ține zecimalele.
+    let sezon = '';
+    if (v !== '' && v != null) {
+      const raw = Number(v) * 6;
+      sezon = String(Number.isInteger(raw) ? raw : Math.round(raw * 100) / 100);
+    }
     formDirty.current = true;
     setForm(prev => ({ ...prev, ca_cost_lunar: v, ca_cost_sezon: sezon }));
   }
   function setSezon(v: any) {
-    const lunar = v !== '' && v != null ? String(Math.round(Number(v) / 6)) : '';
+    // Sezonul tastat rămâne neatins; lunarul e doar derivat (÷6), păstrat cu 2 zecimale ca un re-derivat
+    // (×6) să reconstruiască fidel sezonul (ex: 605 → lunar 100.83 → ×6 = 604.98 ≈ 605, nu 606).
+    let lunar = '';
+    if (v !== '' && v != null) {
+      const raw = Number(v) / 6;
+      lunar = String(Number.isInteger(raw) ? raw : Math.round(raw * 100) / 100);
+    }
     formDirty.current = true;
     setForm(prev => ({ ...prev, ca_cost_sezon: v, ca_cost_lunar: lunar }));
   }
@@ -211,37 +241,56 @@ export default function StrategiePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form]);
 
-  // Curăță timerele la unmount.
+  // Curăță timerele la unmount + anulează un eventual PATCH în zbor (FIX #3).
   useEffect(() => () => {
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
     if (savedTimer.current) clearTimeout(savedTimer.current);
+    if (saveAbort.current) saveAbort.current.abort();
   }, []);
 
   async function save() {
     if (!client) return;
+    const key = client.categorie === 1 ? 'strategieV1' : 'strategieV2';
+    const body = JSON.stringify({
+      [key]: form,
+      suprafata: form.suprafata ? parseFloat(String(form.suprafata)) : null,
+      obsSituatie: form.obs_situatie || null,
+      strategieNevoi: form.strategie_nevoi || null
+    });
+    // FIX #3 (dedup): dacă payload-ul e identic cu ultimul salvat cu succes, nu mai trimitem nimic.
+    if (body === lastSavedPayload.current) return;
     setMsg('');
     // Indicator salvare automată: „⟳ Se salvează…" cât rulează PATCH-ul.
     if (savedTimer.current) { clearTimeout(savedTimer.current); savedTimer.current = null; }
     setSaveState('saving');
-    const key = client.categorie === 1 ? 'strategieV1' : 'strategieV2';
-    const r = await fetch(`/api/clienti/${client.id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        [key]: form,
-        suprafata: form.suprafata ? parseFloat(String(form.suprafata)) : null,
-        obsSituatie: form.obs_situatie || null,
-        strategieNevoi: form.strategie_nevoi || null
-      })
-    });
-    const j = await r.json();
-    // „✓ Salvat" ~2s, apoi revine la starea idle.
-    if (j.ok) {
-      setSaveState('saved');
-      savedTimer.current = setTimeout(() => setSaveState('idle'), 2000);
-    } else {
-      setSaveState('idle');
+    // FIX #3 (secvențiere): anulăm PATCH-ul anterior în zbor și atașăm un id crescător de cerere.
+    // Un răspuns mai vechi care vine după o cerere mai nouă e ignorat → „ultima editare câștigă".
+    if (saveAbort.current) saveAbort.current.abort();
+    const ctrl = new AbortController();
+    saveAbort.current = ctrl;
+    const mySeq = ++saveSeq.current;
+    try {
+      const r = await fetch(`/api/clienti/${client.id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body, signal: ctrl.signal
+      });
+      const j = await r.json();
+      // Răspuns învechit (a plecat între timp o cerere mai nouă) → îl ignorăm complet.
+      if (mySeq !== saveSeq.current) return;
+      // „✓ Salvat" ~2s, apoi revine la starea idle.
+      if (j.ok) {
+        lastSavedPayload.current = body;
+        setSaveState('saved');
+        savedTimer.current = setTimeout(() => setSaveState('idle'), 2000);
+      } else {
+        setSaveState('idle');
+      }
+      setMsg(j.ok ? t('✅ Salvat (+ snapshot arhivă)') : '❌ ' + j.error);
+    } catch (e: any) {
+      // Abort intenționat (a venit o cerere mai nouă) → ignorăm tăcut; alt eșec → idle.
+      if (e?.name === 'AbortError') return;
+      if (mySeq === saveSeq.current) setSaveState('idle');
     }
-    setMsg(j.ok ? t('✅ Salvat (+ snapshot arhivă)') : '❌ ' + j.error);
   }
 
   // INFO CRM: generează textul COMPLET din toată fișa (toate câmpurile + auto-calc, ca în spreadsheet)
@@ -310,6 +359,23 @@ export default function StrategiePage() {
   const zone = (id: string) => template.zones.find(z => z.id === id);
   const fld = (zid: string, key: string) => zone(zid)?.fields.find(f => f.key === key);
 
+  // FIX #2: rezolvă un calcKey față de output-ul real al calculului (`calc`).
+  // `missing` = cheia NU există ca proprietate în StrategieCalc → typo în template
+  // (distinct de o cheie validă cu valoare null, care e doar „încă necalculat"). Doar display +
+  // console.warn (o singură dată per cheie), non-distructiv: nu atinge form-ul sau salvarea.
+  const calcVal = (calcKey?: string): { missing: boolean; value: any } => {
+    if (!calcKey) return { missing: false, value: null };
+    if (!(calcKey in (calc as any))) {
+      if (!warnedCalcKeys.current.has(calcKey)) {
+        warnedCalcKeys.current.add(calcKey);
+        // eslint-disable-next-line no-console
+        console.warn(`[fișă] calcKey „${calcKey}" lipsește din output-ul StrategieCalc (typo în template?).`);
+      }
+      return { missing: true, value: null };
+    }
+    return { missing: false, value: (calc as any)[calcKey] };
+  };
+
   // Verifică `cond`: câmpul apare doar dacă valoarea din form[cond.key] ∈ cond.in.
   const condOk = (f: FisaField) => !f.cond || (f.cond.in || []).includes(String(form[f.cond.key] ?? ''));
 
@@ -332,10 +398,13 @@ export default function StrategiePage() {
 
     // 'calc' → CalcRow read-only cu InfoDot (formula + note); valoarea din `calc` prin calcKey.
     if (f.control === 'calc') {
-      const raw = f.calcKey ? (calc as any)[f.calcKey] : null;
-      const value = typeof raw === 'number'
-        ? nfmt(raw, Number.isInteger(raw) ? 0 : 2)
-        : (raw == null || raw === '' ? '—' : String(raw));
+      // FIX #2: dacă f.calcKey nu există în output (typo) → marker „—" vizibil + console.warn.
+      const { missing, value: raw } = calcVal(f.calcKey);
+      const value = missing
+        ? '—'
+        : (typeof raw === 'number'
+          ? nfmt(raw, Number.isInteger(raw) ? 0 : 2)
+          : (raw == null || raw === '' ? '—' : String(raw)));
       const unit = f.calcKey ? CALC_UNITS[f.calcKey] : undefined;
       return <CalcRow key={f.key} label={t(label)} value={value} formula={f.formula ? t(f.formula) : f.formula} note={f.note ? t(f.note) : f.note} fam={f.fam} unit={unit} hero={f.calcKey === 'cost_investitie_eur'} />;
     }
@@ -382,7 +451,10 @@ export default function StrategiePage() {
         const opts = f.options ?? [];
         const cls = 'select' + (f.fam ? ' fam-' + f.fam + '-b' : '');
         const cur = v ?? '';
-        const all = (cur && !opts.includes(String(cur))) ? [String(cur), ...opts] : opts;
+        // FIX #5: deduplică lista (opțiuni canonice + eventuala valoare stocată orfană), o singură
+        // intrare per valoare → fără <option> duplicate / chei React care se calcă.
+        const merged = (cur && !opts.includes(String(cur))) ? [String(cur), ...opts] : opts;
+        const all = Array.from(new Set(merged.map(o => String(o))));
         return (
           <select className={cls} value={cur} onChange={e => set(f.key, e.target.value)}>
             <option value="">—</option>
@@ -560,8 +632,9 @@ export default function StrategiePage() {
 
   // Valoare calc afișată inline (în .qrow, zona 03) cu InfoDot.
   function renderCalcInline(f: FisaField) {
-    const raw = f.calcKey ? (calc as any)[f.calcKey] : null;
-    const value = typeof raw === 'number' ? nfmt(raw, Number.isInteger(raw) ? 0 : 2) : (raw == null || raw === '' ? '—' : String(raw));
+    // FIX #2: calcKey inexistent în output (typo) → marker „—" vizibil + console.warn (via calcVal).
+    const { missing, value: raw } = calcVal(f.calcKey);
+    const value = missing ? '—' : (typeof raw === 'number' ? nfmt(raw, Number.isInteger(raw) ? 0 : 2) : (raw == null || raw === '' ? '—' : String(raw)));
     return (
       <div className="calcinline">
         <b className="mono">{value}</b>
@@ -578,7 +651,8 @@ export default function StrategiePage() {
     const cell = (key: string, unit: string, accent?: boolean, signed?: boolean) => {
       const f = z.fields.find(x => x.key === key);
       if (!f) return null;
-      const raw = f.calcKey ? (calc as any)[f.calcKey] : null;
+      // FIX #2: prin calcVal → console.warn la calcKey inexistent; display rămâne „—" (num == null).
+      const { value: raw } = calcVal(f.calcKey);
       const num = typeof raw === 'number' ? raw : null;
       const tone = accent ? 'accent' : num != null && num > 0 ? 'pos' : num != null && num < 0 ? 'neg' : '';
       const txt = num == null ? '—' : (signed && num > 0 ? '+' : '') + nfmt(num, Number.isInteger(num) ? 0 : (key === '_c_dif_pftv' || key === '_c_amortizare' ? (Number.isInteger(num) ? 0 : (key === '_c_amortizare' ? 1 : 2)) : 0));
@@ -839,8 +913,9 @@ function ChipSet({ options, value, onToggle, fam, defs }: {
   const { t } = useT();
   const cls = fam ? ' chipfam--' + fam : '';
   // Valori vechi care nu mai sunt în options rămân vizibile (selectate) ca să nu se piardă.
+  // FIX #5: deduplică (options + extra orfan) → fără chip-uri duplicate / chei React care se calcă.
   const extra = value.filter(v => !options.includes(v));
-  const all = [...options, ...extra];
+  const all = Array.from(new Set([...options, ...extra]));
   return (
     <div className="chipset">
       {all.map(o => (
@@ -858,7 +933,9 @@ function Pills({ options, value, onChange, fam, defs }: {
 }) {
   const { t } = useT();
   const cls = fam ? ' chipfam--' + fam : '';
-  const all = (value && !options.includes(value)) ? [...options, value] : options;
+  // FIX #5: deduplică (options + eventuala valoare orfană selectată) → fără pills duplicate.
+  const merged = (value && !options.includes(value)) ? [...options, value] : options;
+  const all = Array.from(new Set(merged));
   return (
     <div className="chipset">
       {all.map(o => (

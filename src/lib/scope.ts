@@ -48,10 +48,16 @@ export async function getVisibleOwnerIds(scope: Scope): Promise<string[] | 'ALL'
       childrenOf.set(u.managerId, arr);
     }
   }
+  // Anti-buclă: dacă arborele org are un ciclu (managerId care se închide în el însuși prin lanț),
+  // un nod nu trebuie reprocesat. `visible` = și mulțime de „vizitați": doar nodurile noi se pun în coadă,
+  // iar `expanded` marchează cele deja desfăcute → niciodată buclă infinită (hang/OOM), chiar pe date corupte.
   const visible = new Set<string>([scope.userId]);
+  const expanded = new Set<string>();
   const queue = [scope.userId];
   while (queue.length) {
     const cur = queue.shift()!;
+    if (expanded.has(cur)) continue; // deja desfăcut → nu reprocesa (ciclu)
+    expanded.add(cur);
     for (const child of (childrenOf.get(cur) || [])) {
       if (!visible.has(child)) { visible.add(child); queue.push(child); }
     }

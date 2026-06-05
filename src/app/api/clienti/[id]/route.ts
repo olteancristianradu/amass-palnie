@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db';
 import { auditLog } from '@/lib/audit';
 import { getScope, canAccessClient } from '@/lib/scope';
 import { pushStatusPalnie } from '@/lib/crm-client';
-import { checkStageTransition, deriveStage } from '@/lib/stage-rules';
+import { checkStageTransition, deriveStage, STAGE_RANK } from '@/lib/stage-rules';
 
 // Câmpurile de „status pâlnie" care, la modificare, se împing în Observații CRM (zona aleasă: push în observații).
 const STATUS_FIELDS = ['schitaStatus', 'preOfertat', 'ofertat', 'nevoia', 'stadiu'];
@@ -14,9 +14,12 @@ const SIMPLE_FIELDS = ['stadiu', 'nevoia', 'schitaStatus', 'preOfertat', 'oferta
   't1', 't1Locked', 'probabilitate', 'closeDate', 'forecastCategory', 'closureReason', 'closureReasonDetail', 'nextStepText', 'nextStepDue', 'obsSituatie', 'strategieNevoi', 'notaManager'];
 const DATE_FIELDS = ['closeDate', 'nextStepDue'];
 
-// ANTI-WIPE blob strategie (paritate spreadsheet, bug-ul istoric de wipe): la salvarea fișei NU lăsăm o
-// valoare GOALĂ să suprascrie o valoare NON-GOALĂ deja stocată. Merge cheie-cu-cheie peste blob-ul
-// existent: valorile noi non-goale se scriu; goalul peste non-gol păstrează existentul.
+// ANTI-WIPE blob strategie (paritate spreadsheet, bug-ul istoric de wipe): merge cheie-cu-cheie peste
+// blob-ul existent. Anti-wipe-ul protejează DOAR contra cheilor LIPSĂ / `undefined` (payload parțial —
+// un câmp neatins nu trebuie să șteargă valoarea stocată). NU protejează contra unei valori goale
+// trimise EXPLICIT: golirea intenționată a unui câmp (chips/multiselect → `[]`, text → '', 0, false)
+// trebuie să se persiste. O cheie absentă din `inc` nici nu intră în buclă, deci `merged` păstrează
+// automat valoarea din `base` (anti-wipe). `null`/`undefined` nu se scriu niciodată (vezi mai jos).
 function mergeStrategieBlob(existing: string | null, incoming: any): string {
   let base: Record<string, any> = {};
   if (existing) { try { const b = JSON.parse(existing); if (b && typeof b === 'object' && !Array.isArray(b)) base = b; } catch {} }
@@ -24,10 +27,14 @@ function mergeStrategieBlob(existing: string | null, incoming: any): string {
   const merged: Record<string, any> = { ...base };
   for (const [k, v] of Object.entries(inc)) {
     if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue; // anti prototype-pollution
-    const empty = v === undefined || v === null || (typeof v === 'string' && v.trim() === '') || (Array.isArray(v) && v.length === 0);
-    if (!empty) merged[k] = v;            // valoare nouă utilă → scrie
-    else if (!(k in base)) merged[k] = v; // cheie nouă goală (nu exista) → ok
-    // altfel: gol peste non-gol → PĂSTREAZĂ existentul (anti-wipe)
+    if (v === undefined || v === null) {
+      // null/undefined = „lipsă de valoare", NU golire intenționată: nu atingem cheile existente,
+      // iar pentru CHEI NOI sărim complet (nu introducem null/undefined în blob → fără corupere).
+      continue;
+    }
+    // Orice altă valoare PREZENTĂ explicit ([], '', 0, false sau valoare utilă) = intenție clară a
+    // userului → se scrie (golirea intenționată a unui câmp se persistă).
+    merged[k] = v;
   }
   return JSON.stringify(merged);
 }
@@ -94,11 +101,27 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     const dt = new Date(v); return isNaN(dt.getTime()) ? null : dt;
   };
   // Construiește data de update (whitelist; datele primesc Date sau null).
+  // INVARIANT KANBAN (anti-pierdere date): se scriu DOAR câmpurile prezente EXPLICIT în `updates`
+  // (cheile `undefined` sunt sărite la linia de mai jos). O simplă schimbare de `stadiu` — inclusiv
+  // mutarea ÎNAPOI pe pâlnie — NU atinge câmpurile de dată ale etapelor intermediare (schitaStatus,
+  // preOfertat, ofertat, t1, nextStepDue, closeDate etc.) decât dacă vin explicit în body.
   const data: any = {};
   for (const f of SIMPLE_FIELDS) {
     if (updates[f] === undefined) continue;
     if (DATE_FIELDS.includes(f)) data[f] = parseDateFlexible(updates[f]);
     else data[f] = updates[f];
+  }
+  // Gardă defensivă a invariantului de mai sus: la o mutare ÎNAPOI de stadiu, ne asigurăm că niciun
+  // câmp de etapă nu ajunge în `data` decât dacă a venit EXPLICIT în body. (În mod normal whitelist-ul
+  // de mai sus garantează deja asta; gardă redundantă contra unei regresii viitoare care ar pre-popula `data`.)
+  if (updates.stadiu !== undefined) {
+    const movedBack = (STAGE_RANK[deriveStage({ ...before, ...data } as any)] ?? 0) < (STAGE_RANK[deriveStage(before as any)] ?? 0);
+    if (movedBack) {
+      const STAGE_DATE_FIELDS = ['schitaStatus', 'preOfertat', 'ofertat', 't1', 'nextStepDue', 'closeDate'];
+      for (const f of STAGE_DATE_FIELDS) {
+        if (updates[f] === undefined && f in data) delete data[f]; // nu goli date de etapă fără cerere explicită
+      }
+    }
   }
   // ANTI-WIPE (restaurat — fusese revertit la JSON.stringify): gol nu suprascrie non-gol.
   if (updates.strategieV1 !== undefined) data.strategieV1 = mergeStrategieBlob(before.strategieV1, updates.strategieV1);

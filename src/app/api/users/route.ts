@@ -105,6 +105,8 @@ export async function PATCH(req: NextRequest) {
     if (id === scope.userId && active === false) return NextResponse.json({ ok: false, error: 'Nu-ți poți îngheța propriul cont' }, { status: 400 });
     data.active = active;
   }
+  // Reține dacă PATCH-ul setează un manager nou (non-null) → validarea de ciclu trebuie reluată în tranzacție.
+  let managerIdToValidate: string | null = null;
   if (managerId !== undefined) {
     // Previne cicluri: managerId nou nu poate fi în subtree-ul lui id (sau el însuși).
     if (managerId === id) return NextResponse.json({ ok: false, error: 'Un user nu poate fi propriul manager' }, { status: 400 });
@@ -115,6 +117,7 @@ export async function PATCH(req: NextRequest) {
       const sub = new Set<string>([id]); const q = [id];
       while (q.length) { const c = q.shift()!; (childrenOf.get(c) || []).forEach(ch => { if (!sub.has(ch)) { sub.add(ch); q.push(ch); } }); }
       if (sub.has(managerId)) return NextResponse.json({ ok: false, error: 'Ciclu interzis: managerul ales e în subordinea acestui user' }, { status: 400 });
+      managerIdToValidate = managerId;
     }
     data.managerId = managerId || null;
   }
@@ -134,10 +137,37 @@ export async function PATCH(req: NextRequest) {
     data.position = p || null;
   }
   if (Object.keys(data).length === 0) return NextResponse.json({ ok: false, error: 'Nimic de schimbat' }, { status: 400 });
-  // Verifică existența (ex. doi admini lucrează simultan, unul tocmai a șters contul) → 404 clar, nu 500 generic.
-  const existsU = await prisma.user.findUnique({ where: { id }, select: { id: true } });
-  if (!existsU) return NextResponse.json({ ok: false, error: 'Cont inexistent' }, { status: 404 });
-  await prisma.user.update({ where: { id }, data });
+  // Când managerId nou + active/role se schimbă simultan, verificarea de ciclu și update-ul trebuie ATOMICE:
+  // altfel, între pre-check și write, un PATCH concurent poate (re)crea un ciclu sau dezactiva managerul ales,
+  // lăsând un manager dezactivat țintit de alt user. Reluăm validarea în interiorul tranzacției, pe starea reală.
+  const needsTx = managerIdToValidate !== null;
+  if (needsTx) {
+    let conflict: { status: number; error: string } | undefined;
+    await prisma.$transaction(async (tx) => {
+      // Verifică existența țintei (ex. ștearsă între timp de alt admin) → 404 clar, nu 500 generic.
+      const existsU = await tx.user.findUnique({ where: { id }, select: { id: true } });
+      if (!existsU) { conflict = { status: 404, error: 'Cont inexistent' }; return; }
+      // Re-validare ciclu pe starea curentă (TOCTOU): managerul ales nu poate fi în subtree-ul lui id.
+      const all = await tx.user.findMany({ select: { id: true, managerId: true, active: true } });
+      const childrenOf = new Map<string, string[]>();
+      const activeById = new Map<string, boolean>();
+      all.forEach(u => { activeById.set(u.id, u.active !== false); if (u.managerId) { const a = childrenOf.get(u.managerId) || []; a.push(u.id); childrenOf.set(u.managerId, a); } });
+      const sub = new Set<string>([id]); const q = [id];
+      while (q.length) { const c = q.shift()!; (childrenOf.get(c) || []).forEach(ch => { if (!sub.has(ch)) { sub.add(ch); q.push(ch); } }); }
+      if (sub.has(managerIdToValidate!)) { conflict = { status: 400, error: 'Ciclu interzis: managerul ales e în subordinea acestui user' }; return; }
+      // Managerul țintit (alt user decât id — `managerId === id` e deja respins mai sus) trebuie să fie activ:
+      // nu lega un user de un manager dezactivat, citit pe starea curentă din DB în interiorul tranzacției.
+      const tgtActive = activeById.get(managerIdToValidate!) ?? false;
+      if (!tgtActive) { conflict = { status: 400, error: 'Managerul ales este dezactivat' }; return; }
+      await tx.user.update({ where: { id }, data });
+    });
+    if (conflict) return NextResponse.json({ ok: false, error: conflict.error }, { status: conflict.status });
+  } else {
+    // Verifică existența (ex. doi admini lucrează simultan, unul tocmai a șters contul) → 404 clar, nu 500 generic.
+    const existsU = await prisma.user.findUnique({ where: { id }, select: { id: true } });
+    if (!existsU) return NextResponse.json({ ok: false, error: 'Cont inexistent' }, { status: 404 });
+    await prisma.user.update({ where: { id }, data });
+  }
   await auditLog({ userId: scope.userId, func: 'users/update', action: 'UPDATE', entity: 'User', entityId: id, fields: Object.keys(data).join(',') });
   return NextResponse.json({ ok: true });
 }
@@ -163,9 +193,15 @@ export async function DELETE(req: NextRequest) {
   }
   if (force && n > 0) {
     // Ștergere forțată (duplicate): șterge clienții lui (cascadă arhivă + remindere) apoi userul. DOAR în aplicație — NU atinge CRM.
-    await prisma.client.deleteMany({ where: { ownerId: id } });
+    // ATOMIC: deleteMany(clienți) + delete(user) într-o singură tranzacție → fără clienți orfani (ownerId spre user șters)
+    // dacă pică la jumătate. Acoperă lipsa unui onDelete la nivel de schemă, rezolvând-o în aplicație.
+    await prisma.$transaction(async (tx) => {
+      await tx.client.deleteMany({ where: { ownerId: id } });
+      await tx.user.delete({ where: { id } });
+    });
+  } else {
+    await prisma.user.delete({ where: { id } });
   }
-  await prisma.user.delete({ where: { id } });
   await auditLog({ userId: scope.userId, func: 'users/delete', action: 'DELETE', entity: 'User', entityId: id, fields: force ? `force; clienti=${n}` : 'fără clienți' });
   return NextResponse.json({ ok: true, deletedClients: force ? n : 0 });
 }

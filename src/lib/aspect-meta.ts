@@ -1,5 +1,6 @@
 // Metadate „Aspect" (oglindă a public/aspect.js) — folosibile în componente fără window.
 // Culorile efective vin din tokenii --st-* (setați de motorul Aspect, editabili în /aspect).
+// deriveStage: delegat la stage-rules (sursa unică de adevăr) — nu duplica logica.
 
 export interface StageMeta { key: string; label: string; warn: number; late: number; }
 export const STAGES: StageMeta[] = [
@@ -52,19 +53,8 @@ export function prioToSteluta(key: string): number {
   switch (key) { case 'rosu': return 1; case 'portocaliu': return 2; case 'albastru': return 3; case 'verde': return 4; default: return 0; }
 }
 
-// Stadiul funnel derivat din câmpurile clientului (Client din Prisma) — 1:1 cu deriveStage din handoff.
-export function deriveStage(c: { stadiu?: string | null; ofertat?: string | null; preOfertat?: string | null; schitaStatus?: string | null; t1?: string | null }): string {
-  const st = (c.stadiu || '').toLowerCase();
-  if (st.includes('contract')) return 'contractat';
-  if (st.includes('anulat')) return 'anulat';
-  if (st.includes('aman')) return 'amanat';
-  if (st.includes('finalizat')) return 'finalizat';
-  if (c.ofertat) return 'ofertat';
-  if (c.preOfertat) return 'preofertat';
-  if (c.schitaStatus) return 'schita';
-  if (c.t1) return 't1';
-  return 'intrare';
-}
+// Stadiul funnel derivat din câmpurile clientului — delegat la stage-rules (sursa unică de adevăr).
+export { deriveStage } from '@/lib/stage-rules';
 
 // Zile „în stadiu" — aproximat din dataIntrare (appul nu ține ageInStage explicit).
 export function daysSince(iso?: string | null): number {

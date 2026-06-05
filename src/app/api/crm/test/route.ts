@@ -12,6 +12,11 @@ export async function POST() {
     const { cookie, utilizatorId } = await login(userId);
     return NextResponse.json({ ok: true, cookieLength: cookie.length, utilizatorId });
   } catch (e: any) {
-    return NextResponse.json({ ok: false, error: e.message }, { status: 500 });
+    // Nu scurgem detalii de sesiune/infra gestcom; logăm pe server, răspundem generic.
+    console.error('[crm/test] eroare autentificare CRM:', e?.message ?? e);
+    const mesaj = /credenti|parol|user|autentific/i.test(e?.message ?? '')
+      ? 'Credențiale CRM lipsă sau invalide.'
+      : 'Conectarea la CRM a eșuat, reîncearcă.';
+    return NextResponse.json({ ok: false, error: mesaj }, { status: 500 });
   }
 }

@@ -14,22 +14,28 @@ export async function GET(req: NextRequest) {
 
   // Filtru pe dataIntrare (cohortă), echivalent C3/E3 din Dashboard.gs.
   // Interval inclusiv: start = 00:00 ziua start, end = sfârșitul zilei end (< end+1zi).
-  // Parsăm 'yyyy-mm-dd' ca miezul nopții LOCAL (fără 'Z' → fus local), nu UTC — ca granițele zilei
-  // să fie corecte indiferent de fusul orar al serverului.
-  const start = startParam ? new Date(startParam + 'T00:00:00') : null;
-  const end = endParam ? new Date(endParam + 'T00:00:00') : null;
-  const validStart = start && !isNaN(start.getTime()) ? start : null;
-  const validEnd = end && !isNaN(end.getTime()) ? end : null;
+  // FIX Bug #1: parsăm 'yyyy-mm-dd' prin componente locale (an, lună, zi) — nu prin string ISO.
+  // new Date('yyyy-mm-ddT00:00:00') fără 'Z' este implementation-defined în ES5 și poate fi
+  // interpretat ca UTC pe unele motoare/versiuni Node, decalând intervalul cu ±ore față de fus.
+  // Construind cu new Date(y, m-1, d, ...) obținem garantat timp LOCAL, ca în parseDateFlexible
+  // din src/app/api/clienti/[id]/route.ts.
+  const parseLocalDay = (s: string | null): Date | null => {
+    if (!s) return null;
+    const parts = s.split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) return null;
+    const dt = new Date(parts[0], parts[1] - 1, parts[2], 0, 0, 0, 0);
+    return isNaN(dt.getTime()) ? null : dt;
+  };
+  const validStart = parseLocalDay(startParam);
+  const validEnd = parseLocalDay(endParam);
   if (validStart || validEnd) {
     const di: any = {};
     if (validStart) {
-      validStart.setHours(0, 0, 0, 0);
-      di.gte = validStart;
+      di.gte = validStart; // deja 00:00:00 LOCAL
     }
     if (validEnd) {
       const endIncl = new Date(validEnd);
-      endIncl.setHours(0, 0, 0, 0);
-      endIncl.setDate(endIncl.getDate() + 1);
+      endIncl.setDate(endIncl.getDate() + 1); // ziua următoare 00:00 LOCAL → end exclusiv
       di.lt = endIncl;
     }
     where.dataIntrare = di;
@@ -91,14 +97,18 @@ export async function GET(req: NextRequest) {
     .slice(0, 50);
 
   const visible = await getVisibleOwnerIds(scope);
-  const recentSyncs = await prisma.syncRun.findMany({
+  // FIX Bug #2: manager cu zero rapoarte → visible = [] → { userId: { in: [] } } returnează
+  // 0 rânduri (corect), dar evităm și cazul în care un array gol ar putea crea o query nenulă
+  // nedorită. Dacă visible e array gol, nu are rost să interogăm — returnăm liste goale direct.
+  const hasVisible = visible === 'ALL' || visible.length > 0;
+  const recentSyncs = hasVisible ? await prisma.syncRun.findMany({
     where: visible === 'ALL' ? {} : { userId: { in: visible } },
     orderBy: { startedAt: 'desc' }, take: 10
-  });
+  }) : [];
 
   // Lista agenților din subtree (pentru filtrul managerului) — doar cei de sub el
   let agents: Array<{ id: string; name: string }> = [];
-  if (scope.isManager) {
+  if (scope.isManager && hasVisible) {
     const us = await prisma.user.findMany({
       where: visible === 'ALL' ? {} : { id: { in: visible } },
       select: { id: true, name: true, email: true }

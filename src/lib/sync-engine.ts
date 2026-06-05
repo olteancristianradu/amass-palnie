@@ -182,7 +182,9 @@ export async function refreshDetailsBatch(userId: string, limit = 0, type = 'DET
 export async function refreshRemindere(userId: string) {
   const run = await prisma.syncRun.create({ data: { userId, type: 'REMINDERS', status: 'RUNNING', startedAt: new Date() } });
   try {
-    const clienti = await prisma.client.findMany({ where: { ownerId: userId, NOT: { stadiu: { in: FINAL } } }, select: { id: true, idLucrare: true } });
+    // FIX P3: NOT IN cu NULL în SQL ignoră rândurile cu stadiu=null (semantică SQL).
+    // Includem explicit stadiu=null (activi fără stadiu setat) + cei non-finali — identic cu refreshDetailsBatch.
+    const clienti = await prisma.client.findMany({ where: { ownerId: userId, OR: [{ stadiu: null }, { stadiu: { notIn: FINAL } }] }, select: { id: true, idLucrare: true } });
     let processed = 0, withReminder = 0;
     for (const c of clienti) {
       try {

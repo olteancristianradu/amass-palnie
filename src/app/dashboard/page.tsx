@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Layout } from '@/components/Layout';
 import { Icon } from '@/components/Icon';
 import { PriorityStars, SyncBadge, STAR_VAR, type SyncInfo } from '@/components/ui';
@@ -60,7 +60,18 @@ export default function DashboardPage() {
     else if (k === '30') { setStart(isoDay(30)); setEnd(isoDay(0)); }
     else if (k === 'an') { setStart(new Date().getFullYear() + '-01-01'); setEnd(isoDay(0)); }
   }
+  // FIX Bug #5: ref „mounted" pentru a arunca răspunsurile stale (dacă componenta s-a demontat
+  // între timp) și tokenRef pentru a detecta cererile depășite (filtre schimbate înainte ca
+  // răspunsul anterior să sosească). clearInterval la unmount previne acumularea de timere.
+  const mountedRef = useRef(true);
+  const tokenRef = useRef(0); // incrementat la fiecare cerere nouă; răspunsurile vechi se aruncă
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   function load(o = owner, st = start, en = end) {
+    const token = ++tokenRef.current;
     const qs = new URLSearchParams({ owner: o });
     if (st) qs.set('start', st);
     if (en) qs.set('end', en);
@@ -70,11 +81,18 @@ export default function DashboardPage() {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.json();
       })
-      .then(j => { if (j && j.ok) { setS(j.stats); setIsManager(j.isManager); setErr(null); } })
-      .catch(e => { setErr(t('Nu am putut încărca indicatorii (') + (e?.message || t('eroare rețea')) + t('). Reîncerc automat în 30s.')); });
+      .then(j => {
+        // Aruncă răspunsul dacă componenta s-a demontat sau a venit o cerere mai nouă (stale)
+        if (!mountedRef.current || token !== tokenRef.current) return;
+        if (j && j.ok) { setS(j.stats); setIsManager(j.isManager); setErr(null); }
+      })
+      .catch(e => {
+        if (!mountedRef.current || token !== tokenRef.current) return;
+        setErr(t('Nu am putut încărca indicatorii (') + (e?.message || t('eroare rețea')) + t('). Reîncerc automat în 30s.'));
+      });
   }
   useEffect(() => { load(); }, [owner, start, end]);
-  // Auto-refresh la 30s (păstrează indicatorii la zi, respectă filtrele curente)
+  // Auto-refresh la 30s — cleanup la unmount și la schimbarea filtrelor (evită acumularea de timere)
   useEffect(() => {
     const id = setInterval(() => load(owner, start, end), 30000);
     return () => clearInterval(id);
@@ -124,8 +142,9 @@ export default function DashboardPage() {
   //  - Tentativă  = clienți cu nevoia 'Tentativa'.
   //  - Anulați    = clienți cu stadiu 'Anulat'.
   const cCalificat = fn.nevoie;
-  const cTentativa = s.byNevoie?.['Tentativa'] ?? 0;
-  const cAnulat = s.byStadiu?.['Anulat'] ?? 0;
+  // FIX Bug #4: byNevoie/byStadiu cu optional chaining consistent (byStadiu deja ?.['Contractat'] mai jos)
+  const cTentativa = (s.byNevoie ?? {})['Tentativa'] ?? 0;
+  const cAnulat = (s.byStadiu ?? {})['Anulat'] ?? 0;
   const raport: [string, number][] = [
     [t('Clienți Intrați'), fn.intrari],
     [t('Clienți Sunați (T1)'), fn.t1],
@@ -134,8 +153,9 @@ export default function DashboardPage() {
     [t('Anulați'), cAnulat],
   ];
 
-  const stadiuEntries = Object.entries(s.byStadiu).sort((a, b) => b[1] - a[1]);
-  const maxStadiu = Math.max(1, ...Object.values(s.byStadiu));
+  // FIX Bug #4: byStadiu poate lipsi pe payload parțial → optional chaining + fallback {}
+  const stadiuEntries = Object.entries(s.byStadiu ?? {}).sort((a, b) => b[1] - a[1]);
+  const maxStadiu = Math.max(1, ...Object.values(s.byStadiu ?? {}));
   const maxP = Math.max(1, ...Object.values(s.byPrioritate || { '0': 1 }));
 
   // Topbar (în header-ul global): badge sync + interval + selector agent (manager).
@@ -314,7 +334,8 @@ export default function DashboardPage() {
           <div className="card card--pad">
             <div className="d2sec-lbl">{t('Pe categorie')}</div>
             <div className="d2-keyrow" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))' }}>
-              {Object.entries(s.byCategorie).sort((a, b) => Number(a[0]) - Number(b[0])).map(([k, v]) => (
+              {/* FIX Bug #4: byCategorie cu fallback {} pentru payload parțial */}
+              {Object.entries(s.byCategorie ?? {}).sort((a, b) => Number(a[0]) - Number(b[0])).map(([k, v]) => (
                 <div key={k} className="d2key">
                   <span className="d2key__l">{catLabels[k] ? t(catLabels[k]) : t('Cat ') + k}</span>
                   <span className="d2key__v" style={{ fontSize: '1.5rem' }}>{v}</span>
@@ -325,9 +346,10 @@ export default function DashboardPage() {
 
           <div className="card card--pad">
             <div className="d2sec-lbl">{t('Sincronizări recente')}</div>
-            {s.recentSyncs.length === 0 && <div className="muted" style={{ fontSize: '.8125rem' }}>{t('Nicio sincronizare încă.')}</div>}
+            {/* FIX Bug #3: recentSyncs poate fi undefined pe payload parțial → fallback [] */}
+            {(s.recentSyncs ?? []).length === 0 && <div className="muted" style={{ fontSize: '.8125rem' }}>{t('Nicio sincronizare încă.')}</div>}
             <div className="d2list">
-              {s.recentSyncs.slice(0, 6).map((r: any) => (
+              {(s.recentSyncs ?? []).slice(0, 6).map((r: any) => (
                 <div key={r.id} className="d2li d2li--r" style={{ fontSize: '.8125rem' }}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ width: 7, height: 7, borderRadius: '50%', flex: '0 0 7px', background: r.status === 'COMPLETED' ? 'var(--success)' : r.status === 'FAILED' ? 'var(--danger)' : 'var(--warning)' }} />

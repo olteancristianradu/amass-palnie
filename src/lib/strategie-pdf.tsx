@@ -52,11 +52,27 @@ export async function renderStrategiePdf(c: any): Promise<Buffer> {
       row('Necesar PFTV AMASS', f.necesar_pftv_amass_kw, 'kW'),
       row('Cost investiție AMASS', f.cost_investitie_eur, 'EUR'),
       row('Cost eșalonare lunară', f.cost_esalonare_range, ''),
-      React.createElement(Text, { style: styles.zone }, '02 Sistem actual & observații'),
-      row('Sistem actual', v.sistem_actual),
-      row('Unitate consum', v.consum_unitate),
-      row('Suma (cost actual)', v.suma),
-      row('Observații', v.obs_situatie),
+      // ── Zona 02: câmpuri diferite per variantă ──
+      // V1 (categorie 1, construcție): câmpuri prefixate ca_ (info casă actuală)
+      // V2 (categorie 2, casă locuită): sursa_caldura / distributie / consum_unitate / suma
+      ...(c.categorie === 1
+        ? [
+            React.createElement(Text, { style: styles.zone, key: 'z02v1' }, '02 Info casă actuală'),
+            row('Sursă de căldură (actuală)', v.ca_sursa_caldura),
+            row('Distribuție / emisie', v.ca_distributie),
+            row('Cost lunar actual', v.ca_cost_lunar, 'lei'),
+            row('Cost sezon actual', v.ca_cost_sezon, 'lei'),
+            row('Observații situație actuală', v.obs_situatie),
+          ]
+        : [
+            React.createElement(Text, { style: styles.zone, key: 'z02v2' }, '02 Sistemul actual & observații'),
+            row('Sursă de căldură', v.sursa_caldura),
+            row('Distribuție / emisie', v.distributie),
+            row('Unitate consum', v.consum_unitate),
+            row('Suma (cost actual / lună)', v.suma, 'lei'),
+            row('Observații situație actuală', v.obs_situatie),
+          ]
+      ),
       React.createElement(Text, { style: styles.zone }, '03 Reacții financiare'),
       row('Reacție limita buget', f.cost_investitie_economic_eur, 'EUR'),
       row('Reacție plată + Promo', f.cost_promo_eur, 'EUR'),
@@ -69,11 +85,17 @@ export async function renderStrategiePdf(c: any): Promise<Buffer> {
       row('Preventie (sistem/brand)', v.preventie),
       row('Nivel bani', v.nivel_bani),
       row('Tipologie emoțională', v.tipologie),
-      React.createElement(Text, { style: styles.zone }, '05 Diferențe & concluzii'),
-      row('Diferență consum', f.diferenta_consum_lei, 'lei/lună'),
-      row('Profit anual', f.profit_anual_lei, 'lei'),
-      row('Diferență PFTV', f.diferenta_pftv_kw, 'kW'),
-      row('Amortizare', f.amortizare_ani, 'ani'),
+      // V2 DOAR: zona 05 „Diferențe & concluzii" (V1 nu are această zonă, ca în spreadsheet)
+      ...(c.categorie !== 1
+        ? [
+            React.createElement(Text, { style: styles.zone, key: 'z05v2' }, '05 Diferențe & concluzii'),
+            row('Diferență consum', f.diferenta_consum_lei, 'lei/lună'),
+            row('Profit anual', f.profit_anual_lei, 'lei'),
+            row('Diferență PFTV', f.diferenta_pftv_kw, 'kW'),
+            row('Amortizare', f.amortizare_ani, 'ani'),
+          ]
+        : []
+      ),
       React.createElement(Text, { style: styles.zone }, 'Strategie & nevoi identificate'),
       React.createElement(Text, { style: styles.obs }, fieldValueToText(v.strategie_nevoi) || '—')
     )

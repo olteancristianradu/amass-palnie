@@ -77,8 +77,7 @@ export function PriorityPicker({ value, onChange, onClose }: { value: string; on
     const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [onClose]); // FIX 2026-06-05: onClose în deps — evită stale closure pe callback-ul de închidere
   return (
     <div className="prio-pop" ref={ref}>
       <div className="label" style={{ marginBottom: 6 }}>{t('Prioritate')}</div>

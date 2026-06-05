@@ -92,6 +92,24 @@ export function KanbanBoard({ clienti, isManager, ownerFilter, onPatch, setMsg, 
     const col = COLS.find(c => c.key === colKey)!;
     const patch: any = { ...col.patch(), ...extra };
     const cur = clienti.find(c => c.id === id);
+    // FIX 2026-06-05 (DATA LOSS — mutare ÎNAPOI): patch-urile coloanelor timpurii pun explicit ''
+    // pe câmpurile de dată ale etapelor ulterioare (ex. T1 → schitaStatus/preOfertat/ofertat = '').
+    // La o mutare înapoi (din Schiță în T1) asta ștergea ireversibil datele etapelor deja
+    // înregistrate. Invariant pe frontend: o mutare înapoi schimbă DOAR stadiul vizibil, fără a
+    // pune null/'' peste câmpuri de dată non-empty. Mutarea înainte își păstrează comportamentul
+    // legitim (setarea automată a datei etapei-țintă). Detectăm direcția prin ordinea COLS.
+    const STAGE_DATE_FIELDS = ['t1', 'schitaStatus', 'preOfertat', 'ofertat'] as const;
+    const curStage = cur ? stageOf(cur) : null;
+    const fromIdx = curStage ? COLS.findIndex(c => c.key === curStage) : -1;
+    const toIdx = COLS.findIndex(c => c.key === colKey);
+    const isBackward = fromIdx >= 0 && toIdx >= 0 && toIdx < fromIdx;
+    if (isBackward && cur) {
+      // Nu rescrie peste câmpurile de dată deja completate: scoatem din patch orice cheie de etapă
+      // pe care patch-ul ar goli-o (''), dar care are deja o valoare în clientul curent.
+      for (const f of STAGE_DATE_FIELDS) {
+        if (f in patch && !nz(patch[f]) && nz((cur as any)[f])) delete patch[f];
+      }
+    }
     if (colKey === 'contractat' && cur && !nz(cur.ofertat)) patch.ofertat = today();
     onPatch(id, patch); // optimist
     setMsg(`⏳ ${t('Mut în')} „${t(col.label)}"…`);
@@ -327,7 +345,7 @@ function MoveMenu({ current, x, y, onPick, onClose }: { current: string; x: numb
   useEffect(() => {
     const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
     document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h);
-  }, [onClose]);
+  }, [onClose]); // FIX 2026-06-05: onClose în deps — evită stale closure pe callback-ul de închidere
   const maxX = typeof window !== 'undefined' ? window.innerWidth - 200 : 1000;
   return (
     <div className="pop-anchor" style={{ left: Math.min(x, maxX), top: y + 4 }}>

@@ -7,6 +7,13 @@
    ========================================================================== */
 (function () {
   const LS_BASE = 'amass.aspect.v2';
+  // Namespace per-utilizator: cheia LS devine „amass.aspect.v2.{USER}".
+  // USER se citește din 'amass.currentUser' (scris de app la login via Aspect.setUser).
+  // LIMITARE: aspect.js e încărcat înainte de hidratarea React, deci ID-ul autentificat nu
+  // e disponibil fiabil dintr-un cookie HttpOnly la acest moment (nu avem acces la el în JS).
+  // Strategie conservatoare: la boot citim valoarea anterioară salvată de aceeași sesiune;
+  // app-ul TREBUIE să cheme `Aspect.setUser(userId)` imediat după autentificare (sau la mount).
+  // Dacă nu există, fallback la 'default' — toți userii neautentificați împart același slot.
   let USER = (function () { try { return localStorage.getItem('amass.currentUser') || 'default'; } catch (e) { return 'default'; } })();
   function lsKey() { return LS_BASE + '.' + USER; }
 
@@ -168,7 +175,24 @@
     catch (e) {}
     return { ...DEFAULTS };
   }
-  function save() { try { localStorage.setItem(lsKey(), JSON.stringify(state)); localStorage.setItem('amass.currentUser', USER); } catch (e) {} }
+  function save() {
+    var payload = JSON.stringify(state);
+    try {
+      localStorage.setItem(lsKey(), payload);
+      localStorage.setItem('amass.currentUser', USER);
+    } catch (e) {
+      // QuotaExceededError — cel mai probabil bgImage este prea mare.
+      // Renunțăm la bgImage și reîncercăm ca celelalte setări să se salveze.
+      if (e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED')) {
+        console.warn('[Aspect] localStorage quota depășit — bgImage eliminat, celelalte setări salvate.');
+        try {
+          var slim = Object.assign({}, state, { bgImage: '' });
+          localStorage.setItem(lsKey(), JSON.stringify(slim));
+          localStorage.setItem('amass.currentUser', USER);
+        } catch (e2) { /* nici fără bgImage nu a mers — ignorăm silențios */ }
+      }
+    }
+  }
 
   const subs = new Set();
 
@@ -243,11 +267,22 @@
     importJSON: (txt) => {
       try { const o = JSON.parse(txt); if (!o || typeof o !== 'object') return false;
         delete o._amass_aspect; delete o.user;
-        // Imagine de fundal prea mare (peste ~1.5M caractere) → o ignorăm (altfel localStorage overflow + save tăcut).
-        // bgImage acceptat DOAR ca data:image (anti-injecție CSS) + sub ~1.5M (anti-overflow localStorage).
-        if (typeof o.bgImage === 'string' && (o.bgImage.length > 1500000 || !/^data:image\//.test(o.bgImage))) delete o.bgImage;
-        // MERGE culori stadii (nu înlocui) — ca importul unui preset fără `stages` să NU șteargă personalizările curente.
-        state = { ...DEFAULTS, ...state, ...o, stages: { ...state.stages, ...(o.stages || {}) } }; save(); apply(); return true;
+        // bgImage: acceptat DOAR ca data:image (anti-injecție CSS) sub ~1.5M (anti-overflow localStorage)
+        // SAU ca '' (ștergere intenționată a fundalului).
+        // String non-gol care NU e data:image → eliminăm cheia complet ca să nu suprascriem starea curentă.
+        if ('bgImage' in o) {
+          if (typeof o.bgImage === 'string' && o.bgImage !== '' && (o.bgImage.length > 1500000 || !/^data:image\//.test(o.bgImage))) {
+            delete o.bgImage; // invalid → ignorăm cheia (nu resetăm la DEFAULTS)
+          }
+        }
+        // Suprascriem DOAR cheile prezente explicit în JSON (nu resetăm câmpuri absente la DEFAULTS).
+        // Cheile absente din `o` → se păstrează valoarea curentă din `state`.
+        // Cheile prezente în `o` → suprascriu (inclusiv '' pentru bgImage = ștergere intenționată).
+        const merged = {};
+        Object.keys(DEFAULTS).forEach(k => { merged[k] = k in o ? o[k] : state[k]; });
+        // MERGE culori stadii (nu înlocui) — importul unui preset fără `stages` NU șterge personalizările curente.
+        merged.stages = { ...state.stages, ...(o.stages || {}) };
+        state = merged; save(); apply(); return true;
       } catch (e) { return false; }
     },
   };

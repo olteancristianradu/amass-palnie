@@ -57,15 +57,31 @@ export async function GET(req: NextRequest) {
         par('Cost investiție AMASS', f.cost_investitie_eur, 'EUR'),
         par('Cost eșalonare lunară', f.cost_esalonare_range, ''),
         blank(),
-        heading('02 Sistem actual & observații'),
-        par('Sistem actual', v.sistem_actual),
-        par('Unitate consum', v.consum_unitate),
-        par('Suma (cost actual)', v.suma),
-        par('Observații', v.obs_situatie),
+        // ── Zona 02: câmpuri diferite per variantă ──
+        // V1 (categorie 1, construcție): câmpuri prefixate ca_ (info casă actuală)
+        // V2 (categorie 2, casă locuită): sursa_caldura / distributie / consum_unitate / suma
+        ...(c.categorie === 1
+          ? [
+              heading('02 Info casă actuală'),
+              par('Sursă de căldură (actuală)', v.ca_sursa_caldura),
+              par('Distribuție / emisie', v.ca_distributie),
+              par('Cost lunar actual', v.ca_cost_lunar, 'lei'),
+              par('Cost sezon actual', v.ca_cost_sezon, 'lei'),
+              par('Observații situație actuală', v.obs_situatie),
+            ]
+          : [
+              heading('02 Sistemul actual & observații'),
+              par('Sursă de căldură', v.sursa_caldura),
+              par('Distribuție / emisie', v.distributie),
+              par('Unitate consum', v.consum_unitate),
+              par('Suma (cost actual / lună)', v.suma, 'lei'),
+              par('Observații situație actuală', v.obs_situatie),
+            ]
+        ),
         blank(),
         heading('03 Reacții financiare'),
-        par('Reacție limita buget (C17)', f.cost_investitie_economic_eur, 'EUR'),
-        par('Reacție plată integrală + Promo (C18)', f.cost_promo_eur, 'EUR'),
+        par('Reacție limita buget', f.cost_investitie_economic_eur, 'EUR'),
+        par('Reacție plată integrală + Promo', f.cost_promo_eur, 'EUR'),
         par('Tip plată preferat', v.tip_plata),
         par('Interval buget', v.interval_buget),
         blank(),
@@ -76,11 +92,18 @@ export async function GET(req: NextRequest) {
         par('Nivel bani', v.nivel_bani),
         par('Tipologie emoțională', v.tipologie),
         blank(),
-        heading('05 Diferențe & concluzii'),
-        par('Diferență consum', f.diferenta_consum_lei, 'lei/lună'),
-        par('Profit anual', f.profit_anual_lei, 'lei'),
-        par('Diferență PFTV', f.diferenta_pftv_kw, 'kW'),
-        par('Amortizare investiție', f.amortizare_ani, 'ani'),
+        // V2 DOAR: zona 05 „Diferențe & concluzii" (V1 nu are această zonă, ca în spreadsheet)
+        ...(c.categorie !== 1
+          ? [
+              heading('05 Diferențe & concluzii'),
+              par('Diferență consum', f.diferenta_consum_lei, 'lei/lună'),
+              par('Profit anual', f.profit_anual_lei, 'lei'),
+              par('Diferență PFTV', f.diferenta_pftv_kw, 'kW'),
+              par('Amortizare investiție', f.amortizare_ani, 'ani'),
+              blank(),
+            ]
+          : [blank()]
+        ),
         blank(),
         heading('Strategie & nevoi identificate'),
         new Paragraph({ children: [new TextRun({ text: fieldValueToText(v.strategie_nevoi) || '—' })] })

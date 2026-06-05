@@ -1006,6 +1006,14 @@ const EN: Record<string, string> = {
   "Vizualizare ierarhie": "View hierarchy",
   "Zile așteptare": "Waiting days",
   "Zona nu are un câmp de observații → opțiunea „salvează în Observații\" nu e disponibilă.": "The zone has no notes field → the „save to Notes\" option is not available.",
+
+  /* ---- Preset-uri de brand (Aspect) ---- */
+  "AMASS Roșu": "AMASS Red",
+  "Ardezie": "Slate",
+  "Chihlimbar": "Amber",
+  "Prună": "Plum",
+  "Pădure": "Forest",
+  /* Pin, Cobalt, Teal, Ocean, Magenta, Indigo, Cărămidă → deja în dicționar sau identice EN/RO */
 };
 
 interface I18n { lang: Lang; setLang: (l: Lang) => void; t: (s: string) => string; }

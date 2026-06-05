@@ -224,6 +224,8 @@ export async function fetchDetail(userId: string, idLucrare: string): Promise<Cr
     const remR = await fetch(remUrl, { headers: { Cookie: cookie } });
     const remTxt = await remR.text();
     const reminders = JSON.parse(remTxt);
+    // P2: validare explicită că e array (null/obiect/string → warn + tratăm ca gol).
+    if (!Array.isArray(reminders)) { console.warn('[fetchDetail] remindere non-array id_lucrare=' + idSafe + ' tip=' + typeof reminders); }
     if (Array.isArray(reminders) && reminders.length > 0) {
       const dates = reminders
         .filter((r: any) => String(r.status_reminder) === '3')
@@ -641,10 +643,16 @@ export async function addReminder(userId: string, payload: {
     headers: { Cookie: cookie, 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
     body: new URLSearchParams(form).toString()
   });
-  // 302 către login = sesiune expirată; 200 cu HTML login = la fel. Altfel = succes real.
+  // 302 → succes DOAR dacă Location e absența sau redirecționează la remindere/lucrari (nu la login
+  // sau la o altă pagină neașteptată). 200 → succes DOAR dacă body-ul nu e pagina de login/eroare.
   const loc = r.headers.get('location') || '';
   if (r.status === 302) {
     if (/m=login/i.test(loc)) { await invalidateCookie(userId); continue; }
+    // Acceptăm 302 cu Location spre remindere/lucrari sau fără modul explicit (redirect standard CRM).
+    if (loc && !/m=remindere|m=lucrari/i.test(loc) && /m=/i.test(loc)) {
+      console.warn('[addReminder] 302 redirect neașteptat location=' + loc + ' id_lucrare=' + idSafe);
+      return { ok: false, error: 'Redirect CRM neașteptat: ' + loc };
+    }
     return { ok: true };
   }
   if (r.status === 200) {

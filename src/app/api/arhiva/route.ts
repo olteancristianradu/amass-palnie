@@ -7,6 +7,10 @@ export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ ok: false }, { status: 401 });
   const userId = (session.user as any).id;
+  // take(500): limită conservatoare; include-ul pe client e deja select-restrâns la 3 câmpuri
+  // (nume/localitate/idLucrare) deci cost-ul per-rând e mic. dataSnapshot (blob mare) nu e inclus în
+  // include → se returnează direct din ArhivaEntry (câmpuri indexate). Monitorizează dacă un user
+  // ajunge la sute de snapshot-uri și scade take la 200 sau adaugă paginare cursor.
   const entries = await prisma.arhivaEntry.findMany({
     where: { client: { ownerId: userId } },
     include: { client: { select: { nume: true, localitate: true, idLucrare: true } } },
@@ -49,10 +53,15 @@ export async function POST(req: NextRequest) {
   }
 
   // Creează ÎNTÂI un snapshot „pre-restore" din starea curentă → restaurarea e reversibilă.
+  // IMPORTANT: versiunea se derivă din snapshot-ul care SE RESTAUREAZĂ (nu din categoria CURENTĂ
+  // a clientului) — categoria poate fi schimbat după snapshot → mislabeling altfel.
+  const versiuneRestored = snap.categorie === 1 ? 'V1'
+    : snap.categorie === 2 ? 'V2'
+    : (entry.client.categorie === 1 ? 'V1' : 'V2'); // fallback defensiv dacă snapshot vechi nu are categorie
   await prisma.arhivaEntry.create({
     data: {
       clientId: entry.clientId,
-      versiune: entry.client.categorie === 1 ? 'V1' : 'V2',
+      versiune: versiuneRestored,
       dataSnapshot: JSON.stringify(entry.client),
       obsExtra: 'pre-restore'
     }

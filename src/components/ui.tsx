@@ -151,6 +151,11 @@ export function Kpi({ label, value, suffix, delta, dir, accent }: {
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
 interface ToastItem { id: string; msg: string; type: ToastType; }
 let _push: ((msg: string, type?: ToastType) => void) | null = null;
+// FIX 2026-06-05 (antipattern global _push — race la remount): la navigare/remount _push devine
+// momentan null. Înainte, orice toast() emis în acel interval se pierdea silent. Acum păstrăm o
+// coadă scurtă a mesajelor orfane și o drenăm la următorul mount, ca notificările să nu dispară.
+const _pending: Array<{ msg: string; type?: ToastType }> = [];
+const PENDING_MAX = 20; // plafon mic anti-creștere necontrolată dacă nu se montează nimic
 export function ToastHost() {
   const [items, setItems] = useState<ToastItem[]>([]);
   useEffect(() => {
@@ -159,6 +164,8 @@ export function ToastHost() {
       setItems(x => [...x, { id, msg, type }]);
       setTimeout(() => setItems(x => x.filter(i => i.id !== id)), 2600);
     };
+    // Drenează mesajele acumulate cât timp niciun host nu era montat.
+    if (_pending.length) { const q = _pending.splice(0); q.forEach(p => _push?.(p.msg, p.type)); }
     return () => { _push = null; };
   }, []);
   const ic = (t: ToastType) => t === 'success' ? 'check' : t === 'error' ? 'alert' : t === 'info' ? 'bell' : 'check';
@@ -173,7 +180,12 @@ export function ToastHost() {
     </div>
   );
 }
-export function toast(msg: string, type?: ToastType) { if (_push) _push(msg, type); }
+export function toast(msg: string, type?: ToastType) {
+  // Dacă există un host montat, livrăm direct. Dacă nu (remount/navigare), punem în coadă
+  // (cu plafon) ca să nu crape și să nu pierdem mesajul; se va drena la următorul mount.
+  if (_push) { _push(msg, type); return; }
+  if (_pending.length < PENDING_MAX) _pending.push({ msg, type });
+}
 
 // ── Formatare RO — port 1:1 din handoff ui.jsx ────────────────────────────────
 export const num = (n: number) => Number(n).toLocaleString('ro-RO');

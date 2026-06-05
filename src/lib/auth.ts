@@ -6,6 +6,12 @@ import { prisma } from './db';
 // Rate-limit anti brute-force (in-memory, per email+IP). FAIL-OPEN prin design: orice eroare a
 // limitatorului NU trebuie să blocheze un login legitim. Prag GENEROS (20 eșecuri / 10 min) ca
 // greșelile normale de tastare să nu declanșeze niciodată un blocaj.
+//
+// NOTE DESIGN: contoarele sunt in-memory BY DESIGN pentru că aplicația rulează single-instance
+// în spatele unui tunel privat (Cloudflare Tunnel). Persistența pe DB/Redis ar adăuga complexitate
+// nejustificată — în caz de restart al serverului contoarele se resetează, ceea ce e acceptabil
+// deoarece: (1) tunel privat = suprafață de atac limitată, (2) pragul de 20/10min e suficient
+// pentru tentative umane, (3) fail-open garantează că un restart nu blochează utilizatori valizi.
 const _loginFails = new Map<string, { count: number; first: number }>();
 const _LF_WINDOW = 10 * 60_000, _LF_MAX = 20;
 function _lfKey(email: string, ip: string) { return email + '|' + ip; }
@@ -55,18 +61,44 @@ export const authOptions: NextAuthOptions = {
   pages: { signIn: '/login' },
   // App intern pe rețea locală, accesat prin HTTP (http://IP:3000) → cookie-urile NU trebuie marcate
   // „Secure" (altfel browserul nu le trimite pe HTTP și login-ul eșuează „silent", indiferent de parolă).
-  // Protocol-aware: pe HTTP → false (neschimbat); dacă ajunge vreodată pe HTTPS (reverse-proxy) și
-  // NEXTAUTH_URL devine https://… → Secure se activează automat, fără modificare de cod.
-  useSecureCookies: (process.env.NEXTAUTH_URL || '').startsWith('https://'),
+  // Protocol-aware: pe HTTP → false (neschimbat); dacă ajunge vreodată pe HTTPS (reverse-proxy / Cloudflare
+  // Tunnel) și NEXTAUTH_URL devine https://… → Secure se activează automat, fără modificare de cod.
+  // Normalizăm: trim + lowercase pe prefix → tolerează spații/majuscule/trailing-slash accidentale.
+  useSecureCookies: (process.env.NEXTAUTH_URL || '').trim().toLowerCase().startsWith('https://'),
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
+        // Login proaspăt: populăm token din datele returnate de authorize()
         token.id = (user as any).id;
         token.role = (user as any).role;
+        token.active = true; // cont valid la momentul login-ului
+      } else if (token.id) {
+        // Reînnoire token (sesiune existentă): re-citim rolul + active din DB pentru a elimina
+        // stale permissions — un user retrogradat/dezactivat nu trebuie să păstreze vechile
+        // drepturi până la expirarea JWT (7 zile). FAIL-SAFE: orice eroare DB păstrează
+        // token-ul existent (nu blocăm useri valizi dacă DB are o eroare tranzitorie).
+        try {
+          const fresh = await prisma.user.findUnique({
+            where: { id: token.id as string },
+            select: { role: true, active: true }
+          });
+          if (fresh) {
+            token.role = fresh.role;
+            token.active = (fresh.active as boolean | null) !== false; // null/true = activ
+          }
+        } catch (e: any) {
+          // DB indisponibil temporar → păstrăm token-ul curent, NU delogăm userul
+          console.warn('[auth] jwt refresh DB error (fallback la token existent):', e?.message);
+        }
       }
       return token;
     },
     async session({ session, token }) {
+      // Dacă userul e marcat inactiv (detectat la reînnoire token), golim sesiunea →
+      // middleware/getServerSession va trata sesiunea ca neautentificată.
+      if (token.active === false) {
+        return { ...session, user: undefined, expires: session.expires };
+      }
       if (session.user && token) {
         (session.user as any).id = token.id;
         (session.user as any).role = token.role;

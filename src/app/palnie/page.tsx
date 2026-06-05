@@ -278,6 +278,9 @@ export default function PalniePage() {
   useEffect(() => { try { localStorage.setItem('amass-palnie-sort', sortKey); } catch {} }, [sortKey]);
   // Update optimist local — folosit de Kanban (drag & drop) ca să reflecte mutarea instant.
   const patchLocal = (id: string, patch: Record<string, any>) => setClienti(prev => prev.map(c => c.id === id ? { ...c, ...patch } : c));
+  // Token anti-race pentru load(): fiecare cerere primește un id; la întoarcere, dacă a pornit între
+  // timp o cerere mai nouă (ex. managerul a comutat agentul), ignorăm rezultatul stale (nu mai facem setState).
+  const loadToken = useRef(0);
 
   // Toast-ul dispare SINGUR: succes/info după 4s, eroare după 8s (înainte rămânea agățat după sync).
   useEffect(() => {
@@ -289,18 +292,25 @@ export default function PalniePage() {
 
   async function load(silent = false) {
     if (!silent) setLoading(true);
+    // Cheia cererii = ownerFilter de la momentul pornirii. Dacă se schimbă până se întoarce, rezultatul e stale.
+    const myToken = ++loadToken.current;
+    const reqOwner = ownerFilter;
     try {
-      const r = await fetch('/api/clienti?limit=5000&owner=' + ownerFilter);
+      const r = await fetch('/api/clienti?limit=5000&owner=' + reqOwner);
       // Sesiune expirată/invalidă → NU lăsa pagina goală; trimite la login.
       if (r.status === 401) { window.location.href = '/login'; return; }
       const j = await r.json().catch(() => ({} as any));
+      // ANTI-RACE: a pornit între timp o cerere mai nouă → ignorăm acest rezultat (nu suprapunem date stale).
+      if (myToken !== loadToken.current) return;
       if (r.ok && j.ok) { setClienti(j.clienti); setIsManager(j.isManager); }
       else if (!silent) setMsg('❌ ' + (j.error || `${t('Eroare server')} (${r.status})`));
     } catch (e: any) {
+      if (myToken !== loadToken.current) return; // eroarea unei cereri stale nu trebuie să afecteze UI-ul curent
       if (!silent) setMsg('❌ ' + (e?.message || t('Nu s-a putut încărca pâlnia')));
     } finally {
       // finally garantează că spinnerul „Se încarcă pâlnia…" nu rămâne agățat la o eroare/HTML neașteptat.
-      if (!silent) setLoading(false);
+      // Doar cererea cea mai nouă are voie să stingă spinnerul (o cerere stale nu trebuie să-l stingă prematur).
+      if (!silent && myToken === loadToken.current) setLoading(false);
     }
   }
   useEffect(() => { load(); }, [ownerFilter]);
@@ -312,8 +322,18 @@ export default function PalniePage() {
         if (j.isManager) setAgentList(j.stats.agents || []);
         setLastSync((j.stats.recentSyncs || [])[0] || null);
         setAutoSync(j.autoSync || null);
+      } else {
+        // Răspuns ne-ok: NU pretindem succes pe badge — îl ducem într-o stare cunoscută (necunoscut),
+        // ca să nu afișeze un status de sync stale/greșit.
+        console.error('loadMeta: răspuns ne-ok de la /api/dashboard', j?.error);
+        setLastSync(null); setAutoSync(null);
       }
-    }).catch(() => {});
+    }).catch(e => {
+      // FIX: nu mai înghițim eroarea (înainte badge-urile rămâneau pe valori vechi/greșite). Logăm și
+      // lăsăm metadatele într-o stare cunoscută (necunoscut), nu pretindem succes.
+      console.error('loadMeta: eroare la încărcarea metadatelor de sync', e);
+      setLastSync(null); setAutoSync(null);
+    });
   }
   useEffect(() => { loadMeta(); }, []);
 
@@ -406,12 +426,14 @@ export default function PalniePage() {
     if (!r.ok) {
       const j = await r.json().catch(() => ({} as any));
       setMsg('❌ ' + (j.validationErrors?.join(' ') || j.error || t('Nu s-a putut salva')));
-      // Rollback per-câmp doar dacă valoarea afișată e încă cea pe care AM setat-o noi (anti-pierdere afișaj).
+      // Rollback COMPLET (toate câmpurile atinse), nu parțial — altfel pe un eșec cu mai multe câmpuri
+      // ar rămâne o stare hibridă coruptă. Atomic, doar dacă încă suntem în starea optimistă pe care AM
+      // setat-o noi (TOATE câmpurile încă au valorile optimiste): dacă între timp a apărut altă editare pe
+      // ORICARE câmp, nu rescriem nimic (anti-pierdere afișaj).
       setClienti(p => p.map(c => {
         if (c.id !== id) return c;
-        const restore: Record<string, any> = {};
-        for (const k of Object.keys(newVals)) if ((c as any)[k] === newVals[k]) restore[k] = prevVals[k];
-        return { ...c, ...restore };
+        const stillOurs = Object.keys(newVals).every(k => (c as any)[k] === newVals[k]);
+        return stillOurs ? { ...c, ...prevVals } : c;
       }));
     }
   }
@@ -431,6 +453,14 @@ export default function PalniePage() {
   // { stadiu, closureReason, closureReasonDetail } într-un singur PATCH; restul merg direct.
   function setStadiu(id: string, value: string) {
     if (value === 'Contractat' || value === 'Anulat') { setCloseModal({ id, stadiu: value }); return; }
+    // INVERS BUSINESS RULE: dacă plecăm din 'Anulat' (Anulat implică nevoia='Nu il putem ajuta'), iar nevoia
+    // a rămas EXACT acea valoare implicată, o resetăm la gol în ACELAȘI PATCH — altfel rămâne contradicția
+    // „nu mai e Anulat, dar tot 'Nu il putem ajuta'". Nu atingem nevoia setată manual la altceva.
+    const c = clienti.find(x => x.id === id);
+    if (c?.stadiu === 'Anulat' && c?.nevoia === 'Nu il putem ajuta') {
+      updateInlineMulti(id, { stadiu: value, nevoia: '' });
+      return;
+    }
     updateInline(id, 'stadiu', value);
   }
   async function closeWithReason(id: string, stadiu: 'Contractat' | 'Anulat', detail: string) {

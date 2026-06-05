@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getScope } from '@/lib/scope';
 import { auditLog } from '@/lib/audit';
-import { safeParseBlob, isNonEmptyValue, applyFieldDeletionToBlob } from '@/lib/fisa-template';
+import { safeParseBlob, isNonEmptyValue, applyFieldDeletionToBlob, type FisaZone } from '@/lib/fisa-template';
 
 // ── Operații DESTRUCTIVE pe un CÂMP al fișei (cheie din blob-ul strategieV1/V2) — DOAR admin ──
 // Folosit de editorul de format (admin/fisa) când se șterge un câmp care are deja date la clienți.
@@ -52,6 +52,24 @@ export async function POST(req: NextRequest) {
 
   const col = blobCol(variant);
 
+  // ── FIX Bug 2: validare că obsKey există în template înainte de delete-to-obs ──
+  // Fără această verificare, valorile ar fi mutate într-o cheie fantomă (dangling reference).
+  if (action === 'delete-to-obs') {
+    let templateZones: FisaZone[] = [];
+    try {
+      const tRow = await prisma.fisaTemplate.findUnique({ where: { variant } });
+      if (tRow?.zones) templateZones = JSON.parse(tRow.zones) as FisaZone[];
+    } catch { /* template corupt sau absent — procedăm la validare cu lista goală */ }
+    const templateKeys = new Set<string>();
+    for (const z of templateZones) for (const f of z.fields ?? []) if (f.key) templateKeys.add(f.key);
+    if (templateKeys.size > 0 && !templateKeys.has(obsKey)) {
+      return NextResponse.json(
+        { ok: false, error: `obsKey "${obsKey}" nu există în template-ul ${variant} — verifică cheia câmpului de observații țintă` },
+        { status: 400 }
+      );
+    }
+  }
+
   // Admin = scope la TOȚI clienții. Tragem doar coloana blob-ului (+ id) ca să fim ușori la 820 clienți.
   // Filtrăm pe „coloana nu e goală" ca pre-filtru ieftin; verificarea fină a cheii e în JS.
   // Selectul folosește o cheie calculată ([col]) → inferența Prisma pe elementul de rând devine
@@ -85,6 +103,8 @@ export async function POST(req: NextRequest) {
   const targets = clients.filter(c => key in safeParseBlob((c as any)[col]));
 
   let affected = 0;
+  // FIX Bug 1: acumulăm eșecurile per-client (idLucrare/id) în loc să raportăm un fals total.
+  const failed: { id: string; error: string }[] = [];
 
   // Procesăm fiecare client într-o tranzacție proprie: blob-ul live + TOATE snapshoturile lui.
   // O tranzacție per client (nu una globală) → la 820 clienți o tranzacție uriașă ar putea bloca SQLite;
@@ -119,16 +139,27 @@ export async function POST(req: NextRequest) {
       ]);
       affected++;
     } catch (e) {
-      // Un client eșuat nu oprește restul; logăm și continuăm (defensiv pe date reale).
-      console.error('[fisa-field] update eșuat pt client', c.id, (e as any)?.message);
+      // FIX Bug 1 + Bug 3: înregistrăm eșecul (nu incrementăm affected) și logăm cu detalii.
+      const errMsg = (e as any)?.message ?? 'eroare necunoscută';
+      failed.push({ id: c.id, error: errMsg });
+      console.error('[fisa-field] update eșuat pt client', c.id, errMsg);
     }
   }
 
+  // FIX Bug 3: audit log include și numărul/lista eșecurilor, nu doar succesele.
+  const failedIds = failed.map(f => f.id).join(',');
   await auditLog({
     userId: scope.userId, func: 'fisa-field', action: action.toUpperCase().replace(/-/g, '_'),
     entity: 'FisaField', entityId: variant + ':' + key,
-    fields: 'affected=' + affected + (mode === 'to-obs' ? ' obsKey=' + obsKey : ''),
+    fields: 'affected=' + affected + ' failed=' + failed.length
+      + (failed.length > 0 ? ' failedIds=' + failedIds : '')
+      + (mode === 'to-obs' ? ' obsKey=' + obsKey : ''),
   });
 
-  return NextResponse.json({ ok: true, affected });
+  // FIX Bug 1: returnăm numărul real de succese + lista eșecurilor (id + eroare) în răspuns.
+  return NextResponse.json({
+    ok: true,
+    affected,
+    ...(failed.length > 0 && { failedCount: failed.length, failed }),
+  });
 }

@@ -53,11 +53,16 @@ export function isSyncing(userId: string): boolean {
   return G().busy.has(userId);
 }
 
-/** Încearcă să prindă lock-ul. Întoarce false dacă era deja ocupat (atomic: check + set). */
+/**
+ * Încearcă să prindă lock-ul. Întoarce false dacă era deja ocupat.
+ * P5: check + set sunt sincrone (fără await) → atomic în runtime-ul JS single-threaded.
+ * Setăm busy ÎNAINTE de orice await ulterior din caller (tick face acquireSync direct
+ * fără isSyncing() separat, eliminând fereastra de race dintre verificare și setare).
+ */
 export function acquireSync(userId: string): boolean {
   const busy = G().busy;
   if (busy.has(userId)) return false;
-  busy.add(userId);
+  busy.add(userId); // setat sincron, înainte de orice await → nu există fereastră de race
   return true;
 }
 
@@ -114,7 +119,8 @@ export function startAutoSync() {
   g.started = true;
   console.log('[auto-sync] pornit (light 90s / detalii 10min, lot ' + BATCH + ')');
   // Curăță SyncRun-uri rămase RUNNING după un crash/restart (audit 2026-06-01) — altfel rămân orfane.
-  prisma.syncRun.updateMany({ where: { status: 'RUNNING' }, data: { status: 'FAILED', completedAt: new Date(), errorMessage: 'întrerupt (restart server)' } }).catch(() => {});
+  // P4: adăugat catch cu logging (anterior catch gol → eroare Prisma la startup era silențioasă).
+  prisma.syncRun.updateMany({ where: { status: 'RUNNING' }, data: { status: 'FAILED', completedAt: new Date(), errorMessage: 'întrerupt (restart server)' } }).catch((e: any) => { console.error('[auto-sync] cleanup SyncRun la pornire a eșuat:', e?.message || e); });
   setTimeout(() => { tick().catch(() => {}); g.timer = setInterval(() => tick().catch(() => {}), TICK_MS); }, 15_000);
 }
 
