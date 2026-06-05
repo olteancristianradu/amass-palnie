@@ -15,7 +15,7 @@
 
 :root,
 [data-theme="light"] {
-  --accent:#CC0000; --accent-hover:#A00203; --accent-active:#D1171E;
+  --accent:#CC0000; --accent-hover:#A00203; --accent-active:#960202; /* active = mai ÎNCHIS ca baza (apăsat), aliniat handoff (era #D1171E, mai deschis = greșit) */
   --accent-soft:#FBE9E9; --accent-softer:#FDF4F4; --accent-ring:rgba(204,0,0,.18); --on-accent:#FFFFFF;
   --pine:#2F6B5E; --pine-hover:#245447; --pine-soft:#E6F0ED;
   --bg:#FAFAF8; --surface:#FFFFFF; --surface-2:#F6F7F8; --surface-3:#F1F3F5; --sidebar-bg:#FBFBFC; --overlay:rgba(33,37,41,.45);
@@ -23,7 +23,7 @@
   --text:#212529; --text-secondary:#4B535B; --text-muted:#8A9099; --text-faint:#B5BAC0;
   --border:#E5E7EB; --border-strong:#D5D9DE; --border-faint:#EEF0F2;
   --success:#1F8A5B; --success-soft:#E4F3EC; --warning:#B7791F; --warning-soft:#FBF1DD;
-  --danger:#D1171E; --danger-soft:#FCE9E9; --info:#2563A8; --info-soft:#E6EFF8;
+  --danger:#DC2626; --danger-soft:#FCE9E9; --info:#2563A8; --info-soft:#E6EFF8; /* danger aliniat la spec (era #D1171E = refolosea accent-active) */
   --heat-0:#9AA3AD; --heat-1:#3B82C4; --heat-2:#2FA39B; --heat-3:#C9930A; --heat-4:#E0561C; --heat-5:#CC0000;
   --shadow-sm:0 1px 2px rgba(20,24,28,.05);
   --shadow-md:0 1px 2px rgba(20,24,28,.05), 0 4px 12px rgba(20,24,28,.06);
