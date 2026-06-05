@@ -57,7 +57,7 @@
 
 /* content */
 .content { padding: var(--sp-5); flex: 1; min-width: 0; }
-.content--kanban { padding: var(--sp-4) 0 var(--sp-4) var(--sp-5); overflow: hidden; }
+.content--kanban { padding: var(--sp-4) 0 var(--sp-4) var(--sp-5); overflow: hidden; display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; max-height: calc(100vh - var(--header-h)); max-height: calc(100dvh - var(--header-h)); }
 
 /* segmented */
 .segmented { display: inline-flex; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 3px; gap: 2px; }
@@ -97,9 +97,9 @@
 .move-menu__dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 9px; }
 
 /* ---------------- KANBAN ---------------- */
-.kanban-wrap { overflow-x: auto; padding-bottom: var(--sp-3); height: 100%; }
-.kanban { display: flex; gap: var(--sp-3); align-items: flex-start; padding-right: var(--sp-5); min-height: 0; }
-.kcol { flex: 0 0 290px; width: 290px; background: var(--surface-sunk); border: 1px solid var(--border); border-radius: var(--r-md); display: flex; flex-direction: column; max-height: calc(100vh - 210px); }
+.kanban-wrap { overflow-x: auto; padding-bottom: var(--sp-3); flex: 1 1 auto; min-height: 0; }
+.kanban { display: flex; gap: var(--sp-3); align-items: flex-start; padding-right: var(--sp-5); min-height: 0; height: 100%; }
+.kcol { flex: 0 0 290px; width: 290px; background: var(--surface-sunk); border: 1px solid var(--border); border-radius: var(--r-md); display: flex; flex-direction: column; max-height: 100%; }
 .kcol.is-over { outline: 2px dashed var(--accent); outline-offset: -3px; background: var(--accent-softer); }
 .kcol__head { padding: 11px 12px 10px; border-bottom: 1px solid var(--border); position: relative; }
 .kcol__bar { position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--sc); border-radius: var(--r-md) var(--r-md) 0 0; }
@@ -119,7 +119,7 @@
 .stage-edit__sw { width: 24px; height: 24px; border-radius: var(--r-sm); border: 2px solid transparent; cursor: pointer; }
 .stage-edit__sw.is-on { border-color: var(--text); box-shadow: 0 0 0 2px var(--surface) inset; }
 .stage-edit__picker { width: 32px; height: 32px; padding: 0; border: 1px solid var(--border-strong); border-radius: var(--r-sm); background: none; cursor: pointer; }
-.kcol-add { flex: 0 0 64px; align-self: stretch; max-height: calc(100vh - 210px); background: var(--surface-2); border: 1px dashed var(--border-strong); border-radius: var(--r-md); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--text-muted); cursor: pointer; font-size: .75rem; font-weight: 600; text-align: center; }
+.kcol-add { flex: 0 0 64px; align-self: stretch; max-height: 100%; background: var(--surface-2); border: 1px dashed var(--border-strong); border-radius: var(--r-md); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--text-muted); cursor: pointer; font-size: .75rem; font-weight: 600; text-align: center; }
 .kcol-add:hover { color: var(--accent); border-color: var(--accent-line); }
 
 .kc { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--sc); border-radius: var(--r-sm); padding: 9px 10px 9px 8px; box-shadow: var(--shadow-sm); cursor: grab; transition: box-shadow var(--transition), transform var(--transition); }
@@ -142,10 +142,12 @@
 /* TABEL full-height (port handoff): vederea Tabel umple ecranul cu scroll INTERN + header sticky
    (ca la Kanban/Carduri), prin lanț flex — fără numărul magic 220px care se spărgea la topbar pe 2 rânduri.
    `.content--table` e pus pe wrapper-ul vederii Tabel (vezi Layout contentMod). */
-/* `flex:none` + înălțime DEFINITĂ: shell-ul (.app min-height:100vh, .main flex:1) NU mărginește
-   înălțimea la ecran, deci lanțul flex are nevoie de o înălțime explicită ca să prindă scrollul intern. */
-.content--table { display: flex; flex-direction: column; overflow: hidden; flex: none; box-sizing: border-box;
-  height: calc(100vh - var(--header-h)); height: calc(100dvh - var(--header-h)); }
+/* TABEL/KANBAN full-height ROBUST: mărginim `.main` la ecran DOAR când conține tabel/kanban (`:has`),
+   apoi `flex:1` umple EXACT spațiul rămas sub topbar — fără număr magic (topbar real ≈94px, variază cu lățimea).
+   Fallback (browsere fără :has): `max-height` cap-ează la ~ecran și scrollul intern tot funcționează. */
+.main:has(> .content--table), .main:has(> .content--kanban) { height: 100vh; height: 100dvh; overflow: hidden; }
+.content--table { display: flex; flex-direction: column; overflow: hidden; flex: 1 1 auto; min-height: 0; box-sizing: border-box;
+  max-height: calc(100vh - var(--header-h)); max-height: calc(100dvh - var(--header-h)); }
 .content--table .table-wrap { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .content--table .tbl-scroll { flex: 1 1 auto; min-height: 0; max-height: none; }
 .tbl { width: 100%; border-collapse: separate; border-spacing: 0; font-size: .8125rem; }

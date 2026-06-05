@@ -1,6 +1,6 @@
 /* AMASS Pâlnie — service worker (PWA, offline) — NETWORK-FIRST ca update-urile să apară imediat.
    Adaptat pentru Next.js: nu cache-uim rute API/_next dinamice agresiv; doar fallback offline. */
-const CACHE = 'amass-palnie-v3';
+const CACHE = 'amass-palnie-v4';
 const ASSETS = ['/', '/icon-192.png', '/icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS).catch(() => {})).then(() => self.skipWaiting()));
